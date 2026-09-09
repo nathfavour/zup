@@ -22,10 +22,12 @@ import {
 } from 'lucide-react';
 import { VaultSecurityState, PasskeyRecord } from '../types';
 import {
+  generateMEK,
   decryptMEKWithPassword,
   encryptMEKWithPassword,
   createPasskeyRecord,
   testPasskeyAssertion,
+  ARGON2_CONFIG,
 } from '../lib/crypto';
 
 interface VaultCredentialsManagerProps {
@@ -337,28 +339,174 @@ export function VaultCredentialsManager({
     }
   };
 
-  // Unconfigured Vault State
+  // Unconfigured Vault State: Allow inline Master Password setup directly within Settings
+  const [showInlineInit, setShowInlineInit] = useState(false);
+  const [initPassword, setInitPassword] = useState('');
+  const [confirmInitPassword, setConfirmInitPassword] = useState('');
+  const [isInitializing, setIsInitializing] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
+
+  const handleInlineInit = async (e: FormEvent) => {
+    e.preventDefault();
+    setInitError(null);
+
+    if (initPassword.length < 8) {
+      setInitError('Master password must be at least 8 characters long.');
+      return;
+    }
+    if (initPassword !== confirmInitPassword) {
+      setInitError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setIsInitializing(true);
+    try {
+      const mek = generateMEK();
+      const wrapped = await encryptMEKWithPassword(mek, initPassword);
+
+      const securityState: VaultSecurityState = {
+        id: 'primary_vault_security',
+        isInitialized: true,
+        salt: wrapped.salt,
+        passwordWrappedMEK: wrapped,
+        passkeys: [],
+        argonConfig: {
+          iterations: ARGON2_CONFIG.iterations,
+          memorySize: ARGON2_CONFIG.memorySize,
+          hashLength: ARGON2_CONFIG.hashLength,
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      onUpdateVaultSecurity(securityState);
+      if (onUnlocked) {
+        onUnlocked(mek);
+      }
+      setIsInitializing(false);
+      setShowInlineInit(false);
+      setInitPassword('');
+      setConfirmInitPassword('');
+    } catch (err: unknown) {
+      console.error('Failed to initialize vault in settings:', err);
+      setInitError(err instanceof Error ? err.message : 'Encryption initialization failed.');
+      setIsInitializing(false);
+    }
+  };
+
   if (!vaultSecurity?.isInitialized) {
     return (
-      <div className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 shrink-0">
-            <Lock size={19} />
+      <div className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 shrink-0">
+              <Lock size={19} />
+            </div>
+            <div>
+              <h4 className="text-white text-sm font-bold m-0">Master Password & Vault Security</h4>
+              <p className="text-stone-400 text-xs m-0 mt-0.5">
+                Set up a master password right here in Settings to protect your private keys and credentials.
+              </p>
+            </div>
           </div>
-          <div>
-            <h4 className="text-white text-sm font-bold m-0">No Encryption Vault Configured</h4>
-            <p className="text-stone-400 text-xs m-0 mt-0.5">
-              Set up a master password and register one or more passkeys to encrypt your sovereign keys.
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowInlineInit(!showInlineInit)}
+            className="px-4 py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-black text-xs font-bold transition-all cursor-pointer shadow-[0_0_10px_#10B98133] shrink-0"
+          >
+            {showInlineInit ? 'Close Form' : 'Setup Master Password'}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onOpenSetupEncryption}
-          className="px-4 py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-black text-xs font-bold transition-all cursor-pointer shadow-[0_0_10px_#10B98133] shrink-0"
-        >
-          Setup Vault Now
-        </button>
+
+        {showInlineInit && (
+          <form
+            onSubmit={handleInlineInit}
+            className="p-4 rounded-xl bg-[#1A1816] border border-[#2F2C28] flex flex-col gap-3.5 animate-fadeIn"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-white text-xs font-bold flex items-center gap-1.5">
+                <KeyRound size={15} className="text-[#10B981]" />
+                Create Master Password
+              </span>
+              <span className="text-stone-400 text-[11px] font-mono">
+                Argon2id (64MB Memory Hard)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-stone-300 text-xs font-medium">
+                  Master Password <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type={showPasswordText ? 'text' : 'password'}
+                  value={initPassword}
+                  onChange={(e) => setInitPassword(e.target.value)}
+                  placeholder="Minimum 8 characters..."
+                  required
+                  autoFocus
+                  className="w-full bg-[#121110] border border-[#35322D] focus:border-[#10B981] focus:outline-none rounded-xl px-3.5 py-2 text-white text-xs"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-stone-300 text-xs font-medium">
+                  Confirm Master Password <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type={showPasswordText ? 'text' : 'password'}
+                  value={confirmInitPassword}
+                  onChange={(e) => setConfirmInitPassword(e.target.value)}
+                  placeholder="Re-enter password..."
+                  required
+                  className="w-full bg-[#121110] border border-[#35322D] focus:border-[#10B981] focus:outline-none rounded-xl px-3.5 py-2 text-white text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => setShowPasswordText(!showPasswordText)}
+                className="text-xs text-stone-400 hover:text-stone-200 flex items-center gap-1.5 cursor-pointer"
+              >
+                {showPasswordText ? <EyeOff size={14} /> : <Eye size={14} />}
+                <span>{showPasswordText ? 'Hide password' : 'Show password'}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowInlineInit(false)}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#24221F] border border-[#35322D] text-stone-300 text-xs font-semibold cursor-pointer hover:bg-[#2F2C28]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isInitializing || !initPassword || !confirmInitPassword}
+                  className="px-4 py-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-black text-xs font-bold cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isInitializing ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin" />
+                      <span>Deriving Argon2id...</span>
+                    </>
+                  ) : (
+                    <span>Save Master Password</span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {initError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center gap-2">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>{initError}</span>
+              </div>
+            )}
+          </form>
+        )}
       </div>
     );
   }

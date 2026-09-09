@@ -26,9 +26,14 @@ export function generateRandomBytes(length: number): Uint8Array {
 
 export const ARGON2_CONFIG = {
   iterations: 3,
-  memorySize: 64 * 1024, // 64 MB
+  memorySize: 65536, // 64 MB (in KB)
   hashLength: 32, // 256-bit AES key
-  parallelism: 1,
+  parallelism: 4,
+};
+
+export const PBKDF2_LEGACY_CONFIG = {
+  iterations: 600000,
+  hash: 'SHA-256',
 };
 
 /**
@@ -38,16 +43,94 @@ export async function deriveKEKFromPassword(
   password: string,
   salt: Uint8Array
 ): Promise<Uint8Array> {
-  const hash = await argon2id({
-    password,
-    salt,
-    parallelism: ARGON2_CONFIG.parallelism,
-    iterations: ARGON2_CONFIG.iterations,
-    memorySize: ARGON2_CONFIG.memorySize,
-    hashLength: ARGON2_CONFIG.hashLength,
-    outputType: 'binary',
-  });
-  return hash as Uint8Array;
+  try {
+    const hash = await argon2id({
+      password,
+      salt,
+      parallelism: ARGON2_CONFIG.parallelism,
+      iterations: ARGON2_CONFIG.iterations,
+      memorySize: ARGON2_CONFIG.memorySize,
+      hashLength: ARGON2_CONFIG.hashLength,
+      outputType: 'binary',
+    });
+    return hash as Uint8Array;
+  } catch {
+    // Fallback to parallelism 1 if browser environment restricts web workers
+    const hash = await argon2id({
+      password,
+      salt,
+      parallelism: 1,
+      iterations: ARGON2_CONFIG.iterations,
+      memorySize: ARGON2_CONFIG.memorySize,
+      hashLength: ARGON2_CONFIG.hashLength,
+      outputType: 'binary',
+    });
+    return hash as Uint8Array;
+  }
+}
+
+/**
+ * PBKDF2 Legacy Fallback Derivation (600k iterations, SHA-256)
+ */
+export async function deriveKEKFromPasswordPBKDF2(
+  password: string,
+  salt: Uint8Array
+): Promise<Uint8Array> {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits', 'deriveKey']
+  );
+
+  const derivedKey = await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: salt as unknown as ArrayBuffer,
+      iterations: PBKDF2_LEGACY_CONFIG.iterations,
+      hash: PBKDF2_LEGACY_CONFIG.hash,
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+
+  const rawBytes = await crypto.subtle.exportKey('raw', derivedKey);
+  return new Uint8Array(rawBytes);
+}
+
+/**
+ * Mandatory in-memory roundtrip validation before saving any encrypted MEK
+ */
+export async function verifyMEKRoundtrip(
+  rawMek: Uint8Array,
+  cipherText: string,
+  iv: string,
+  kek: Uint8Array
+): Promise<void> {
+  try {
+    const testDecrypted = await decryptData(cipherText, iv, kek);
+    if (!testDecrypted || testDecrypted.byteLength !== rawMek.byteLength) {
+      throw new Error(
+        'KEYCHAIN_ENCRYPTION_VERIFICATION_FAILED: Encrypted MEK failed in-memory roundtrip validation'
+      );
+    }
+    for (let i = 0; i < rawMek.byteLength; i++) {
+      if (testDecrypted[i] !== rawMek[i]) {
+        throw new Error(
+          'KEYCHAIN_ENCRYPTION_VERIFICATION_FAILED: Encrypted MEK failed in-memory roundtrip validation'
+        );
+      }
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `KEYCHAIN_ENCRYPTION_VERIFICATION_FAILED: Encrypted MEK failed in-memory roundtrip validation (${message})`
+    );
+  }
 }
 
 /**
@@ -115,14 +198,18 @@ export function generateMEK(): Uint8Array {
 
 /**
  * Encrypts the MEK with user's password using Argon2id-derived KEK
+ * Enforces mandatory in-memory roundtrip validation before returning!
  */
 export async function encryptMEKWithPassword(
   mek: Uint8Array,
   password: string
 ): Promise<EncryptedPayload> {
-  const salt = generateRandomBytes(16);
+  const salt = generateRandomBytes(32); // 256-bit salt per Kylrix spec
   const kek = await deriveKEKFromPassword(password, salt);
   const { cipherText, iv } = await encryptData(mek, kek);
+
+  // Mandatory in-memory roundtrip validation
+  await verifyMEKRoundtrip(mek, cipherText, iv, kek);
 
   return {
     cipherText,
@@ -132,18 +219,32 @@ export async function encryptMEKWithPassword(
 }
 
 /**
- * Decrypts the MEK using user's password
+ * Decrypts the MEK using user's password with automatic PBKDF2 legacy fallback & double-lock upgrade support
  */
 export async function decryptMEKWithPassword(
   payload: EncryptedPayload,
   password: string
-): Promise<Uint8Array> {
+): Promise<{ mek: Uint8Array; wasUpgradedFromLegacy?: boolean }> {
   if (!payload.salt) {
     throw new Error('Missing salt in encrypted MEK payload');
   }
   const salt = hexToBytes(payload.salt);
-  const kek = await deriveKEKFromPassword(password, salt);
-  return await decryptData(payload.cipherText, payload.iv, kek);
+
+  // Primary: Argon2id derivation
+  try {
+    const kek = await deriveKEKFromPassword(password, salt);
+    const decrypted = await decryptData(payload.cipherText, payload.iv, kek);
+    return { mek: decrypted, wasUpgradedFromLegacy: false };
+  } catch (argonErr) {
+    // Secondary fallback: PBKDF2 (legacy fallback for older vaults)
+    try {
+      const legacyKek = await deriveKEKFromPasswordPBKDF2(password, salt);
+      const decrypted = await decryptData(payload.cipherText, payload.iv, legacyKek);
+      return { mek: decrypted, wasUpgradedFromLegacy: true };
+    } catch {
+      throw argonErr;
+    }
+  }
 }
 
 /**
@@ -223,9 +324,12 @@ export async function createPasskeyRecord(
   }
 
   const credentialId = bytesToHex(new Uint8Array(credential.rawId));
-  const salt = generateRandomBytes(16);
+  const salt = generateRandomBytes(32);
   const passkeyKEK = await derivePasskeyKEK(credentialId, salt);
   const { cipherText, iv } = await encryptData(mek, passkeyKEK);
+
+  // Mandatory in-memory roundtrip validation
+  await verifyMEKRoundtrip(mek, cipherText, iv, passkeyKEK);
 
   return {
     id: `pk_${Date.now()}_${bytesToHex(generateRandomBytes(4))}`,
@@ -307,4 +411,140 @@ export async function decryptSecret(
   const decryptedBytes = await decryptData(parsed.cipherText, parsed.iv, mek);
   const decoder = new TextDecoder();
   return decoder.decode(decryptedBytes);
+}
+
+/**
+ * MasterPassCrypto Singleton with Volatile MEK Preservation ("Session Worker")
+ * Holds raw MEK exclusively in RAM. Uses BroadcastChannel / ephemeral session memory
+ * across rapid tab refreshes without ever persisting raw MEK to unencrypted storage.
+ */
+class MasterPassCryptoManager {
+  private activeMEK: Uint8Array | null = null;
+  private channel: BroadcastChannel | null = null;
+  private listeners = new Set<(mek: Uint8Array | null) => void>();
+
+  constructor() {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        this.channel = new BroadcastChannel('zup_volatile_session_context');
+        this.channel.onmessage = (event) => {
+          if (event.data?.type === 'WIPE_CONTEXT') {
+            this.purgeMemory();
+          } else if (event.data?.type === 'STORE_CONTEXT' && event.data.hex) {
+            this.activeMEK = hexToBytes(event.data.hex);
+            this.notify();
+          }
+        };
+      } catch {
+        // BroadcastChannel unavailable in restricted contexts
+      }
+    }
+  }
+
+  public subscribe(fn: (mek: Uint8Array | null) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private notify(): void {
+    this.listeners.forEach((fn) => {
+      try {
+        fn(this.activeMEK);
+      } catch {
+        // Ignore subscriber error
+      }
+    });
+  }
+
+  public setMEK(mek: Uint8Array): void {
+    this.activeMEK = new Uint8Array(mek);
+    this.notify();
+    if (this.channel) {
+      try {
+        this.channel.postMessage({
+          type: 'STORE_CONTEXT',
+          hex: bytesToHex(this.activeMEK),
+        });
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
+  public getMEK(): Uint8Array | null {
+    return this.activeMEK;
+  }
+
+  public hasMEK(): boolean {
+    return this.activeMEK !== null;
+  }
+
+  public isUnlocked(): boolean {
+    return this.activeMEK !== null;
+  }
+
+  public purgeMemory(): void {
+    if (this.activeMEK) {
+      this.activeMEK.fill(0); // Zero out in memory
+      this.activeMEK = null;
+      this.notify();
+    }
+  }
+
+  public lockApplication(): void {
+    this.purgeMemory();
+    if (this.channel) {
+      try {
+        this.channel.postMessage({ type: 'WIPE_CONTEXT' });
+      } catch {
+        // Ignore
+      }
+    }
+  }
+}
+
+export const masterPassCrypto = new MasterPassCryptoManager();
+
+/**
+ * Helper to produce a KeychainEntry for f_keychain
+ */
+export function createKeychainPasswordEntry(
+  userId: string,
+  payload: EncryptedPayload
+): import('../types').KeychainEntry {
+  return {
+    id: `keychain_${userId}_password`,
+    userId,
+    type: 'password',
+    credentialId: null,
+    wrappedKey: payload.cipherText,
+    salt: payload.salt || '',
+    isArgon: true,
+    params: JSON.stringify({
+      memory: ARGON2_CONFIG.memorySize,
+      iterations: ARGON2_CONFIG.iterations,
+      parallelism: ARGON2_CONFIG.parallelism,
+      algo: 'Argon2id',
+    }),
+    authPass: true,
+  };
+}
+
+export function createKeychainPasskeyEntry(
+  userId: string,
+  passkey: PasskeyRecord
+): import('../types').KeychainEntry {
+  return {
+    id: `keychain_${userId}_${passkey.credentialId}`,
+    userId,
+    type: 'passkey',
+    credentialId: passkey.credentialId,
+    wrappedKey: passkey.encryptedMEK.cipherText,
+    salt: passkey.encryptedMEK.salt || '',
+    isArgon: false,
+    params: JSON.stringify({
+      algo: 'WebAuthn-PRF-AES256GCM',
+    }),
+    authPass: true,
+  };
 }

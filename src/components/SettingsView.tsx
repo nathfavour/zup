@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { 
   Shield, 
   ShieldCheck, 
@@ -18,15 +18,18 @@ import {
   Plus,
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  Cloud
 } from 'lucide-react';
-import { NostrKeypair, RelayInfo, VaultSecurityState, PasskeyRecord } from '../types';
+import { NostrKeypair, RelayInfo, VaultSecurityState, PasskeyRecord, SyncStatus, KylrixOAuthSession } from '../types';
 import { 
   createPasskeyRecord, 
   encryptMEKWithPassword, 
   decryptMEKWithPassword, 
   ARGON2_CONFIG 
 } from '../lib/crypto';
+import { syncEngine } from '../lib/syncEngine';
+import { kylrixOAuth } from '../lib/kylrixOAuth';
 
 interface SettingsViewProps {
   keypair: NostrKeypair;
@@ -41,6 +44,7 @@ interface SettingsViewProps {
   onOpenPro: () => void;
   onClearCache: () => void;
   onResetDefaultRelays: () => void;
+  onOpenSync?: () => void;
 }
 
 export function SettingsView({
@@ -56,7 +60,25 @@ export function SettingsView({
   onOpenPro,
   onClearCache,
   onResetDefaultRelays,
+  onOpenSync,
 }: SettingsViewProps) {
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(syncEngine.getSyncStatus());
+  const [pendingCount, setPendingCount] = useState<number>(syncEngine.getPendingCount());
+  const [oauthSession, setOauthSession] = useState<KylrixOAuthSession>(kylrixOAuth.getSession());
+
+  useEffect(() => {
+    const unsubSync = syncEngine.subscribe((status, pending) => {
+      setSyncStatus(status);
+      setPendingCount(pending);
+    });
+    const unsubOAuth = kylrixOAuth.subscribe((sess) => {
+      setOauthSession(sess);
+    });
+    return () => {
+      unsubSync();
+      unsubOAuth();
+    };
+  }, []);
   const [webrtcProtect, setWebrtcProtect] = useState(true);
   const [zeroMetadata, setZeroMetadata] = useState(true);
   const [nip07Bridge, setNip07Bridge] = useState(false);
@@ -118,10 +140,11 @@ export function SettingsView({
 
       // If MEK is not in memory, verify with current password
       if (!activeMEK) {
-        activeMEK = await decryptMEKWithPassword(
+        const decrypted = await decryptMEKWithPassword(
           vaultSecurity.passwordWrappedMEK,
           currentPassword
         );
+        activeMEK = decrypted.mek;
       }
 
       if (!activeMEK) {
@@ -212,23 +235,88 @@ export function SettingsView({
   return (
     <div className="flex flex-col gap-5 pb-16 md:pb-6">
       {/* Privacy Overview Banner */}
-      <div className="p-5 rounded-[22px] bg-[#000000] border border-white/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+      <div className="p-5 rounded-[22px] bg-[#141210] border border-[#2C2925] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-[16px] bg-[#F59E0B]/15 border border-[#F59E0B]/40 flex items-center justify-center text-[#F59E0B] shadow-[0_0_12px_#F59E0B33]">
+          <div className="w-12 h-12 rounded-[16px] bg-[#F59E0B]/15 border border-[#F59E0B]/40 flex items-center justify-center text-[#F59E0B]">
             <Shield size={24} />
           </div>
           <div>
             <h3 className="text-white font-black text-base uppercase tracking-wider m-0">
               Privacy & Cryptographic Guard
             </h3>
-            <p className="text-white text-xs font-bold mt-0.5 m-0">
+            <p className="text-[#99948D] text-xs font-bold mt-0.5 m-0">
               Zero telemetries, no centralized databases, pure client-side MEK encryption.
             </p>
           </div>
         </div>
 
-        <div className="px-3 py-1.5 rounded-[14px] bg-[#161412] border border-white/20 text-xs font-mono font-bold text-white">
+        <div className="px-3 py-1.5 rounded-[14px] bg-[#1C1A17] border border-[#35322E] text-xs font-mono font-bold text-white">
           <span>TOR COMPATIBLE</span>
+        </div>
+      </div>
+
+      {/* ========================================================= */}
+      {/* KYLRIX IDENTITY BINDING & AUTONOMIC SYNC SECTION           */}
+      {/* ========================================================= */}
+      <div className="p-5 rounded-[22px] bg-[#141210] border border-[#2C2925] flex flex-col gap-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Cloud size={18} className="text-[#EC4899]" />
+            <h4 className="text-white font-black text-xs uppercase tracking-wider m-0">
+              Kylrix Cloud Sync & Mesh Reconciliation
+            </h4>
+          </div>
+          <span
+            className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-black uppercase ${
+              syncStatus === 'pending'
+                ? 'bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/40'
+                : syncStatus === 'offline'
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+            }`}
+          >
+            {syncStatus === 'pending'
+              ? `PENDING (${pendingCount})`
+              : syncStatus === 'offline'
+              ? 'OFFLINE'
+              : 'SYNCHRONIZED'}
+          </span>
+        </div>
+
+        <div className="p-3.5 rounded-[16px] bg-[#1A1815] border border-[#2B2824] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {oauthSession.isConnected && oauthSession.profile ? (
+              <img
+                src={oauthSession.profile.avatar}
+                alt={oauthSession.profile.name}
+                className="w-10 h-10 rounded-[12px] border border-[#3A3631] bg-[#121110] object-cover shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-[12px] bg-[#24211D] border border-[#3A3631] flex items-center justify-center text-white shrink-0">
+                <Cloud size={20} />
+              </div>
+            )}
+            <div className="min-w-0">
+              <span className="text-white font-bold text-xs block truncate">
+                {oauthSession.isConnected && oauthSession.profile
+                  ? `Bound: ${oauthSession.profile.name} (${oauthSession.profile.email || oauthSession.profile.userId})`
+                  : 'Sovereign Standalone Mode (Local-First)'}
+              </span>
+              <span className="text-[#8F8A83] text-[11px] font-medium block truncate mt-0.5">
+                {oauthSession.isConnected
+                  ? 'OAuth 2.1 PKCE Active • NIP-78 Kind 30078 Identity Synced'
+                  : 'RxDB is your Single Source of Truth. Connect Kylrix for zero-knowledge cross-device settings.'}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenSync}
+            className="px-3.5 py-1.5 rounded-[12px] bg-[#EC4899] hover:bg-[#db2777] text-white font-bold text-xs uppercase tracking-wider cursor-pointer shrink-0 transition-colors shadow-sm"
+          >
+            {oauthSession.isConnected ? 'Manage Sync' : 'Sign in with Kylrix'}
+          </button>
         </div>
       </div>
 

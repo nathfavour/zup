@@ -79,13 +79,13 @@ export function UnlockDrawer({
     setIsAuthenticating(true);
 
     try {
-      const mek = await decryptMEKWithPassword(
+      const result = await decryptMEKWithPassword(
         securityState.passwordWrappedMEK,
         password
       );
       setIsAuthenticating(false);
       setPassword('');
-      onUnlocked(mek);
+      onUnlocked(result.mek);
       onClose();
     } catch (err: unknown) {
       console.error('Password unlock failed:', err);

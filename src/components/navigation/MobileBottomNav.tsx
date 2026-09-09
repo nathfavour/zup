@@ -22,7 +22,7 @@ export function MobileBottomNav({
     <nav
       id="mobile-bottom-nav"
       aria-label="Mobile Bottom Navigation"
-      className="flex md:hidden fixed bottom-0 left-0 right-0 w-full z-40 bg-[#000000]/95 backdrop-blur-xl border-t border-white/20 rounded-t-[24px] sm:rounded-t-[28px] rounded-b-none px-4 py-2.5 items-center justify-around shadow-[0_-8px_30px_rgba(0,0,0,0.85)] safe-area-inset-bottom transition-all"
+      className="flex md:hidden fixed bottom-0 left-0 right-0 w-full z-40 bg-[#121110] border-t border-[#282522] rounded-t-[24px] sm:rounded-t-[28px] rounded-b-none px-4 py-2.5 items-center justify-around shadow-[0_-8px_30px_rgba(0,0,0,0.85)] safe-area-inset-bottom transition-all"
     >
       {/* 1. Feed Icon */}
       <button
@@ -36,8 +36,7 @@ export function MobileBottomNav({
         <Globe2
           size={24}
           style={{
-            color: activeTab === 'feed' ? '#EC4899' : 'rgba(255, 255, 255, 0.65)',
-            filter: activeTab === 'feed' ? 'drop-shadow(0 0 8px #EC489988)' : undefined,
+            color: activeTab === 'feed' ? '#EC4899' : '#8F8A83',
           }}
           className="transition-colors"
         />
@@ -45,7 +44,6 @@ export function MobileBottomNav({
         <div
           style={{
             backgroundColor: activeTab === 'feed' ? '#EC4899' : 'transparent',
-            boxShadow: activeTab === 'feed' ? '0 0 6px #EC4899' : undefined,
           }}
           className="w-1.5 h-1.5 rounded-full mt-1 transition-all"
         />
@@ -64,8 +62,7 @@ export function MobileBottomNav({
           <Send
             size={22}
             style={{
-              color: activeTab === 'messages' ? '#6366F1' : 'rgba(255, 255, 255, 0.65)',
-              filter: activeTab === 'messages' ? 'drop-shadow(0 0 8px #6366F188)' : undefined,
+              color: activeTab === 'messages' ? '#6366F1' : '#8F8A83',
             }}
             className="transition-colors"
           />
@@ -78,7 +75,6 @@ export function MobileBottomNav({
         <div
           style={{
             backgroundColor: activeTab === 'messages' ? '#6366F1' : 'transparent',
-            boxShadow: activeTab === 'messages' ? '0 0 6px #6366F1' : undefined,
           }}
           className="w-1.5 h-1.5 rounded-full mt-1 transition-all"
         />
@@ -89,7 +85,7 @@ export function MobileBottomNav({
         type="button"
         id="mobile-nav-create"
         onClick={onOpenCompose}
-        className="flex items-center justify-center w-11 h-11 rounded-[16px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] text-white shadow-[0_0_15px_#EC489955] cursor-pointer transition-transform active:scale-90"
+        className="flex items-center justify-center w-11 h-11 rounded-[16px] bg-[#EC4899] hover:bg-[#db2777] text-white shadow-md cursor-pointer transition-transform active:scale-90"
         aria-label="Create Zup"
         title="Create Zup"
       >

@@ -28,8 +28,10 @@ import {
 import { getDatabase, ZupDatabase } from './lib/db';
 import { 
   encryptSecret, 
-  decryptSecret 
+  decryptSecret,
+  masterPassCrypto 
 } from './lib/crypto';
+import { syncEngine } from './lib/syncEngine';
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
 import { FeedView } from './components/FeedView';
@@ -46,6 +48,7 @@ import { ProUpgradeDrawer } from './components/ProUpgradeDrawer';
 import { EncryptionSetupDrawer } from './components/EncryptionSetupDrawer';
 import { UnlockDrawer } from './components/UnlockDrawer';
 import { ImportIdentityDrawer } from './components/ImportIdentityDrawer';
+import { KylrixSyncModal } from './components/KylrixSyncModal';
 
 export default function App() {
   // Database instance
@@ -53,13 +56,14 @@ export default function App() {
 
   // Security & MEK Encryption State
   const [vaultSecurity, setVaultSecurity] = useState<VaultSecurityState | null>(null);
-  const [mek, setMek] = useState<Uint8Array | null>(null);
-  const [isVaultLocked, setIsVaultLocked] = useState(true);
+  const [mek, setMek] = useState<Uint8Array | null>(() => masterPassCrypto.getMEK());
+  const [isVaultLocked, setIsVaultLocked] = useState(() => !masterPassCrypto.hasMEK());
 
   // Drawers for Security & Setup
   const [isSetupEncryptionOpen, setIsSetupEncryptionOpen] = useState(false);
   const [isUnlockOpen, setIsUnlockOpen] = useState(false);
   const [isImportIdentityOpen, setIsImportIdentityOpen] = useState(false);
+  const [isKylrixSyncOpen, setIsKylrixSyncOpen] = useState(false);
 
   // Navigation & Filter State
   const [activeTab, setActiveTab] = useState<ActiveTab>('feed');
@@ -143,13 +147,24 @@ export default function App() {
         if (secDoc) {
           const sec = secDoc.toJSON() as VaultSecurityState;
           setVaultSecurity(sec);
-          setIsVaultLocked(true);
-          // By default prompt for passkey unlock!
-          setIsUnlockOpen(true);
+          if (masterPassCrypto.hasMEK()) {
+            setMek(masterPassCrypto.getMEK());
+            setIsVaultLocked(false);
+          } else {
+            setIsVaultLocked(true);
+            setIsUnlockOpen(true);
+          }
         } else {
           // First time launch: prompt encryption setup drawer
           setIsSetupEncryptionOpen(true);
         }
+
+        // Keep tabs in sync with MasterPassCrypto volatile MEK
+        const unsubCrypto = masterPassCrypto.subscribe((volatileMEK) => {
+          setMek(volatileMEK);
+          setIsVaultLocked(!volatileMEK);
+        });
+        subs.push({ unsubscribe: unsubCrypto });
 
         // B. Load Identities from RxDB
         const idDocs = await database.identities.find().exec();
@@ -432,12 +447,15 @@ export default function App() {
     }
 
     setVaultSecurity(securityState);
+    masterPassCrypto.setMEK(unlockedMEK);
     setMek(unlockedMEK);
     setIsVaultLocked(false);
     setIsSetupEncryptionOpen(false);
+    syncEngine.markPending('primary_vault_security', 1, 'setting', securityState);
   };
 
   const handleUnlocked = async (unlockedMEK: Uint8Array) => {
+    masterPassCrypto.setMEK(unlockedMEK);
     setMek(unlockedMEK);
     setIsVaultLocked(false);
 
@@ -465,6 +483,7 @@ export default function App() {
   };
 
   const handleLockVault = () => {
+    masterPassCrypto.lockApplication();
     setMek(null);
     setIsVaultLocked(true);
     // Mask private key in active keypair for protection
@@ -480,6 +499,7 @@ export default function App() {
       await db.vault_security.upsert(updated);
     }
     setVaultSecurity(updated);
+    syncEngine.markPending('primary_vault_security', 1, 'setting', updated);
   };
 
   // =========================================================================
@@ -576,6 +596,7 @@ export default function App() {
     } else {
       setEvents((prev) => [signed, ...prev]);
     }
+    syncEngine.markPending(signed.id, 1, 'note', signed);
 
     // Broadcast across targeted WebSocket relays
     targetRelays.forEach(async (url) => {
@@ -614,6 +635,7 @@ export default function App() {
     } else {
       setEvents((prev) => [signed, ...prev]);
     }
+    syncEngine.markPending(signed.id, 1, 'note', signed);
   };
 
   const handleLikeEvent = async (eventId: string) => {
@@ -647,6 +669,7 @@ export default function App() {
     } else {
       setEvents((prev) => prev.map((e) => (e.id === eventId ? updated : e)));
     }
+    syncEngine.markPending(`like_${eventId}`, 1, 'note', updated);
   };
 
   const handleRepostEvent = async (eventId: string) => {
@@ -682,6 +705,7 @@ export default function App() {
     } else {
       setEvents((prev) => prev.map((e) => (e.id === eventId ? updated : e)));
     }
+    syncEngine.markPending(`repost_${eventId}`, 1, 'note', updated);
   };
 
   const handleConfirmZap = async (
@@ -898,7 +922,7 @@ export default function App() {
   const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <div className="min-h-screen bg-[#161412] text-white flex flex-col selection:bg-[#EC4899]/30 selection:text-white">
+    <div className="min-h-screen bg-[#100F0E] text-white flex flex-col selection:bg-[#EC4899]/30 selection:text-white">
       {/* Topbar Chrome */}
       <Header
         keypair={keypair}
@@ -910,6 +934,7 @@ export default function App() {
           setIsProOpen(true);
         }}
         onToggleEphemeral={handleToggleEphemeral}
+        onOpenSync={() => setIsKylrixSyncOpen(true)}
       />
 
       {/* Main Workspace Frame */}
@@ -1062,6 +1087,7 @@ export default function App() {
               }}
               onClearCache={handleClearCache}
               onResetDefaultRelays={handleResetDefaultRelays}
+              onOpenSync={() => setIsKylrixSyncOpen(true)}
             />
           )}
         </main>
@@ -1118,6 +1144,13 @@ export default function App() {
         onClose={() => setIsImportIdentityOpen(false)}
         mek={mek}
         onIdentityImported={handleIdentityImported}
+      />
+
+      {/* Kylrix Sovereign Identity & Autonomic Mesh Sync Modal */}
+      <KylrixSyncModal
+        isOpen={isKylrixSyncOpen}
+        onClose={() => setIsKylrixSyncOpen(false)}
+        keypair={keypair}
       />
     </div>
   );

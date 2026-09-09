@@ -27,11 +27,11 @@ export function DesktopSidebar({
     <aside
       id="desktop-sidebar"
       aria-label="Desktop Navigation Sidebar"
-      className="hidden md:flex flex-col w-64 lg:w-72 shrink-0 h-[calc(100vh-96px)] sticky top-[80px] bg-[#000000] border border-white/20 rounded-[24px] p-4 justify-between overflow-y-auto shadow-2xl transition-all"
+      className="hidden md:flex flex-col w-64 lg:w-72 shrink-0 h-[calc(100vh-96px)] sticky top-[80px] bg-[#121110] border border-[#282522] rounded-[24px] p-4 justify-between overflow-y-auto shadow-2xl transition-all"
     >
       <div className="flex flex-col gap-3">
         <div className="px-3 py-1 flex items-center justify-between">
-          <span className="text-white text-[11px] font-black uppercase tracking-widest">
+          <span className="text-[#99948D] text-[11px] font-black uppercase tracking-widest">
             Sovereign Mesh
           </span>
           <span className="text-[10px] font-mono text-[#EC4899] font-bold">
@@ -39,8 +39,8 @@ export function DesktopSidebar({
           </span>
         </div>
 
-        {/* Primary Desktop Nav Tabs: Icons and Text */}
-        <nav className="flex flex-col gap-2">
+        {/* Primary Desktop Nav Tabs: Standalone Clean Icons and Text (No Box Enclosures) */}
+        <nav className="flex flex-col gap-1.5">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -50,29 +50,24 @@ export function DesktopSidebar({
                 key={tab.id}
                 id={`desktop-nav-tab-${tab.id}`}
                 onClick={() => onSelectTab(tab.id)}
-                style={{
-                  borderColor: isActive ? tab.accent : undefined,
-                }}
-                className={`w-full text-left p-3 rounded-[18px] transition-all flex items-center gap-3.5 group cursor-pointer ${
+                className={`w-full text-left px-3.5 py-3 rounded-[16px] transition-all flex items-center gap-3.5 group cursor-pointer ${
                   isActive
-                    ? `bg-[#161412] border-2 text-white ${tab.glow}`
-                    : 'bg-[#161412]/50 border border-white/10 hover:border-white/40 text-white'
+                    ? 'bg-[#1D1B18] border border-[#3E3A34] text-white'
+                    : 'bg-transparent border border-transparent hover:bg-[#1A1816] hover:border-[#2C2925] text-[#99948D] hover:text-white'
                 }`}
               >
-                <div
+                {/* Standalone clean single icon without individual box enclosure */}
+                <Icon
+                  size={20}
                   style={{
-                    backgroundColor: isActive ? `${tab.accent}25` : '#000000',
-                    borderColor: isActive ? tab.accent : 'rgba(255, 255, 255, 0.15)',
-                    color: isActive ? tab.accent : '#ffffff',
+                    color: isActive ? tab.accent : '#8A857E',
                   }}
-                  className="w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 border transition-all"
-                >
-                  <Icon size={18} />
-                </div>
+                  className="shrink-0 transition-colors"
+                />
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-1">
-                    <span className="text-white font-extrabold text-sm tracking-wide truncate">
+                    <span className={`font-extrabold text-sm tracking-wide truncate ${isActive ? 'text-white' : 'text-[#D6D2CC] group-hover:text-white'}`}>
                       {tab.label}
                     </span>
                     {tab.badge && (
@@ -81,7 +76,7 @@ export function DesktopSidebar({
                       </span>
                     )}
                   </div>
-                  <span className="text-white/60 text-[11px] font-medium tracking-tight truncate block mt-0.5">
+                  <span className="text-[#807B74] text-[11px] font-medium tracking-tight truncate block mt-0.5">
                     {tab.sublabel}
                   </span>
                 </div>
@@ -90,12 +85,12 @@ export function DesktopSidebar({
           })}
         </nav>
 
-        {/* Prominent Desktop "Create" / "New Zup" Button */}
+        {/* Prominent Desktop "Create" / "New Zup" Button (Solid OpenBricks style, no gradients) */}
         <button
           id="desktop-create-zup-btn"
           type="button"
           onClick={onOpenCompose}
-          className="w-full mt-2 py-3.5 px-4 rounded-[18px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] hover:opacity-95 text-white font-black text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-[0_0_20px_#EC489955] active:scale-[0.98]"
+          className="w-full mt-2 py-3 px-4 rounded-[16px] bg-[#EC4899] hover:bg-[#db2777] text-white font-black text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-md active:scale-[0.98]"
         >
           <Plus size={18} strokeWidth={3} />
           <span>Create Zup</span>
@@ -103,31 +98,27 @@ export function DesktopSidebar({
       </div>
 
       {/* Sidebar Bottom Security Status & Pro Trigger */}
-      <div className="flex flex-col gap-2.5 pt-3 border-t border-white/10 mt-auto">
+      <div className="flex flex-col gap-2.5 pt-3 border-t border-[#262320] mt-auto">
         {keypair.isEphemeral ? (
-          <div className="p-3 rounded-[16px] bg-[#161412] border border-[#F59E0B]/50 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-[10px] bg-[#F59E0B]/15 text-[#F59E0B] flex items-center justify-center shrink-0 border border-[#F59E0B]/30">
-              <Flame size={14} />
-            </div>
+          <div className="p-3 rounded-[16px] bg-[#1A1815] border border-[#F59E0B]/50 flex items-center gap-2.5">
+            <Flame size={18} className="text-[#F59E0B] shrink-0" />
             <div className="min-w-0 flex-1">
               <span className="text-white font-bold text-xs block truncate">
                 Burner Mode Active
               </span>
-              <span className="text-white/60 text-[10px] font-medium block truncate">
+              <span className="text-[#8F8A83] text-[10px] font-medium block truncate">
                 Zero key persistence
               </span>
             </div>
           </div>
         ) : (
-          <div className="p-3 rounded-[16px] bg-[#161412] border border-white/10 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-[10px] bg-[#10B981]/15 text-[#10B981] flex items-center justify-center shrink-0 border border-[#10B981]/30">
-              <Shield size={14} />
-            </div>
+          <div className="p-3 rounded-[16px] bg-[#1A1815] border border-[#2B2824] flex items-center gap-2.5">
+            <Shield size={18} className="text-[#10B981] shrink-0" />
             <div className="min-w-0 flex-1">
               <span className="text-white font-bold text-xs block truncate">
                 Local Cryptography
               </span>
-              <span className="text-white/60 text-[10px] font-medium block truncate">
+              <span className="text-[#8F8A83] text-[10px] font-medium block truncate">
                 Secp256k1 client-signed
               </span>
             </div>
@@ -137,15 +128,15 @@ export function DesktopSidebar({
         <button
           id="sidebar-pro-banner"
           onClick={onOpenPro}
-          className="w-full p-2.5 rounded-[16px] bg-[#161412] border border-[#A855F7]/40 hover:border-[#A855F7] transition-all flex items-center justify-between text-left group cursor-pointer shadow-[0_0_12px_#A855F71a]"
+          className="w-full p-2.5 rounded-[16px] bg-[#1A1815] border border-[#35322E] hover:border-[#A855F7] transition-all flex items-center justify-between text-left group cursor-pointer"
         >
-          <div className="flex items-center gap-2 min-w-0">
-            <Sparkles size={15} className="text-[#A855F7] shrink-0" />
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Sparkles size={16} className="text-[#A855F7] shrink-0" />
             <div className="min-w-0">
               <span className="text-white font-black text-xs uppercase tracking-wider block truncate">
                 Pro Mesh Relay
               </span>
-              <span className="text-white/60 text-[10px] font-medium block truncate">
+              <span className="text-[#8F8A83] text-[10px] font-medium block truncate">
                 Tor & NIP-05 Verified
               </span>
             </div>

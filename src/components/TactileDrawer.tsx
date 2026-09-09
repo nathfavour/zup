@@ -17,6 +17,7 @@ interface TactileDrawerProps {
   canGoBack?: boolean;
   onGoBack?: () => void;
   onPopOut?: () => void;
+  isFullScreenMobile?: boolean;
   id?: string;
 }
 
@@ -30,11 +31,18 @@ export function TactileDrawer({
   canGoBack,
   onGoBack,
   onPopOut,
+  isFullScreenMobile = false,
   id = 'tactile-drawer',
 }: TactileDrawerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!isOpen) return null;
+
+  const mobileHeight = isFullScreenMobile
+    ? 'h-[100dvh]'
+    : isExpanded
+    ? 'h-[100dvh]'
+    : 'h-[60dvh] max-h-[60dvh]';
 
   return (
     <>
@@ -45,15 +53,15 @@ export function TactileDrawer({
         aria-hidden="true"
       />
 
-      {/* Surface: Fixed 60vh / 100vh on mobile, Right Sidebar on Desktop */}
+      {/* Surface: Fixed 60dvh max / 100dvh on mobile, Native Right Sidebar on Desktop */}
       <div
         id={id}
         className={`fixed z-50 transition-all duration-200 bg-[#161412] flex flex-col border-white/20
-          /* Mobile: Bottom drawer with fixed 60dvh or 100dvh */
+          /* Mobile: Bottom drawer with max/ideal height 60dvh or 100dvh for fullscreen */
           bottom-0 left-0 right-0 max-w-full overflow-hidden border-t md:border-t-0
-          ${isExpanded ? 'h-[100dvh]' : 'h-[60dvh]'}
-          /* Desktop: Native right sidebar translation */
-          md:top-[57px] md:bottom-0 md:right-0 md:left-auto md:w-[460px] md:h-[calc(100vh-57px)] md:border-l
+          ${mobileHeight}
+          /* Desktop: Native right sidebar */
+          md:top-0 md:bottom-0 md:right-0 md:left-auto md:w-[440px] md:h-full md:border-l md:shadow-2xl
         `}
       >
         {/* Top Minimalist Header Layer with Standardized 3-Slot Actions + Leading Back */}

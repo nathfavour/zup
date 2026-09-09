@@ -27,6 +27,7 @@ interface FeedViewProps {
   onLikeEvent: (eventId: string) => void;
   onRepostEvent: (eventId: string) => void;
   onReplyEvent: (event: NostrEvent) => void;
+  onSelectPost?: (event: NostrEvent) => void;
   // Live Feed & Infinite Scroll Props
   newEventsCount?: number;
   onLoadNewEvents?: () => void;
@@ -44,6 +45,7 @@ export function FeedView({
   onLikeEvent,
   onRepostEvent,
   onReplyEvent,
+  onSelectPost,
   newEventsCount = 0,
   onLoadNewEvents,
   onLoadOlderEvents,
@@ -233,7 +235,8 @@ export function FeedView({
               <article
                 key={event.id}
                 id={`note-card-${event.id}`}
-                className="p-4 sm:p-5 rounded-[22px] bg-[#000000] border border-white/20 hover:border-white/45 transition-all flex flex-col gap-3 group shadow-xl relative overflow-hidden"
+                onClick={() => onSelectPost?.(event)}
+                className="p-4 sm:p-5 rounded-[22px] bg-[#000000] border border-white/20 hover:border-white/45 transition-all flex flex-col gap-3 group shadow-xl relative overflow-hidden cursor-pointer"
               >
                 {/* Instant Zap Particle Flash */}
                 {isJustZapped && (
@@ -294,7 +297,10 @@ export function FeedView({
                     )}
 
                     <button
-                      onClick={() => handleToggleBookmark(event.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleBookmark(event.id);
+                      }}
                       className={`p-1.5 rounded-[10px] border transition-colors cursor-pointer ${
                         isBookmarked
                           ? 'bg-[#A855F7]/20 border-[#A855F7] text-[#A855F7]'
@@ -308,7 +314,10 @@ export function FeedView({
 
                     <button
                       id={`copy-note-id-${event.id}`}
-                      onClick={() => handleCopyEventId(event.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyEventId(event.id);
+                      }}
                       className="p-1.5 rounded-[10px] bg-[#161412] border border-white/20 hover:border-white/50 text-white/80 hover:text-white transition-colors cursor-pointer"
                       title="Copy Note ID"
                       aria-label="Copy Note ID"
@@ -344,7 +353,10 @@ export function FeedView({
                 )}
 
                 {/* Action Bar */}
-                <div className="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-white text-xs font-bold">
+                <div
+                  className="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-white text-xs font-bold"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {/* Left: Engagement Controls */}
                   <div className="flex items-center gap-2 sm:gap-3">
                     {/* Reply */}

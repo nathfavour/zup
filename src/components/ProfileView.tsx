@@ -38,6 +38,7 @@ interface ProfileViewProps {
   onLikeEvent: (eventId: string) => void;
   onRepostEvent: (eventId: string) => void;
   onReplyEvent: (event: NostrEvent) => void;
+  onSelectPost?: (event: NostrEvent) => void;
   onBackToFeed: () => void;
   // Relays and Key Vault management for top Settings button
   relays: RelayInfo[];
@@ -70,6 +71,7 @@ export function ProfileView({
   onLikeEvent,
   onRepostEvent,
   onReplyEvent,
+  onSelectPost,
   onBackToFeed,
   relays,
   onAddRelay,
@@ -393,6 +395,7 @@ export function ProfileView({
                 onLikeEvent={onLikeEvent}
                 onRepostEvent={onRepostEvent}
                 onReplyEvent={onReplyEvent}
+                onSelectPost={onSelectPost}
               />
             ))
           )
@@ -640,6 +643,7 @@ interface ProfileNoteCardProps {
   onLikeEvent: (eventId: string) => void;
   onRepostEvent: (eventId: string) => void;
   onReplyEvent: (event: NostrEvent) => void;
+  onSelectPost?: (event: NostrEvent) => void;
 }
 
 /**
@@ -652,6 +656,7 @@ function ProfileNoteCard({
   onLikeEvent,
   onRepostEvent,
   onReplyEvent,
+  onSelectPost,
 }: ProfileNoteCardProps) {
   const author = event.author;
   const displayName = author?.displayName || author?.name || formatTruncatedKey(event.pubkey);
@@ -663,7 +668,10 @@ function ProfileNoteCard({
   });
 
   return (
-    <div className="p-4 rounded-[20px] bg-[#000000] border border-white/20 hover:border-white/35 transition-all shadow-md">
+    <div
+      onClick={() => onSelectPost?.(event)}
+      className="p-4 rounded-[20px] bg-[#000000] border border-white/20 hover:border-white/35 transition-all shadow-md cursor-pointer"
+    >
       <div className="flex items-start gap-3">
         {/* Author Avatar */}
         <div className="w-10 h-10 rounded-[12px] bg-[#161412] border border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
@@ -700,7 +708,10 @@ function ProfileNoteCard({
           </p>
 
           {/* Action Bar (Reply, Repost, Like, Zap) */}
-          <div className="flex items-center justify-between pt-2 text-white/60 max-w-sm">
+          <div
+            className="flex items-center justify-between pt-2 text-white/60 max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Reply */}
             <button
               type="button"

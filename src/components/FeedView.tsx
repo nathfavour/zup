@@ -27,6 +27,7 @@ interface FeedViewProps {
 
 export function FeedView({
   events,
+  onOpenCompose,
   onOpenZap,
   onLikeEvent,
   onRepostEvent,
@@ -110,13 +111,37 @@ export function FeedView({
       {/* The Pure Feed Notes List */}
       <div className="flex flex-col gap-3">
         {filteredEvents.length === 0 ? (
-          <div className="p-8 rounded-[22px] bg-[#000000] border border-white/20 text-center flex flex-col items-center justify-center gap-2.5 shadow-xl">
-            <h4 className="text-white font-black text-sm uppercase tracking-wider m-0">
-              No Notes Found
-            </h4>
-            <p className="text-white/70 text-xs font-medium max-w-sm m-0">
-              {searchQuery ? `No notes matching "${searchQuery}"` : 'Your feed is empty.'}
-            </p>
+          <div className="p-8 rounded-[22px] bg-[#000000] border border-white/20 text-center flex flex-col items-center justify-center gap-3 shadow-xl">
+            {searchQuery ? (
+              <>
+                <h4 className="text-white font-black text-sm uppercase tracking-wider m-0">
+                  No Notes Found
+                </h4>
+                <p className="text-white/70 text-xs font-medium max-w-sm m-0">
+                  No notes matching &ldquo;{searchQuery}&rdquo;
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#10B981]/15 border border-[#10B981]/30 text-[#10B981] text-xs font-mono font-bold">
+                  <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
+                  <span>Connecting to Relays</span>
+                </div>
+                <h4 className="text-white font-black text-sm uppercase tracking-wider m-0">
+                  Streaming Live Decentralized Feed
+                </h4>
+                <p className="text-white/70 text-xs font-medium max-w-md m-0">
+                  Subscribed to real Nostr relays (<span className="text-[#EC4899] font-mono">damus.io</span>, <span className="text-[#10B981] font-mono">nos.lol</span>, <span className="text-[#A855F7] font-mono">nostr.band</span>). Live public Kind 1 notes will stream in as relays broadcast.
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenCompose}
+                  className="mt-2 px-5 py-2 rounded-[14px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] hover:opacity-90 text-white font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_15px_#EC489933]"
+                >
+                  Publish First Note
+                </button>
+              </>
+            )}
           </div>
         ) : (
           filteredEvents.map((event) => {

@@ -1,11 +1,11 @@
 import { 
-  Radio, 
-  Key, 
   Send, 
-  Settings, 
-  Globe2 
+  Globe2,
+  Bell,
+  User,
+  Plus
 } from 'lucide-react';
-import { ActiveTab, RelayInfo, NostrKeypair } from '../../types';
+import { ActiveTab, NostrKeypair } from '../../types';
 
 export interface NavTabItem {
   id: ActiveTab;
@@ -18,53 +18,44 @@ export interface NavTabItem {
 }
 
 export function getNavTabs(
-  relays: RelayInfo[],
-  unreadCount: number,
+  unreadMessagesCount: number,
+  unreadNotificationsCount: number,
   keypair: NostrKeypair
 ): NavTabItem[] {
-  const connectedCount = relays.filter((r) => r.status === 'connected').length;
-
   return [
     {
       id: 'feed',
       label: 'Feed',
-      sublabel: 'Global & Following Notes',
+      sublabel: 'Decentralized Notes & Zups',
       icon: Globe2,
       accent: '#EC4899', // Pink
       glow: 'shadow-[0_0_14px_#EC489944]',
-    },
-    {
-      id: 'relays',
-      label: 'Relays',
-      sublabel: `${connectedCount} Connected Nodes`,
-      icon: Radio,
-      accent: '#A855F7', // Amethyst
-      glow: 'shadow-[0_0_14px_#A855F744]',
     },
     {
       id: 'messages',
       label: 'Messages',
       sublabel: 'End-to-End Encrypted DMs',
       icon: Send,
-      badge: unreadCount > 0 ? unreadCount : undefined,
+      badge: unreadMessagesCount > 0 ? unreadMessagesCount : undefined,
       accent: '#6366F1', // Indigo
       glow: 'shadow-[0_0_14px_#6366F144]',
     },
     {
-      id: 'vault',
-      label: 'Key Vault',
-      sublabel: keypair.isEphemeral ? 'Ephemeral Burner Active' : 'Sovereign Secp256k1 Keys',
-      icon: Key,
-      accent: '#10B981', // Emerald
-      glow: 'shadow-[0_0_14px_#10B98144]',
-    },
-    {
-      id: 'settings',
-      label: 'Privacy',
-      sublabel: 'Zero-Logs & Tor Guard',
-      icon: Settings,
+      id: 'notifications',
+      label: 'Notifications',
+      sublabel: 'Zaps, Reactions & Mentions',
+      icon: Bell,
+      badge: unreadNotificationsCount > 0 ? unreadNotificationsCount : undefined,
       accent: '#F59E0B', // Amber
       glow: 'shadow-[0_0_14px_#F59E0B44]',
+    },
+    {
+      id: 'profile',
+      label: 'Profile',
+      sublabel: keypair.displayName || keypair.name || 'Sovereign Identity',
+      icon: User,
+      accent: '#10B981', // Emerald
+      glow: 'shadow-[0_0_14px_#10B98144]',
     },
   ];
 }

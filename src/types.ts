@@ -121,7 +121,31 @@ export interface DirectMessageThread {
   }>;
 }
 
-export type ActiveTab = 'feed' | 'relays' | 'messages' | 'vault' | 'settings';
+export type ActiveTab = 
+  | 'feed' 
+  | 'messages' 
+  | 'notifications' 
+  | 'profile' 
+  | 'relays' 
+  | 'vault' 
+  | 'settings';
+
+export interface NostrNotification {
+  id: string;
+  type: 'zap' | 'like' | 'repost' | 'reply' | 'mention';
+  sourcePubkey: string;
+  sourceName: string;
+  sourceAvatar?: string;
+  sourceNpub?: string;
+  targetEventId?: string;
+  targetEventContent?: string;
+  amountSats?: number;
+  comment?: string;
+  timestamp: number;
+  read: boolean;
+}
+
+export type ProfileSubTab = 'zups' | 'replies' | 'likes' | 'zaps';
 
 export type FeedFilter = 
   | 'foryou'

@@ -10,7 +10,7 @@ interface HeaderProps {
   keypair: NostrKeypair;
   relays: RelayInfo[];
   onOpenCompose: () => void;
-  onOpenVault: () => void;
+  onOpenProfile: () => void;
   onOpenPro: () => void;
   onToggleEphemeral: () => void;
 }
@@ -19,7 +19,7 @@ export function Header({
   keypair,
   relays,
   onOpenCompose,
-  onOpenVault,
+  onOpenProfile,
   onOpenPro,
   onToggleEphemeral,
 }: HeaderProps) {
@@ -90,12 +90,12 @@ export function Header({
             </button>
           )}
 
-          {/* Active Identity Avatar Pill (Click opens Key Vault) */}
+          {/* Active Identity Avatar Pill (Click opens Profile) */}
           <button
             id="identity-pill"
-            onClick={onOpenVault}
+            onClick={onOpenProfile}
             className="flex items-center gap-2 px-2 sm:px-2.5 py-1 rounded-[14px] bg-[#161412] border border-white/20 hover:border-[#10B981] cursor-pointer transition-all group"
-            title="Open Sovereign Key Vault"
+            title="Open Sovereign Profile"
           >
             <img
               src={keypair.avatar}

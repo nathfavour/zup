@@ -124,7 +124,19 @@ export function MessagesView({
           </div>
 
           <div className="flex flex-col gap-2">
-            {threads.map((thread) => {
+            {threads.length === 0 ? (
+              <div className="p-6 rounded-[18px] bg-[#000000] border border-white/20 text-center flex flex-col items-center justify-center gap-2 text-white/70 text-xs">
+                <span>No encrypted conversations yet.</span>
+                <button
+                  type="button"
+                  onClick={() => setIsStartingNew(true)}
+                  className="mt-1 px-3 py-1.5 rounded-[12px] bg-[#6366F1]/20 border border-[#6366F1] text-[#6366F1] font-bold text-xs hover:bg-[#6366F1]/30 transition-all cursor-pointer"
+                >
+                  Start New Chat
+                </button>
+              </div>
+            ) : (
+              threads.map((thread) => {
               const isSelected = activePeerPubkey === thread.peerPubkey;
 
               return (
@@ -163,7 +175,7 @@ export function MessagesView({
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
 

@@ -64,8 +64,10 @@ export function UnlockDrawer({
       onClose();
     } catch (err: unknown) {
       console.error('Passkey unlock failed:', err);
-      setError('Biometric authentication failed or was cancelled. Try again or use password.');
+      setError('Biometric authentication failed or was cancelled. Please unlock with your master password below.');
       setIsAuthenticating(false);
+      // Seamless fallback to password unlock
+      setUsePasskey(false);
     }
   };
 

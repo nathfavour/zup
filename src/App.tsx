@@ -12,16 +12,19 @@ import {
   RelayInfo, 
   DirectMessageThread,
   StoredIdentity,
-  VaultSecurityState
+  VaultSecurityState,
+  NostrNotification
 } from './types';
 import { 
   createNewKeypair, 
   DEFAULT_RELAYS, 
   signNote, 
+  signReaction,
+  signRepost,
+  pubkeyToNpub,
   bytesToHex,
   hexToBytes
 } from './lib/nostr';
-import { INITIAL_EVENTS, INITIAL_DIRECT_MESSAGES } from './data/seedEvents';
 import { getDatabase, ZupDatabase } from './lib/db';
 import { 
   encryptSecret, 
@@ -34,6 +37,8 @@ import { RelayMeshView } from './components/RelayMeshView';
 import { MessagesView } from './components/MessagesView';
 import { VaultView } from './components/VaultView';
 import { SettingsView } from './components/SettingsView';
+import { ProfileView } from './components/ProfileView';
+import { NotificationsView } from './components/NotificationsView';
 import { ComposeDrawer } from './components/ComposeDrawer';
 import { ZapModal } from './components/ZapModal';
 import { ReplyDrawer } from './components/ReplyDrawer';
@@ -65,10 +70,41 @@ export default function App() {
   const [activeIdentityId, setActiveIdentityId] = useState<string>('');
   const [keypair, setKeypair] = useState<NostrKeypair>(() => createNewKeypair(false));
 
-  // Relays, Events, Threads State (driven by RxDB)
+  // Relays, Events, Threads State (driven by RxDB & live relay stream)
   const [relays, setRelays] = useState<RelayInfo[]>(DEFAULT_RELAYS);
-  const [events, setEvents] = useState<NostrEvent[]>(INITIAL_EVENTS);
-  const [threads, setThreads] = useState<DirectMessageThread[]>(INITIAL_DIRECT_MESSAGES);
+  const [events, setEvents] = useState<NostrEvent[]>([]);
+  const [threads, setThreads] = useState<DirectMessageThread[]>([]);
+  const [notifications, setNotifications] = useState<NostrNotification[]>([
+    {
+      id: 'notif_1',
+      type: 'zap',
+      sourcePubkey: '3bf0c63fcb93463407af97b5e0928838ce2d7bca84ab5774d755559d2a589b8a',
+      sourceName: 'Fiatjaf',
+      amountSats: 210,
+      comment: '⚡ Great decentralization work on Zup!',
+      targetEventContent: 'Sovereign client cryptography and direct relay broadcasting.',
+      timestamp: Math.floor(Date.now() / 1000) - 1800,
+      read: false,
+    },
+    {
+      id: 'notif_2',
+      type: 'like',
+      sourcePubkey: '82341f882b6eabcd2d7f17e15195cadd2fad366cb37918879c7344e8097b444f',
+      sourceName: 'Jack',
+      targetEventContent: 'Zero-knowledge encrypted local vault with native Argon2id.',
+      timestamp: Math.floor(Date.now() / 1000) - 3600,
+      read: false,
+    },
+    {
+      id: 'notif_3',
+      type: 'repost',
+      sourcePubkey: 'fa984bd7dbb282f07e16e7ae87b2ec4c9c4dc92e7073dac505bc941f87e6820c',
+      sourceName: 'Damus Relay Bot',
+      targetEventContent: 'P2P decentralized messaging with no intermediaries.',
+      timestamp: Math.floor(Date.now() / 1000) - 7200,
+      read: true,
+    },
+  ]);
 
   // Action Modals State
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -79,6 +115,15 @@ export default function App() {
 
   // WebSocket connections reference
   const activeSocketsRef = useRef<Map<string, WebSocket>>(new Map());
+  // Cache for real Nostr author profiles (Kind 0)
+  const profileCacheRef = useRef<Map<string, {
+    name?: string;
+    displayName?: string;
+    avatar?: string;
+    nip05?: string;
+  }>>(new Map());
+  // Set of pubkeys already requested for Kind 0
+  const requestedPubkeysRef = useRef<Set<string>>(new Set());
 
   // =========================================================================
   // 1. Initialize RxDB and Reactive Subscriptions
@@ -147,7 +192,7 @@ export default function App() {
 
         // C. Reactive RxDB Subscriptions
         const notesSub = database.notes.find().$.subscribe((docs) => {
-          if (docs && docs.length > 0) {
+          if (docs) {
             const mapped = docs.map((d) => d.toJSON() as NostrEvent);
             mapped.sort((a, b) => b.created_at - a.created_at);
             setEvents(mapped);
@@ -219,8 +264,8 @@ export default function App() {
           );
           const reqMessage = JSON.stringify([
             'REQ',
-            `sub_${relay.url.slice(-4)}`,
-            { kinds: [1], limit: 15 },
+            `sub_${relay.url.replace(/[^a-zA-Z0-9]/g, '').slice(-6)}`,
+            { kinds: [1], limit: 30 },
           ]);
           try {
             ws.send(reqMessage);
@@ -232,36 +277,104 @@ export default function App() {
         ws.onmessage = async (msgEvent) => {
           try {
             const data = JSON.parse(msgEvent.data);
-            if (Array.isArray(data) && data[0] === 'EVENT') {
-              const incoming = data[2];
-              if (incoming && incoming.id && incoming.content) {
-                const formatted: NostrEvent = {
-                  id: incoming.id,
-                  pubkey: incoming.pubkey,
-                  created_at: incoming.created_at || Math.floor(Date.now() / 1000),
-                  kind: incoming.kind || 1,
-                  tags: incoming.tags || [],
-                  content: incoming.content,
-                  sig: incoming.sig || '',
-                  relayUrl: relay.url,
-                  likesCount: Math.floor(Math.random() * 10),
-                  repostsCount: Math.floor(Math.random() * 5),
-                  zapsCount: Math.floor(Math.random() * 50) * 21,
-                  author: {
-                    name: `peer_${incoming.pubkey.slice(0, 6)}`,
-                    displayName: `Nostr Peer`,
-                    avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${incoming.pubkey}`,
-                  },
-                };
+            if (!Array.isArray(data) || data[0] !== 'EVENT') return;
 
-                // Upsert directly into RxDB
-                if (db) {
-                  await db.notes.upsert(formatted);
-                  await db.relays.upsert({
-                    ...relay,
-                    eventsReceived: (relay.eventsReceived || 0) + 1,
-                  });
+            const incoming = data[2];
+            if (!incoming || !incoming.id) return;
+
+            // 1. Handle Kind 0 (Author Profile Metadata)
+            if (incoming.kind === 0 && incoming.pubkey && incoming.content) {
+              try {
+                const meta = JSON.parse(incoming.content);
+                const profile = {
+                  name: meta.name || meta.username,
+                  displayName: meta.display_name || meta.displayName || meta.name,
+                  avatar: meta.picture,
+                  nip05: meta.nip05,
+                };
+                profileCacheRef.current.set(incoming.pubkey, profile);
+
+                // Update any notes in memory and in RxDB by this author
+                setEvents((prev) =>
+                  prev.map((e) => {
+                    if (e.pubkey === incoming.pubkey) {
+                      return {
+                        ...e,
+                        author: {
+                          ...e.author,
+                          name: profile.name || e.author.name,
+                          displayName: profile.displayName || e.author.displayName,
+                          avatar: profile.avatar || e.author.avatar,
+                          nip05: profile.nip05 || e.author.nip05,
+                        },
+                      };
+                    }
+                    return e;
+                  })
+                );
+              } catch {
+                // Ignore invalid metadata
+              }
+              return;
+            }
+
+            // 2. Handle Kind 1 (Real Public Nostr Note)
+            if (incoming.kind === 1 && incoming.content) {
+              const cached = profileCacheRef.current.get(incoming.pubkey);
+              const npub = pubkeyToNpub(incoming.pubkey);
+
+              const formatted: NostrEvent = {
+                id: incoming.id,
+                pubkey: incoming.pubkey,
+                created_at: incoming.created_at || Math.floor(Date.now() / 1000),
+                kind: 1,
+                tags: incoming.tags || [],
+                content: incoming.content,
+                sig: incoming.sig || '',
+                relayUrl: relay.url,
+                likesCount: 0,
+                repostsCount: 0,
+                zapsCount: 0,
+                repliesCount: 0,
+                author: {
+                  name: cached?.name || `npub...${incoming.pubkey.slice(0, 6)}`,
+                  displayName: cached?.displayName || `Peer ${incoming.pubkey.slice(0, 6)}`,
+                  npub,
+                  avatar: cached?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${incoming.pubkey}`,
+                  nip05: cached?.nip05,
+                },
+              };
+
+              // If author profile is not yet in cache, request Kind 0 metadata from this relay
+              if (!cached && !requestedPubkeysRef.current.has(incoming.pubkey)) {
+                requestedPubkeysRef.current.add(incoming.pubkey);
+                try {
+                  ws.send(
+                    JSON.stringify([
+                      'REQ',
+                      `meta_${incoming.pubkey.slice(0, 8)}`,
+                      { kinds: [0], authors: [incoming.pubkey], limit: 1 },
+                    ])
+                  );
+                } catch {
+                  // pass
                 }
+              }
+
+              // Upsert directly into RxDB
+              if (db) {
+                await db.notes.upsert(formatted);
+                await db.relays.upsert({
+                  ...relay,
+                  eventsReceived: (relay.eventsReceived || 0) + 1,
+                });
+              } else {
+                setEvents((prev) => {
+                  if (prev.some((e) => e.id === formatted.id)) return prev;
+                  const next = [formatted, ...prev];
+                  next.sort((a, b) => b.created_at - a.created_at);
+                  return next.slice(0, 50);
+                });
               }
             }
           } catch {
@@ -513,6 +626,23 @@ export default function App() {
       isLiked,
       likesCount: isLiked ? (target.likesCount || 0) + 1 : Math.max(0, (target.likesCount || 1) - 1),
     };
+
+    // Broadcast real signed Kind 7 reaction event to connected Nostr relays
+    if (isLiked && keypair.privkeyHex) {
+      const reactionEvent = signReaction(target.id, target.pubkey, keypair);
+      if (reactionEvent) {
+        activeSocketsRef.current.forEach((ws) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send(JSON.stringify(['EVENT', reactionEvent]));
+            } catch {
+              // pass
+            }
+          }
+        });
+      }
+    }
+
     if (db) {
       await db.notes.upsert(updated);
     } else {
@@ -531,6 +661,23 @@ export default function App() {
         ? (target.repostsCount || 0) + 1
         : Math.max(0, (target.repostsCount || 1) - 1),
     };
+
+    // Broadcast real signed Kind 6 repost event to connected Nostr relays
+    if (isReposted && keypair.privkeyHex) {
+      const repostEvent = signRepost(target, keypair);
+      if (repostEvent) {
+        activeSocketsRef.current.forEach((ws) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send(JSON.stringify(['EVENT', repostEvent]));
+            } catch {
+              // pass
+            }
+          }
+        });
+      }
+    }
+
     if (db) {
       await db.notes.upsert(updated);
     } else {
@@ -725,7 +872,31 @@ export default function App() {
     setRelays(DEFAULT_RELAYS);
   };
 
+  const handleUpdateKeypair = async (updated: NostrKeypair) => {
+    setKeypair(updated);
+    if (db && activeIdentityId) {
+      const existing = await db.identities.findOne(activeIdentityId).exec();
+      if (existing) {
+        await existing.update({
+          $set: {
+            displayName: updated.displayName || '',
+            name: updated.name || '',
+            about: updated.about || '',
+            avatar: updated.avatar || '',
+            nip05: updated.nip05 || '',
+            lud16: updated.lud16 || '',
+          },
+        });
+      }
+    }
+  };
+
+  const handleMarkAllNotificationsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
   const totalUnread = threads.reduce((acc, t) => acc + (t.unreadCount || 0), 0);
+  const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
 
   return (
     <div className="min-h-screen bg-[#161412] text-white flex flex-col selection:bg-[#EC4899]/30 selection:text-white">
@@ -734,7 +905,7 @@ export default function App() {
         keypair={keypair}
         relays={relays}
         onOpenCompose={() => setIsComposeOpen(true)}
-        onOpenVault={() => setActiveTab('vault')}
+        onOpenProfile={() => setActiveTab('profile')}
         onOpenPro={() => {
           setProFeatureName('Pro Relay Mesh');
           setIsProOpen(true);
@@ -748,9 +919,10 @@ export default function App() {
         <Navigation
           activeTab={activeTab}
           onSelectTab={setActiveTab}
-          unreadCount={totalUnread}
-          relays={relays}
+          unreadMessagesCount={totalUnread}
+          unreadNotificationsCount={unreadNotificationsCount}
           keypair={keypair}
+          onOpenCompose={() => setIsComposeOpen(true)}
           onOpenPro={() => {
             setProFeatureName('Sovereign Pro Suite');
             setIsProOpen(true);
@@ -773,6 +945,71 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'messages' && (
+            <MessagesView
+              threads={threads}
+              keypair={keypair}
+              onSendMessage={handleSendMessage}
+              onStartNewThread={handleStartNewThread}
+              onOpenPro={() => {
+                setProFeatureName('Multi-Device E2EE Sync');
+                setIsProOpen(true);
+              }}
+            />
+          )}
+
+          {activeTab === 'notifications' && (
+            <NotificationsView
+              notifications={notifications}
+              keypair={keypair}
+              onMarkAllAsRead={handleMarkAllNotificationsRead}
+              onOpenZapTarget={(eventId) => {
+                const target = events.find((e) => e.id === eventId);
+                if (target) setZapTargetEvent(target);
+              }}
+              onReplyTarget={(eventId) => {
+                const target = events.find((e) => e.id === eventId);
+                if (target) setReplyTargetEvent(target);
+              }}
+            />
+          )}
+
+          {activeTab === 'profile' && (
+            <ProfileView
+              keypair={keypair}
+              onUpdateKeypair={handleUpdateKeypair}
+              events={events}
+              onOpenCompose={() => setIsComposeOpen(true)}
+              onOpenZap={(ev) => setZapTargetEvent(ev)}
+              onLikeEvent={handleLikeEvent}
+              onRepostEvent={handleRepostEvent}
+              onReplyEvent={(ev) => setReplyTargetEvent(ev)}
+              onBackToFeed={() => setActiveTab('feed')}
+              relays={relays}
+              onAddRelay={handleAddRelay}
+              onToggleRelayPermission={handleToggleRelayPermission}
+              onRemoveRelay={handleRemoveRelay}
+              onTestPing={handleTestPing}
+              onResetDefaultRelays={handleResetDefaultRelays}
+              vaultSecurity={vaultSecurity}
+              isVaultLocked={isVaultLocked}
+              onLockVault={handleLockVault}
+              onOpenUnlock={() => setIsUnlockOpen(true)}
+              onOpenSetupEncryption={() => setIsSetupEncryptionOpen(true)}
+              onToggleEphemeral={handleToggleEphemeral}
+              identities={storedIdentities}
+              activeIdentityId={activeIdentityId}
+              onSelectIdentity={handleSelectIdentity}
+              onOpenImportDrawer={() => setIsImportIdentityOpen(true)}
+              onDeleteIdentity={handleDeleteIdentity}
+              onClearCache={handleClearCache}
+              onOpenPro={() => {
+                setProFeatureName('Dedicated Sovereign Infrastructure');
+                setIsProOpen(true);
+              }}
+            />
+          )}
+
           {activeTab === 'relays' && (
             <RelayMeshView
               relays={relays}
@@ -782,19 +1019,6 @@ export default function App() {
               onTestPing={handleTestPing}
               onOpenPro={() => {
                 setProFeatureName('Dedicated Onion Relays');
-                setIsProOpen(true);
-              }}
-            />
-          )}
-
-          {activeTab === 'messages' && (
-            <MessagesView
-              threads={threads}
-              keypair={keypair}
-              onSendMessage={handleSendMessage}
-              onStartNewThread={handleStartNewThread}
-              onOpenPro={() => {
-                setProFeatureName('Multi-Device E2EE Sync');
                 setIsProOpen(true);
               }}
             />

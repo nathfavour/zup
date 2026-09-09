@@ -8,7 +8,6 @@ import {
   VaultSecurityState 
 } from '../types';
 import { DEFAULT_RELAYS } from './nostr';
-import { INITIAL_EVENTS, INITIAL_DIRECT_MESSAGES } from '../data/seedEvents';
 
 // Database Schema Definitions
 const identitySchema = {
@@ -208,20 +207,16 @@ export async function getDatabase(): Promise<ZupDatabase> {
       }
     }
 
-    // Seed initial notes if empty
-    const existingNotes = await db.notes.find().exec();
-    if (existingNotes.length === 0) {
-      for (const ev of INITIAL_EVENTS) {
-        await db.notes.upsert(ev);
+    // Clean up any legacy demo mock events from prior runs so feed is 100% real Nostr events
+    const demoNotes = await db.notes.find({
+      selector: {
+        id: {
+          $regex: '^e10'
+        }
       }
-    }
-
-    // Seed initial messages if empty
-    const existingMessages = await db.messages.find().exec();
-    if (existingMessages.length === 0) {
-      for (const msg of INITIAL_DIRECT_MESSAGES) {
-        await db.messages.upsert(msg);
-      }
+    }).exec();
+    for (const doc of demoNotes) {
+      await doc.remove();
     }
 
     return db;

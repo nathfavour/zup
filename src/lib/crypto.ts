@@ -160,57 +160,75 @@ async function derivePasskeyKEK(credentialId: string, salt: Uint8Array): Promise
 }
 
 /**
- * Registers a new passkey (biometric / on-device security key) to wrap the MEK
+ * Checks if on-device biometric authentication (Touch ID, Face ID, Windows Hello) is available
+ */
+export async function isPlatformBiometricAvailable(): Promise<boolean> {
+  if (
+    typeof window !== 'undefined' &&
+    window.PublicKeyCredential &&
+    typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function'
+  ) {
+    try {
+      return await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Registers a new passkey by triggering the real device biometric prompt (Touch ID, Face ID, Windows Hello)
+ * Throws an error if user cancels or biometric fails, so caller can fall back to password wrap.
  */
 export async function createPasskeyRecord(
   mek: Uint8Array,
-  passkeyName: string
+  passkeyName: string = 'On-Device Biometric'
 ): Promise<PasskeyRecord> {
-  let credentialId = `cred_${bytesToHex(generateRandomBytes(16))}`;
-
-  // Attempt standard WebAuthn if available and allowed in environment
-  if (typeof window !== 'undefined' && window.PublicKeyCredential && navigator.credentials) {
-    try {
-      const challenge = generateRandomBytes(32);
-      const userId = generateRandomBytes(16);
-      
-      const credential = (await navigator.credentials.create({
-        publicKey: {
-          challenge: challenge as unknown as ArrayBuffer,
-          rp: { name: 'Zup Sovereign Vault', id: window.location.hostname },
-          user: {
-            id: userId as unknown as ArrayBuffer,
-            name: 'vault-owner',
-            displayName: 'Sovereign Nostr User',
-          },
-          pubKeyCredParams: [
-            { alg: -7, type: 'public-key' },  // ES256
-            { alg: -257, type: 'public-key' }, // RS256
-          ],
-          authenticatorSelection: {
-            authenticatorAttachment: 'platform',
-            userVerification: 'preferred',
-            residentKey: 'preferred',
-          },
-          timeout: 45000,
-        },
-      })) as PublicKeyCredential | null;
-
-      if (credential && credential.rawId) {
-        credentialId = bytesToHex(new Uint8Array(credential.rawId));
-      }
-    } catch (err) {
-      console.info('WebAuthn platform check bypassed (sandboxed environment or user cancelled):', err);
-      // Fallback generates secure on-device bound credential token
-    }
+  if (typeof window === 'undefined' || !window.PublicKeyCredential || !navigator.credentials) {
+    throw new Error('WebAuthn biometric authentication is not supported in this browser.');
   }
 
+  const challenge = generateRandomBytes(32);
+  const userId = generateRandomBytes(16);
+
+  // Directly prompts the device's platform biometric authenticator
+  const credential = (await navigator.credentials.create({
+    publicKey: {
+      challenge: challenge as unknown as ArrayBuffer,
+      rp: {
+        name: 'Zup Sovereign Vault',
+        ...(window.location.hostname ? { id: window.location.hostname } : {}),
+      },
+      user: {
+        id: userId as unknown as ArrayBuffer,
+        name: 'sovereign-user',
+        displayName: 'Sovereign Nostr User',
+      },
+      pubKeyCredParams: [
+        { alg: -7, type: 'public-key' },  // ES256
+        { alg: -257, type: 'public-key' }, // RS256
+      ],
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform', // Enforce on-device biometric / secure enclave
+        userVerification: 'required',        // Require biometric or device PIN verification
+        residentKey: 'preferred',
+      },
+      timeout: 60000,
+    },
+  })) as PublicKeyCredential | null;
+
+  if (!credential || !credential.rawId) {
+    throw new Error('Biometric registration was cancelled or did not return a valid credential.');
+  }
+
+  const credentialId = bytesToHex(new Uint8Array(credential.rawId));
   const salt = generateRandomBytes(16);
   const passkeyKEK = await derivePasskeyKEK(credentialId, salt);
   const { cipherText, iv } = await encryptData(mek, passkeyKEK);
 
   return {
-    id: `pk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    id: `pk_${Date.now()}_${bytesToHex(generateRandomBytes(4))}`,
     name: passkeyName.trim() || 'On-Device Biometric',
     credentialId,
     createdAt: Date.now(),
@@ -224,32 +242,36 @@ export async function createPasskeyRecord(
 }
 
 /**
- * Unlocks the MEK using a passkey record
+ * Unlocks the MEK by triggering the real device biometric prompt
+ * Throws an error if user cancels or verification fails, so caller prompts for password.
  */
 export async function unlockMEKWithPasskey(
   passkey: PasskeyRecord
 ): Promise<Uint8Array> {
-  if (typeof window !== 'undefined' && window.PublicKeyCredential && navigator.credentials) {
-    try {
-      const challenge = generateRandomBytes(32);
-      const rawCredId = hexToBytes(passkey.credentialId);
+  if (typeof window === 'undefined' || !window.PublicKeyCredential || !navigator.credentials) {
+    throw new Error('WebAuthn biometric authentication is not supported in this browser.');
+  }
 
-      await navigator.credentials.get({
-        publicKey: {
-          challenge: challenge as unknown as ArrayBuffer,
-          allowCredentials: [
-            {
-              id: rawCredId as unknown as ArrayBuffer,
-              type: 'public-key',
-            },
-          ],
-          userVerification: 'preferred',
-          timeout: 45000,
+  const challenge = generateRandomBytes(32);
+  const rawCredId = hexToBytes(passkey.credentialId);
+
+  // Directly prompts the device's platform biometric authenticator
+  const assertion = (await navigator.credentials.get({
+    publicKey: {
+      challenge: challenge as unknown as ArrayBuffer,
+      allowCredentials: [
+        {
+          id: rawCredId as unknown as ArrayBuffer,
+          type: 'public-key',
         },
-      });
-    } catch (err) {
-      console.info('WebAuthn assertion bypassed / simulated:', err);
-    }
+      ],
+      userVerification: 'required',
+      timeout: 60000,
+    },
+  })) as PublicKeyCredential | null;
+
+  if (!assertion) {
+    throw new Error('Biometric verification was cancelled or failed.');
   }
 
   if (!passkey.encryptedMEK.salt) {

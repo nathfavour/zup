@@ -1,4 +1,4 @@
-import { ActiveTab, NostrKeypair, RelayInfo } from '../types';
+import { ActiveTab, NostrKeypair } from '../types';
 import { DesktopSidebar } from './navigation/DesktopSidebar';
 import { MobileBottomNav } from './navigation/MobileBottomNav';
 
@@ -8,9 +8,10 @@ export { MobileBottomNav } from './navigation/MobileBottomNav';
 interface NavigationProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
-  unreadCount: number;
-  relays: RelayInfo[];
+  unreadMessagesCount: number;
+  unreadNotificationsCount: number;
   keypair: NostrKeypair;
+  onOpenCompose: () => void;
   onOpenPro: () => void;
 }
 
@@ -22,30 +23,33 @@ interface NavigationProps {
 export function Navigation({
   activeTab,
   onSelectTab,
-  unreadCount,
-  relays,
+  unreadMessagesCount,
+  unreadNotificationsCount,
   keypair,
+  onOpenCompose,
   onOpenPro,
 }: NavigationProps) {
   return (
     <>
-      {/* Desktop Left Sidebar: Pure CSS 'hidden md:flex' guarantees instant render on desktop only */}
+      {/* Desktop Left Sidebar: Pure CSS 'hidden md:flex' with icons and text */}
       <DesktopSidebar
         activeTab={activeTab}
         onSelectTab={onSelectTab}
-        unreadCount={unreadCount}
-        relays={relays}
+        unreadMessagesCount={unreadMessagesCount}
+        unreadNotificationsCount={unreadNotificationsCount}
         keypair={keypair}
+        onOpenCompose={onOpenCompose}
         onOpenPro={onOpenPro}
       />
 
-      {/* Mobile Floating Bottom Navbar: Pure CSS 'flex md:hidden' with rounded edges */}
+      {/* Mobile Floating Bottom Navbar: Pure CSS 'flex md:hidden' with icons only (no text) */}
       <MobileBottomNav
         activeTab={activeTab}
         onSelectTab={onSelectTab}
-        unreadCount={unreadCount}
-        relays={relays}
+        unreadMessagesCount={unreadMessagesCount}
+        unreadNotificationsCount={unreadNotificationsCount}
         keypair={keypair}
+        onOpenCompose={onOpenCompose}
       />
     </>
   );

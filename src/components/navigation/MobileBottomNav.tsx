@@ -1,81 +1,174 @@
-import { ActiveTab, NostrKeypair, RelayInfo } from '../../types';
-import { getNavTabs } from './navItems';
+import { Globe2, Send, Plus, Bell, User } from 'lucide-react';
+import { ActiveTab, NostrKeypair } from '../../types';
 
 interface MobileBottomNavProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
-  unreadCount: number;
-  relays: RelayInfo[];
+  unreadMessagesCount: number;
+  unreadNotificationsCount: number;
   keypair: NostrKeypair;
+  onOpenCompose: () => void;
 }
 
 export function MobileBottomNav({
   activeTab,
   onSelectTab,
-  unreadCount,
-  relays,
+  unreadMessagesCount,
+  unreadNotificationsCount,
   keypair,
+  onOpenCompose,
 }: MobileBottomNavProps) {
-  const tabs = getNavTabs(relays, unreadCount, keypair);
-
   return (
     <nav
       id="mobile-bottom-nav"
       aria-label="Mobile Bottom Navigation"
-      className="flex md:hidden fixed bottom-0 left-0 right-0 w-full z-40 bg-[#000000]/95 backdrop-blur-xl border-t border-white/20 rounded-t-[24px] sm:rounded-t-[28px] rounded-b-none px-3 py-2 items-center justify-around shadow-[0_-8px_30px_rgba(0,0,0,0.85)] safe-area-inset-bottom transition-all"
+      className="flex md:hidden fixed bottom-0 left-0 right-0 w-full z-40 bg-[#000000]/95 backdrop-blur-xl border-t border-white/20 rounded-t-[24px] sm:rounded-t-[28px] rounded-b-none px-4 py-2.5 items-center justify-around shadow-[0_-8px_30px_rgba(0,0,0,0.85)] safe-area-inset-bottom transition-all"
     >
-      {tabs.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = activeTab === tab.id;
+      {/* 1. Feed Icon */}
+      <button
+        type="button"
+        id="mobile-nav-feed"
+        onClick={() => onSelectTab('feed')}
+        className="flex flex-col items-center justify-center py-1.5 px-3 relative group cursor-pointer transition-transform active:scale-95"
+        aria-label="Feed"
+        title="Feed"
+      >
+        <Globe2
+          size={24}
+          style={{
+            color: activeTab === 'feed' ? '#EC4899' : 'rgba(255, 255, 255, 0.65)',
+            filter: activeTab === 'feed' ? 'drop-shadow(0 0 8px #EC489988)' : undefined,
+          }}
+          className="transition-colors"
+        />
+        {/* Active Indicator Dot */}
+        <div
+          style={{
+            backgroundColor: activeTab === 'feed' ? '#EC4899' : 'transparent',
+            boxShadow: activeTab === 'feed' ? '0 0 6px #EC4899' : undefined,
+          }}
+          className="w-1.5 h-1.5 rounded-full mt-1 transition-all"
+        />
+      </button>
 
-        return (
-          <button
-            key={tab.id}
-            id={`mobile-nav-${tab.id}`}
-            onClick={() => onSelectTab(tab.id)}
-            className="flex flex-col items-center justify-center gap-1 py-1 px-2.5 min-w-[54px] relative group cursor-pointer transition-transform active:scale-95"
-            aria-label={tab.label}
-            title={tab.label}
-          >
-            <div className="relative flex items-center justify-center">
-              <Icon
-                size={22}
-                style={{
-                  color: isActive ? tab.accent : 'rgba(255, 255, 255, 0.65)',
-                  filter: isActive ? `drop-shadow(0 0 8px ${tab.accent}88)` : undefined,
-                }}
-                className="transition-colors"
-              />
-
-              {tab.badge && (
-                <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#6366F1] text-white text-[9px] font-black flex items-center justify-center font-mono border border-black shadow-sm">
-                  {tab.badge}
-                </span>
-              )}
-            </div>
-
-            <span
-              style={{
-                color: isActive ? tab.accent : 'rgba(255, 255, 255, 0.65)',
-              }}
-              className={`text-[10px] tracking-tight transition-colors ${
-                isActive ? 'font-black' : 'font-semibold'
-              }`}
-            >
-              {tab.label}
+      {/* 2. Messages Icon */}
+      <button
+        type="button"
+        id="mobile-nav-messages"
+        onClick={() => onSelectTab('messages')}
+        className="flex flex-col items-center justify-center py-1.5 px-3 relative group cursor-pointer transition-transform active:scale-95"
+        aria-label="Messages"
+        title="Messages"
+      >
+        <div className="relative flex items-center justify-center">
+          <Send
+            size={22}
+            style={{
+              color: activeTab === 'messages' ? '#6366F1' : 'rgba(255, 255, 255, 0.65)',
+              filter: activeTab === 'messages' ? 'drop-shadow(0 0 8px #6366F188)' : undefined,
+            }}
+            className="transition-colors"
+          />
+          {unreadMessagesCount > 0 && (
+            <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-[#EC4899] text-white text-[9px] font-black flex items-center justify-center font-mono border border-black shadow-sm">
+              {unreadMessagesCount}
             </span>
+          )}
+        </div>
+        <div
+          style={{
+            backgroundColor: activeTab === 'messages' ? '#6366F1' : 'transparent',
+            boxShadow: activeTab === 'messages' ? '0 0 6px #6366F1' : undefined,
+          }}
+          className="w-1.5 h-1.5 rounded-full mt-1 transition-all"
+        />
+      </button>
 
-            {/* Active indicator dot */}
-            <div
-              style={{
-                backgroundColor: isActive ? tab.accent : 'transparent',
-                boxShadow: isActive ? `0 0 6px ${tab.accent}` : undefined,
-              }}
-              className="w-1 h-1 rounded-full transition-all"
+      {/* 3. Create Button (Center prominent icon) */}
+      <button
+        type="button"
+        id="mobile-nav-create"
+        onClick={onOpenCompose}
+        className="flex items-center justify-center w-11 h-11 rounded-[16px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] text-white shadow-[0_0_15px_#EC489955] cursor-pointer transition-transform active:scale-90"
+        aria-label="Create Zup"
+        title="Create Zup"
+      >
+        <Plus size={22} strokeWidth={2.8} />
+      </button>
+
+      {/* 4. Notifications Icon */}
+      <button
+        type="button"
+        id="mobile-nav-notifications"
+        onClick={() => onSelectTab('notifications')}
+        className="flex flex-col items-center justify-center py-1.5 px-3 relative group cursor-pointer transition-transform active:scale-95"
+        aria-label="Notifications"
+        title="Notifications"
+      >
+        <div className="relative flex items-center justify-center">
+          <Bell
+            size={23}
+            style={{
+              color: activeTab === 'notifications' ? '#F59E0B' : 'rgba(255, 255, 255, 0.65)',
+              filter: activeTab === 'notifications' ? 'drop-shadow(0 0 8px #F59E0B88)' : undefined,
+            }}
+            className="transition-colors"
+          />
+          {unreadNotificationsCount > 0 && (
+            <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-[#F59E0B] text-black text-[9px] font-black flex items-center justify-center font-mono border border-black shadow-sm">
+              {unreadNotificationsCount}
+            </span>
+          )}
+        </div>
+        <div
+          style={{
+            backgroundColor: activeTab === 'notifications' ? '#F59E0B' : 'transparent',
+            boxShadow: activeTab === 'notifications' ? '0 0 6px #F59E0B' : undefined,
+          }}
+          className="w-1.5 h-1.5 rounded-full mt-1 transition-all"
+        />
+      </button>
+
+      {/* 5. Profile Icon */}
+      <button
+        type="button"
+        id="mobile-nav-profile"
+        onClick={() => onSelectTab('profile')}
+        className="flex flex-col items-center justify-center py-1.5 px-3 relative group cursor-pointer transition-transform active:scale-95"
+        aria-label="Profile"
+        title="Profile"
+      >
+        <div className="relative flex items-center justify-center">
+          {keypair.avatar ? (
+            <img
+              src={keypair.avatar}
+              alt="Profile"
+              referrerPolicy="no-referrer"
+              className={`w-6 h-6 rounded-[10px] object-cover border ${
+                activeTab === 'profile'
+                  ? 'border-[#10B981] shadow-[0_0_8px_#10B98188]'
+                  : 'border-white/30'
+              }`}
             />
-          </button>
-        );
-      })}
+          ) : (
+            <User
+              size={23}
+              style={{
+                color: activeTab === 'profile' ? '#10B981' : 'rgba(255, 255, 255, 0.65)',
+                filter: activeTab === 'profile' ? 'drop-shadow(0 0 8px #10B98188)' : undefined,
+              }}
+              className="transition-colors"
+            />
+          )}
+        </div>
+        <div
+          style={{
+            backgroundColor: activeTab === 'profile' ? '#10B981' : 'transparent',
+            boxShadow: activeTab === 'profile' ? '0 0 6px #10B981' : undefined,
+          }}
+          className="w-1.5 h-1.5 rounded-full mt-1 transition-all"
+        />
+      </button>
     </nav>
   );
 }

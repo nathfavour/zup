@@ -1,25 +1,27 @@
-import { Flame, Shield, Sparkles } from 'lucide-react';
-import { ActiveTab, NostrKeypair, RelayInfo } from '../../types';
+import { Flame, Shield, Sparkles, Plus } from 'lucide-react';
+import { ActiveTab, NostrKeypair } from '../../types';
 import { getNavTabs } from './navItems';
 
 interface DesktopSidebarProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
-  unreadCount: number;
-  relays: RelayInfo[];
+  unreadMessagesCount: number;
+  unreadNotificationsCount: number;
   keypair: NostrKeypair;
+  onOpenCompose: () => void;
   onOpenPro: () => void;
 }
 
 export function DesktopSidebar({
   activeTab,
   onSelectTab,
-  unreadCount,
-  relays,
+  unreadMessagesCount,
+  unreadNotificationsCount,
   keypair,
+  onOpenCompose,
   onOpenPro,
 }: DesktopSidebarProps) {
-  const tabs = getNavTabs(relays, unreadCount, keypair);
+  const tabs = getNavTabs(unreadMessagesCount, unreadNotificationsCount, keypair);
 
   return (
     <aside
@@ -27,16 +29,17 @@ export function DesktopSidebar({
       aria-label="Desktop Navigation Sidebar"
       className="hidden md:flex flex-col w-64 lg:w-72 shrink-0 h-[calc(100vh-96px)] sticky top-[80px] bg-[#000000] border border-white/20 rounded-[24px] p-4 justify-between overflow-y-auto shadow-2xl transition-all"
     >
-      <div className="flex flex-col gap-2">
-        <div className="px-3 py-1.5 flex items-center justify-between">
+      <div className="flex flex-col gap-3">
+        <div className="px-3 py-1 flex items-center justify-between">
           <span className="text-white text-[11px] font-black uppercase tracking-widest">
-            Decentralized Mesh
+            Sovereign Mesh
           </span>
-          <span className="text-[10px] font-mono text-white/50 font-bold">
-            P2P
+          <span className="text-[10px] font-mono text-[#EC4899] font-bold">
+            Zup P2P
           </span>
         </div>
 
+        {/* Primary Desktop Nav Tabs: Icons and Text */}
         <nav className="flex flex-col gap-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -73,7 +76,7 @@ export function DesktopSidebar({
                       {tab.label}
                     </span>
                     {tab.badge && (
-                      <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded-full bg-[#6366F1] text-white">
+                      <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded-full bg-[#EC4899] text-white shadow-sm">
                         {tab.badge}
                       </span>
                     )}
@@ -86,6 +89,17 @@ export function DesktopSidebar({
             );
           })}
         </nav>
+
+        {/* Prominent Desktop "Create" / "New Zup" Button */}
+        <button
+          id="desktop-create-zup-btn"
+          type="button"
+          onClick={onOpenCompose}
+          className="w-full mt-2 py-3.5 px-4 rounded-[18px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] hover:opacity-95 text-white font-black text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-[0_0_20px_#EC489955] active:scale-[0.98]"
+        >
+          <Plus size={18} strokeWidth={3} />
+          <span>Create Zup</span>
+        </button>
       </div>
 
       {/* Sidebar Bottom Security Status & Pro Trigger */}
@@ -97,7 +111,7 @@ export function DesktopSidebar({
             </div>
             <div className="min-w-0 flex-1">
               <span className="text-white font-bold text-xs block truncate">
-                Burner Mode
+                Burner Mode Active
               </span>
               <span className="text-white/60 text-[10px] font-medium block truncate">
                 Zero key persistence

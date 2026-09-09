@@ -207,6 +207,64 @@ export function signNote(
   }
 }
 
+export function pubkeyToNpub(pubkeyHex: string): string {
+  try {
+    return nip19.npubEncode(pubkeyHex);
+  } catch {
+    return `npub1${pubkeyHex.slice(0, 10)}`;
+  }
+}
+
+// Sign and finalize a Reaction (Kind 7)
+export function signReaction(
+  targetEventId: string,
+  targetEventPubkey: string,
+  keypair: NostrKeypair,
+  reactionChar: string = '+'
+): any | null {
+  if (!keypair.privkeyHex) return null;
+  try {
+    const sk = hexToBytes(keypair.privkeyHex);
+    const template = {
+      kind: 7,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ['e', targetEventId],
+        ['p', targetEventPubkey],
+      ],
+      content: reactionChar,
+    };
+    return finalizeEvent(template, sk);
+  } catch (err) {
+    console.error('Error signing reaction:', err);
+    return null;
+  }
+}
+
+// Sign and finalize a Repost (Kind 6)
+export function signRepost(
+  targetEvent: NostrEvent,
+  keypair: NostrKeypair
+): any | null {
+  if (!keypair.privkeyHex) return null;
+  try {
+    const sk = hexToBytes(keypair.privkeyHex);
+    const template = {
+      kind: 6,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ['e', targetEvent.id, targetEvent.relayUrl || ''],
+        ['p', targetEvent.pubkey],
+      ],
+      content: targetEvent.content,
+    };
+    return finalizeEvent(template, sk);
+  } catch (err) {
+    console.error('Error signing repost:', err);
+    return null;
+  }
+}
+
 export function formatTruncatedKey(key: string, head: number = 8, tail: number = 4): string {
   if (!key) return '';
   if (key.length <= head + tail) return key;

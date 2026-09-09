@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { NostrKeypair, RelayInfo } from '../types';
 import { formatTruncatedKey } from '../lib/nostr';
+import { ZupLogo } from './ZupLogo';
 
 interface HeaderProps {
   keypair: NostrKeypair;
@@ -33,9 +34,9 @@ export function Header({
       <div className="max-w-7xl mx-auto px-3.5 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-3">
         {/* Brand: Zup & Connected Relays */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-[11px] bg-[#EC4899]/15 border border-[#EC4899]/40 flex items-center justify-center text-[#EC4899] font-black text-sm shadow-[0_0_12px_#EC489933] shrink-0">
-              ⚡
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-[13px] bg-[#000000] border border-white/20 flex items-center justify-center shadow-[0_0_15px_#EC489922] shrink-0 p-1">
+              <ZupLogo size={28} />
             </div>
             <div className="flex flex-col">
               <span className="text-white font-black text-base sm:text-lg tracking-wider uppercase leading-none">

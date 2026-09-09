@@ -21,6 +21,7 @@ import {
   ARGON2_CONFIG 
 } from '../lib/crypto';
 import { VaultSecurityState, PasskeyRecord } from '../types';
+import { ZupLogo } from './ZupLogo';
 
 interface EncryptionSetupDrawerProps {
   isOpen: boolean;
@@ -220,12 +221,19 @@ export function EncryptionSetupDrawer({
         {viewMode === 'consumer' && (
           <div className="flex flex-col gap-4">
             {/* Consumer Value Banner */}
-            <div className="p-4 rounded-[20px] bg-[#000000] border border-white/20 flex flex-col gap-2.5 shadow-xl">
-              <div className="flex items-center gap-2 text-[#EC4899]">
-                <Zap size={20} className="fill-[#EC4899]" />
-                <span className="text-sm font-black tracking-wide text-white uppercase">
-                  Say what’s up. Get zapped.
-                </span>
+            <div className="p-4 rounded-[20px] bg-[#000000] border border-white/20 flex flex-col gap-3 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-[14px] bg-[#161412] border border-white/20 flex items-center justify-center shrink-0 p-1 shadow-[0_0_15px_#EC489922]">
+                  <ZupLogo size={32} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-black tracking-wide text-white uppercase leading-tight">
+                    Zup
+                  </span>
+                  <span className="text-[11px] font-bold text-[#EC4899]">
+                    Say what’s up. Get zapped.
+                  </span>
+                </div>
               </div>
               <p className="text-white/80 text-xs font-medium leading-relaxed m-0">
                 Experience Nostr with zero friction. No raw hex keys, no seed phrases, and no manual relay configuration. Connect in 1 second with on-device biometrics.

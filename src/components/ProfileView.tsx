@@ -256,10 +256,15 @@ export function ProfileView({
             </div>
 
             {/* Bio / About */}
-            <p className="text-white/90 text-sm font-medium leading-relaxed max-w-xl m-0">
-              {keypair.about ||
-                'Broadcasting sovereign, censorship-resistant Zups to the decentralized Nostr relay mesh.'}
-            </p>
+            {keypair.about ? (
+              <p className="text-white/90 text-sm font-medium leading-relaxed max-w-xl m-0">
+                {keypair.about}
+              </p>
+            ) : (
+              <p className="text-white/40 text-xs italic max-w-xl m-0">
+                No bio set yet. Tap &ldquo;Edit Profile&rdquo; to customize your identity, avatar, and Lightning address.
+              </p>
+            )}
 
             {/* Metadata Pills */}
             <div className="flex items-center gap-3 flex-wrap pt-1 text-xs text-white/60">
@@ -283,24 +288,35 @@ export function ProfileView({
               )}
 
               {/* Connected Relays Status */}
-              <div 
+              <button 
+                type="button"
                 onClick={() => setIsSettingsOpen(true)}
-                className="flex items-center gap-1 text-[#A855F7] font-mono text-[11px] hover:underline cursor-pointer"
+                className="flex items-center gap-1 text-[#A855F7] font-mono text-[11px] hover:underline cursor-pointer bg-transparent border-0 p-0"
               >
                 <Radio size={13} />
                 <span>{connectedRelaysCount} Relays Connected</span>
+              </button>
+
+              {/* Signer Key State */}
+              <div className="flex items-center gap-1 text-[#10B981] font-mono text-[11px]">
+                <Shield size={12} />
+                <span>{keypair.isEphemeral ? 'Ephemeral RAM Key' : 'Local Sovereign Key'}</span>
               </div>
             </div>
 
-            {/* Followers & Following Counts (Twitter-Style) */}
+            {/* Real Network Counts (No fake followers) */}
             <div className="flex items-center gap-5 pt-2 text-xs">
-              <div className="flex items-center gap-1 cursor-pointer hover:underline">
-                <span className="text-white font-black">148</span>
-                <span className="text-white/60 font-medium">Following</span>
+              <div className="flex items-center gap-1">
+                <span className="text-white font-black font-mono">{userZups.length}</span>
+                <span className="text-white/60 font-medium">Broadcasts</span>
               </div>
-              <div className="flex items-center gap-1 cursor-pointer hover:underline">
-                <span className="text-white font-black">1,420</span>
-                <span className="text-white/60 font-medium">Followers</span>
+              <div className="flex items-center gap-1">
+                <span className="text-white font-black font-mono">{userLikes.length}</span>
+                <span className="text-white/60 font-medium">Reactions</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-white font-black font-mono">{userZaps.length}</span>
+                <span className="text-white/60 font-medium">Zaps Sent</span>
               </div>
             </div>
           </div>

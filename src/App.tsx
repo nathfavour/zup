@@ -32,6 +32,7 @@ import {
   masterPassCrypto 
 } from './lib/crypto';
 import { syncEngine } from './lib/syncEngine';
+import { evaluateZupQuality, sanitizeZupContent } from './lib/nostrFilters';
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
 import { FeedView } from './components/FeedView';
@@ -77,38 +78,13 @@ export default function App() {
   // Relays, Events, Threads State (driven by RxDB & live relay stream)
   const [relays, setRelays] = useState<RelayInfo[]>(DEFAULT_RELAYS);
   const [events, setEvents] = useState<NostrEvent[]>([]);
+  const [pendingNewEvents, setPendingNewEvents] = useState<NostrEvent[]>([]);
+  const [blockedSpamCount, setBlockedSpamCount] = useState<number>(0);
+  const [isOlderLoading, setIsOlderLoading] = useState<boolean>(false);
   const [threads, setThreads] = useState<DirectMessageThread[]>([]);
-  const [notifications, setNotifications] = useState<NostrNotification[]>([
-    {
-      id: 'notif_1',
-      type: 'zap',
-      sourcePubkey: '3bf0c63fcb93463407af97b5e0928838ce2d7bca84ab5774d755559d2a589b8a',
-      sourceName: 'Fiatjaf',
-      amountSats: 210,
-      comment: '⚡ Great decentralization work on Zup!',
-      targetEventContent: 'Sovereign client cryptography and direct relay broadcasting.',
-      timestamp: Math.floor(Date.now() / 1000) - 1800,
-      read: false,
-    },
-    {
-      id: 'notif_2',
-      type: 'like',
-      sourcePubkey: '82341f882b6eabcd2d7f17e15195cadd2fad366cb37918879c7344e8097b444f',
-      sourceName: 'Jack',
-      targetEventContent: 'Zero-knowledge encrypted local vault with native Argon2id.',
-      timestamp: Math.floor(Date.now() / 1000) - 3600,
-      read: false,
-    },
-    {
-      id: 'notif_3',
-      type: 'repost',
-      sourcePubkey: 'fa984bd7dbb282f07e16e7ae87b2ec4c9c4dc92e7073dac505bc941f87e6820c',
-      sourceName: 'Damus Relay Bot',
-      targetEventContent: 'P2P decentralized messaging with no intermediaries.',
-      timestamp: Math.floor(Date.now() / 1000) - 7200,
-      read: true,
-    },
-  ]);
+  const [notifications, setNotifications] = useState<NostrNotification[]>([]);
+
+  const feedInitializedRef = useRef<boolean>(false);
 
   // Action Modals State
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -206,15 +182,14 @@ export default function App() {
           setKeypair(fresh);
         }
 
-        // C. Reactive RxDB Subscriptions
-        const notesSub = database.notes.find().$.subscribe((docs) => {
-          if (docs) {
-            const mapped = docs.map((d) => d.toJSON() as NostrEvent);
-            mapped.sort((a, b) => b.created_at - a.created_at);
-            setEvents(mapped);
-          }
-        });
-        subs.push(notesSub);
+        // C. Initial Notes Snapshot from RxDB (prevents feed from jumping on background writes)
+        const initialNotes = await database.notes.find().exec();
+        if (initialNotes && initialNotes.length > 0) {
+          const mapped = initialNotes.map((d) => d.toJSON() as NostrEvent);
+          mapped.sort((a, b) => b.created_at - a.created_at);
+          setEvents(mapped);
+          feedInitializedRef.current = true;
+        }
 
         const relaysSub = database.relays.find().$.subscribe((docs) => {
           if (docs && docs.length > 0) {
@@ -276,13 +251,22 @@ export default function App() {
               r.url === relay.url ? { ...r, status: 'connected' } : r
             )
           );
+          const relaySuffix = relay.url.replace(/[^a-zA-Z0-9]/g, '').slice(-6);
+          // 1. Subscribe to real public notes
           const reqMessage = JSON.stringify([
             'REQ',
-            `sub_${relay.url.replace(/[^a-zA-Z0-9]/g, '').slice(-6)}`,
+            `sub_${relaySuffix}`,
             { kinds: [1], limit: 30 },
+          ]);
+          // 2. Subscribe to real notifications for active keypair
+          const notifMessage = JSON.stringify([
+            'REQ',
+            `notif_${relaySuffix}`,
+            { kinds: [1, 6, 7, 9735], '#p': [keypair.pubkeyHex], limit: 30 },
           ]);
           try {
             ws.send(reqMessage);
+            ws.send(notifMessage);
           } catch {
             // pass
           }
@@ -293,6 +277,7 @@ export default function App() {
             const data = JSON.parse(msgEvent.data);
             if (!Array.isArray(data) || data[0] !== 'EVENT') return;
 
+            const subId = data[1];
             const incoming = data[2];
             if (!incoming || !incoming.id) return;
 
@@ -332,8 +317,62 @@ export default function App() {
               return;
             }
 
-            // 2. Handle Kind 1 (Real Public Nostr Note)
+            // 2. Handle Real Nostr Notifications (Kinds 1, 6, 7, 9735 mentioning user's pubkey)
+            const isUserTargeted = incoming.tags && incoming.tags.some(
+              (t: string[]) => t[0] === 'p' && t[1] === keypair.pubkeyHex
+            );
+            if (isUserTargeted && [1, 6, 7, 9735].includes(incoming.kind) && incoming.pubkey !== keypair.pubkeyHex) {
+              const cachedAuthor = profileCacheRef.current.get(incoming.pubkey);
+              const targetEventId = incoming.tags.find((t: string[]) => t[0] === 'e')?.[1];
+              let notifType: NostrNotification['type'] = 'mention';
+              let notifContent = incoming.content || '';
+              let zapSats: number | undefined;
+
+              if (incoming.kind === 7) {
+                notifType = 'like';
+                notifContent = incoming.content === '+' ? 'Liked your note on the relay mesh' : `Reacted "${incoming.content}"`;
+              } else if (incoming.kind === 6) {
+                notifType = 'repost';
+                notifContent = 'Reposted your note to the mesh network';
+              } else if (incoming.kind === 9735) {
+                notifType = 'zap';
+                notifContent = 'Lightning zap receipt confirmed ⚡';
+                zapSats = 21;
+              } else if (incoming.kind === 1) {
+                notifType = incoming.tags.some((t: string[]) => t[0] === 'e') ? 'reply' : 'mention';
+                notifContent = sanitizeZupContent(incoming.content).slice(0, 140);
+              }
+
+              const newNotif: NostrNotification = {
+                id: incoming.id,
+                type: notifType,
+                sourcePubkey: incoming.pubkey,
+                sourceName: cachedAuthor?.displayName || cachedAuthor?.name || `Peer ${incoming.pubkey.slice(0, 6)}`,
+                sourceAvatar: cachedAuthor?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${incoming.pubkey}`,
+                sourceNpub: pubkeyToNpub(incoming.pubkey),
+                targetEventId,
+                targetEventContent: notifContent,
+                amountSats: zapSats,
+                timestamp: incoming.created_at || Math.floor(Date.now() / 1000),
+                read: false,
+              };
+
+              setNotifications((prev) => {
+                if (prev.some((n) => n.id === newNotif.id)) return prev;
+                return [newNotif, ...prev];
+              });
+            }
+
+            // 3. Handle Kind 1 (Real Public Nostr Note with Quality Shield)
             if (incoming.kind === 1 && incoming.content) {
+              // Zup Quality Shield: Filter out URI dumps, space spams, tag bombing, and bot floods
+              const quality = evaluateZupQuality(incoming);
+              if (!quality.passes) {
+                setBlockedSpamCount((prev) => prev + 1);
+                return; // Discard spam!
+              }
+
+              const cleanContent = sanitizeZupContent(incoming.content);
               const cached = profileCacheRef.current.get(incoming.pubkey);
               const npub = pubkeyToNpub(incoming.pubkey);
 
@@ -343,7 +382,7 @@ export default function App() {
                 created_at: incoming.created_at || Math.floor(Date.now() / 1000),
                 kind: 1,
                 tags: incoming.tags || [],
-                content: incoming.content,
+                content: cleanContent,
                 sig: incoming.sig || '',
                 relayUrl: relay.url,
                 likesCount: 0,
@@ -375,19 +414,50 @@ export default function App() {
                 }
               }
 
-              // Upsert directly into RxDB
+              // Upsert note into RxDB background cache
               if (db) {
                 await db.notes.upsert(formatted);
                 await db.relays.upsert({
                   ...relay,
                   eventsReceived: (relay.eventsReceived || 0) + 1,
                 });
-              } else {
+              }
+
+              // Infinite scroll paging: if this is a response to an older pagination request, append to visible list
+              const isOlderRequest = typeof subId === 'string' && subId.startsWith('older_');
+              if (isOlderRequest) {
+                setEvents((prev) => {
+                  if (prev.some((e) => e.id === formatted.id)) return prev;
+                  const next = [...prev, formatted];
+                  next.sort((a, b) => b.created_at - a.created_at);
+                  return next;
+                });
+                return;
+              }
+
+              // If author is the user themselves, immediately prepend to visible events!
+              if (incoming.pubkey === keypair.pubkeyHex) {
+                setEvents((prev) => {
+                  if (prev.some((e) => e.id === formatted.id)) return prev;
+                  return [formatted, ...prev];
+                });
+                return;
+              }
+
+              // Initial feed population (first 15 notes)
+              if (!feedInitializedRef.current || events.length < 15) {
                 setEvents((prev) => {
                   if (prev.some((e) => e.id === formatted.id)) return prev;
                   const next = [formatted, ...prev];
                   next.sort((a, b) => b.created_at - a.created_at);
-                  return next.slice(0, 50);
+                  return next;
+                });
+                feedInitializedRef.current = true;
+              } else {
+                // Buffer in pending queue! Stop feed jerking and haphazard content replacing!
+                setPendingNewEvents((prev) => {
+                  if (prev.some((e) => e.id === formatted.id)) return prev;
+                  return [formatted, ...prev];
                 });
               }
             }
@@ -593,9 +663,8 @@ export default function App() {
     // Persist to RxDB
     if (db) {
       await db.notes.upsert(signed);
-    } else {
-      setEvents((prev) => [signed, ...prev]);
     }
+    setEvents((prev) => [signed, ...prev.filter((e) => e.id !== signed.id)]);
     syncEngine.markPending(signed.id, 1, 'note', signed);
 
     // Broadcast across targeted WebSocket relays
@@ -632,10 +701,48 @@ export default function App() {
         repliesCount: (targetEvent.repliesCount || 0) + 1,
       });
       await db.notes.upsert(signed);
-    } else {
-      setEvents((prev) => [signed, ...prev]);
     }
+    setEvents((prev) => [signed, ...prev.filter((e) => e.id !== signed.id)]);
     syncEngine.markPending(signed.id, 1, 'note', signed);
+  };
+
+  const handleLoadNewEvents = () => {
+    if (pendingNewEvents.length === 0) return;
+    setEvents((prev) => {
+      const existingIds = new Set(prev.map((e) => e.id));
+      const fresh = pendingNewEvents.filter((e) => !existingIds.has(e.id));
+      const merged = [...fresh, ...prev];
+      merged.sort((a, b) => b.created_at - a.created_at);
+      return merged;
+    });
+    setPendingNewEvents([]);
+  };
+
+  const handleLoadOlderEvents = () => {
+    if (isOlderLoading || events.length === 0) return;
+    setIsOlderLoading(true);
+    const oldestTimestamp = Math.min(...events.map((e) => e.created_at));
+
+    activeSocketsRef.current.forEach((ws, url) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          const relaySuffix = url.replace(/[^a-zA-Z0-9]/g, '').slice(-4);
+          ws.send(
+            JSON.stringify([
+              'REQ',
+              `older_${relaySuffix}_${Date.now().toString().slice(-4)}`,
+              { kinds: [1], until: oldestTimestamp - 1, limit: 20 },
+            ])
+          );
+        } catch {
+          // pass
+        }
+      }
+    });
+
+    setTimeout(() => {
+      setIsOlderLoading(false);
+    }, 2500);
   };
 
   const handleLikeEvent = async (eventId: string) => {
@@ -966,6 +1073,11 @@ export default function App() {
               onLikeEvent={handleLikeEvent}
               onRepostEvent={handleRepostEvent}
               onReplyEvent={(ev) => setReplyTargetEvent(ev)}
+              newEventsCount={pendingNewEvents.length}
+              onLoadNewEvents={handleLoadNewEvents}
+              onLoadOlderEvents={handleLoadOlderEvents}
+              isOlderLoading={isOlderLoading}
+              blockedSpamCount={blockedSpamCount}
             />
           )}
 

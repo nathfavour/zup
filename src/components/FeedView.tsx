@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Heart, 
   Repeat2, 
@@ -8,10 +8,16 @@ import {
   Check, 
   ShieldCheck, 
   Search,
-  Bookmark
+  Bookmark,
+  ArrowUp,
+  RefreshCw,
+  Shield,
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 import { FeedFilter, NostrEvent, NostrKeypair } from '../types';
 import { formatTimeAgo, formatTruncatedKey } from '../lib/nostr';
+import { evaluateZupQuality, sanitizeZupContent } from '../lib/nostrFilters';
 
 interface FeedViewProps {
   events: NostrEvent[];
@@ -23,7 +29,15 @@ interface FeedViewProps {
   onLikeEvent: (eventId: string) => void;
   onRepostEvent: (eventId: string) => void;
   onReplyEvent: (event: NostrEvent) => void;
+  // Live Feed & Infinite Scroll Props
+  newEventsCount?: number;
+  onLoadNewEvents?: () => void;
+  onLoadOlderEvents?: () => void;
+  isOlderLoading?: boolean;
+  blockedSpamCount?: number;
 }
+
+const PAGE_SIZE = 15;
 
 export function FeedView({
   events,
@@ -32,14 +46,30 @@ export function FeedView({
   onLikeEvent,
   onRepostEvent,
   onReplyEvent,
+  newEventsCount = 0,
+  onLoadNewEvents,
+  onLoadOlderEvents,
+  isOlderLoading = false,
+  blockedSpamCount = 0,
 }: FeedViewProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [quickZappedId, setQuickZappedId] = useState<string | null>(null);
+  const [enableQualityFilter, setEnableQualityFilter] = useState(true);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const topAnchorRef = useRef<HTMLDivElement | null>(null);
+
+  // 1. Filter and sort events (with Nostr quality shield)
   const filteredEvents = useMemo(() => {
     let pool = [...events].sort((a, b) => b.created_at - a.created_at);
+
+    // Apply Nostr Quality Filters (rejects URI packed link farms, space spam, tag bombing)
+    if (enableQualityFilter) {
+      pool = pool.filter((e) => evaluateZupQuality(e).passes);
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -57,7 +87,35 @@ export function FeedView({
     }
 
     return pool;
-  }, [events, searchQuery]);
+  }, [events, searchQuery, enableQualityFilter]);
+
+  // 2. Slice for infinite scrolling
+  const visibleEvents = useMemo(() => {
+    return filteredEvents.slice(0, visibleCount);
+  }, [filteredEvents, visibleCount]);
+
+  // 3. Infinite scroll IntersectionObserver
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) {
+          if (visibleCount < filteredEvents.length) {
+            setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredEvents.length));
+          } else if (onLoadOlderEvents && !isOlderLoading) {
+            onLoadOlderEvents();
+          }
+        }
+      },
+      { rootMargin: '400px 0px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [visibleCount, filteredEvents.length, onLoadOlderEvents, isOlderLoading]);
 
   const handleCopyEventId = (id: string) => {
     navigator.clipboard.writeText(id);
@@ -81,32 +139,129 @@ export function FeedView({
     setTimeout(() => setQuickZappedId(null), 1500);
   };
 
+  const handleTapNewContent = () => {
+    if (onLoadNewEvents) {
+      onLoadNewEvents();
+    }
+    topAnchorRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
-    <div className="flex flex-col gap-3 pb-20 md:pb-6">
-      {/* Clean, Single Search Bar directly above the Feed */}
-      <div className="relative w-full">
-        <Search
-          size={15}
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none"
-        />
-        <input
-          id="feed-search-input"
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search notes, #tags, builders..."
-          className="w-full bg-[#000000] border border-white/20 focus:border-[#EC4899] focus:outline-none rounded-[16px] pl-10 pr-9 py-2.5 text-white text-xs sm:text-sm placeholder:text-white/40 transition-colors shadow-sm"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
-            aria-label="Clear search"
-          >
-            ✕
-          </button>
-        )}
+    <div className="flex flex-col gap-3 pb-20 md:pb-6 relative">
+      <div ref={topAnchorRef} className="h-0 w-0" />
+
+      {/* Top Search & Real-Time Indicator Bar */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search
+            size={15}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none"
+          />
+          <input
+            id="feed-search-input"
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search clean notes, #tags, authors..."
+            className="w-full bg-[#000000] border border-white/20 focus:border-[#EC4899] focus:outline-none rounded-[16px] pl-10 pr-9 py-2.5 text-white text-xs sm:text-sm placeholder:text-white/40 transition-colors shadow-sm"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Tiny Real-Time Refresh / Notification Icon with Badge */}
+        <button
+          type="button"
+          id="feed-top-refresh-btn"
+          onClick={handleTapNewContent}
+          className={`relative p-2.5 rounded-[16px] border transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm ${
+            newEventsCount > 0
+              ? 'bg-[#EC4899]/20 border-[#EC4899] text-[#EC4899] shadow-[0_0_15px_rgba(236,72,153,0.4)] hover:bg-[#EC4899]/30'
+              : 'bg-[#000000] border-white/20 text-white/60 hover:text-white hover:bg-white/5'
+          }`}
+          title={
+            newEventsCount > 0
+              ? `${newEventsCount} new Zup${newEventsCount === 1 ? '' : 's'} available • Tap to view`
+              : 'Feed is up to date'
+          }
+          aria-label="Refresh feed"
+        >
+          <RefreshCw 
+            size={15} 
+            className={newEventsCount > 0 ? 'animate-spin-slow' : ''} 
+          />
+          {newEventsCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#EC4899] text-white text-[9px] font-black font-mono flex items-center justify-center animate-pulse shadow-md">
+              {newEventsCount > 9 ? '9+' : newEventsCount}
+            </span>
+          )}
+        </button>
+
+        {/* Quality Shield Filter Toggle */}
+        <button
+          type="button"
+          id="feed-quality-shield-btn"
+          onClick={() => setEnableQualityFilter((prev) => !prev)}
+          className={`p-2.5 rounded-[16px] border transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm ${
+            enableQualityFilter
+              ? 'bg-[#10B981]/15 border-[#10B981]/40 text-[#10B981] hover:bg-[#10B981]/25'
+              : 'bg-[#000000] border-white/20 text-white/40 hover:text-white/70'
+          }`}
+          title={
+            enableQualityFilter
+              ? `Quality Shield Active: Filters URI dumps, space spam & bot waterfall floods (${blockedSpamCount} blocked)`
+              : 'Quality Shield Disabled: Showing raw Nostr waterfall'
+          }
+          aria-label="Toggle Quality Shield"
+        >
+          <Shield size={15} />
+        </button>
       </div>
+
+      {/* Quality Shield Status Bar */}
+      <div className="flex items-center justify-between px-1 text-[11px] font-mono text-white/50">
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${enableQualityFilter ? 'bg-[#10B981]' : 'bg-amber-500'}`} />
+          <span>
+            {enableQualityFilter
+              ? 'Zup Ecosystem Shield: Active (Clean Feed)'
+              : 'Raw Waterfall (Unfiltered)'}
+          </span>
+          {blockedSpamCount > 0 && enableQualityFilter && (
+            <span className="text-[#10B981] font-bold">
+              • {blockedSpamCount} spams filtered
+            </span>
+          )}
+        </div>
+        <span className="hidden sm:inline">
+          Showing {visibleEvents.length} of {filteredEvents.length} notes
+        </span>
+      </div>
+
+      {/* Sticky Floating New Content Notification Pill (Zero-Jerk Feed Updates) */}
+      {newEventsCount > 0 && (
+        <div className="sticky top-[72px] sm:top-[80px] z-30 flex justify-center py-1 pointer-events-none">
+          <button
+            type="button"
+            id="feed-new-content-pill"
+            onClick={handleTapNewContent}
+            className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#EC4899] to-[#A855F7] text-white text-xs font-extrabold shadow-[0_4px_20px_rgba(236,72,153,0.5)] hover:scale-105 active:scale-95 transition-all cursor-pointer animate-fadeIn"
+          >
+            <ArrowUp size={14} className="animate-bounce" />
+            <span>
+              {newEventsCount} new {newEventsCount === 1 ? 'Zup' : 'Zups'} available • Tap to view
+            </span>
+            <RefreshCw size={13} className="opacity-80" />
+          </button>
+        </div>
+      )}
 
       {/* The Pure Feed Notes List */}
       <div className="flex flex-col gap-3">
@@ -118,7 +273,7 @@ export function FeedView({
                   No Notes Found
                 </h4>
                 <p className="text-white/70 text-xs font-medium max-w-sm m-0">
-                  No notes matching &ldquo;{searchQuery}&rdquo;
+                  No clean notes matching &ldquo;{searchQuery}&rdquo;
                 </p>
               </>
             ) : (
@@ -131,7 +286,7 @@ export function FeedView({
                   Streaming Live Decentralized Feed
                 </h4>
                 <p className="text-white/70 text-xs font-medium max-w-md m-0">
-                  Subscribed to real Nostr relays (<span className="text-[#EC4899] font-mono">damus.io</span>, <span className="text-[#10B981] font-mono">nos.lol</span>, <span className="text-[#A855F7] font-mono">nostr.band</span>). Live public Kind 1 notes will stream in as relays broadcast.
+                  Connected to Nostr relays. Real Kind 1 notes pass through Zup Quality Filters before entering your feed.
                 </p>
                 <button
                   type="button"
@@ -144,12 +299,13 @@ export function FeedView({
             )}
           </div>
         ) : (
-          filteredEvents.map((event) => {
+          visibleEvents.map((event) => {
             const isLiked = event.isLiked;
             const isZapped = event.isZapped;
             const isReposted = event.isReposted;
             const isBookmarked = bookmarkedIds.has(event.id);
             const isJustZapped = quickZappedId === event.id;
+            const cleanContent = sanitizeZupContent(event.content);
 
             return (
               <article
@@ -187,7 +343,7 @@ export function FeedView({
                         {event.author?.nip05 && (
                           <span
                             className="inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30"
-                            title={`NIP-05 Verified Builder: ${event.author.nip05}`}
+                            title={`NIP-05 Verified: ${event.author.nip05}`}
                           >
                             <ShieldCheck size={10} />
                             <span>{event.author.nip05.split('@')[1] || event.author.nip05}</span>
@@ -244,9 +400,9 @@ export function FeedView({
                   </div>
                 </div>
 
-                {/* Note Content Text */}
+                {/* Note Content Text (Sanitized from whitespace spam) */}
                 <div className="text-white text-[13.5px] sm:text-sm leading-relaxed font-medium whitespace-pre-wrap break-words">
-                  {event.content}
+                  {cleanContent}
                 </div>
 
                 {/* Tags Row */}
@@ -360,6 +516,24 @@ export function FeedView({
             );
           })
         )}
+
+        {/* Infinite Scroll Sentinel & Loader */}
+        <div ref={sentinelRef} className="py-6 flex flex-col items-center justify-center gap-2">
+          {isOlderLoading ? (
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#161412] border border-white/20 text-white/70 text-xs font-mono">
+              <Loader2 size={14} className="animate-spin text-[#EC4899]" />
+              <span>Paging older Zups from relay mesh...</span>
+            </div>
+          ) : visibleEvents.length > 0 && visibleEvents.length < filteredEvents.length ? (
+            <div className="text-white/40 text-xs font-mono">
+              Scroll down to reveal more Zups...
+            </div>
+          ) : visibleEvents.length > 0 ? (
+            <div className="text-white/40 text-xs font-mono flex items-center gap-1.5">
+              <span>All caught up with latest relay stream</span>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

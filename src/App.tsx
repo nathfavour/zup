@@ -85,6 +85,7 @@ export default function App() {
   const [notifications, setNotifications] = useState<NostrNotification[]>([]);
 
   const feedInitializedRef = useRef<boolean>(false);
+  const visibleEventsCountRef = useRef<number>(0);
 
   // Action Modals State
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -188,6 +189,7 @@ export default function App() {
           const mapped = initialNotes.map((d) => d.toJSON() as NostrEvent);
           mapped.sort((a, b) => b.created_at - a.created_at);
           setEvents(mapped);
+          visibleEventsCountRef.current = mapped.length;
           feedInitializedRef.current = true;
         }
 
@@ -429,7 +431,7 @@ export default function App() {
                 setEvents((prev) => {
                   if (prev.some((e) => e.id === formatted.id)) return prev;
                   const next = [...prev, formatted];
-                  next.sort((a, b) => b.created_at - a.created_at);
+                  visibleEventsCountRef.current = next.length;
                   return next;
                 });
                 return;
@@ -439,22 +441,28 @@ export default function App() {
               if (incoming.pubkey === keypair.pubkeyHex) {
                 setEvents((prev) => {
                   if (prev.some((e) => e.id === formatted.id)) return prev;
-                  return [formatted, ...prev];
+                  const next = [formatted, ...prev];
+                  visibleEventsCountRef.current = next.length;
+                  return next;
                 });
                 return;
               }
 
-              // Initial feed population (first 15 notes)
-              if (!feedInitializedRef.current || events.length < 15) {
+              // Initial feed population (first 15 notes only upon app launch)
+              if (!feedInitializedRef.current || visibleEventsCountRef.current < 15) {
                 setEvents((prev) => {
                   if (prev.some((e) => e.id === formatted.id)) return prev;
-                  const next = [formatted, ...prev];
+                  const next = [...prev, formatted];
                   next.sort((a, b) => b.created_at - a.created_at);
+                  visibleEventsCountRef.current = next.length;
+                  if (next.length >= 15) {
+                    feedInitializedRef.current = true;
+                  }
                   return next;
                 });
-                feedInitializedRef.current = true;
               } else {
-                // Buffer in pending queue! Stop feed jerking and haphazard content replacing!
+                // Buffer in pending queue! Stop feed jerking and content replacing!
+                // Shows in the ephemeral refresh bubble for user to click when ready.
                 setPendingNewEvents((prev) => {
                   if (prev.some((e) => e.id === formatted.id)) return prev;
                   return [formatted, ...prev];
@@ -712,7 +720,7 @@ export default function App() {
       const existingIds = new Set(prev.map((e) => e.id));
       const fresh = pendingNewEvents.filter((e) => !existingIds.has(e.id));
       const merged = [...fresh, ...prev];
-      merged.sort((a, b) => b.created_at - a.created_at);
+      visibleEventsCountRef.current = merged.length;
       return merged;
     });
     setPendingNewEvents([]);
@@ -1030,18 +1038,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#100F0E] text-white flex flex-col selection:bg-[#EC4899]/30 selection:text-white">
-      {/* Topbar Chrome */}
+      {/* Topbar Chrome: Minimalist Logo, Central Notification Icon & Profile Circle */}
       <Header
         keypair={keypair}
-        relays={relays}
-        onOpenCompose={() => setIsComposeOpen(true)}
+        unreadNotificationsCount={unreadNotificationsCount}
+        onOpenNotifications={() => setActiveTab('notifications')}
         onOpenProfile={() => setActiveTab('profile')}
-        onOpenPro={() => {
-          setProFeatureName('Pro Relay Mesh');
-          setIsProOpen(true);
-        }}
-        onToggleEphemeral={handleToggleEphemeral}
-        onOpenSync={() => setIsKylrixSyncOpen(true)}
+        onGoToFeed={() => setActiveTab('feed')}
       />
 
       {/* Main Workspace Frame */}
@@ -1175,10 +1178,13 @@ export default function App() {
               onOpenImportDrawer={() => setIsImportIdentityOpen(true)}
               onDeleteIdentity={handleDeleteIdentity}
               vaultSecurity={vaultSecurity}
+              mek={mek}
               isLocked={isVaultLocked}
               onLockVault={handleLockVault}
               onOpenUnlock={() => setIsUnlockOpen(true)}
               onOpenSetupEncryption={() => setIsSetupEncryptionOpen(true)}
+              onUpdateVaultSecurity={handleUpdateVaultSecurity}
+              onUnlocked={(unlockedMEK) => setMek(unlockedMEK)}
             />
           )}
 

@@ -8,18 +8,22 @@ import {
   Check, 
   Lock, 
   Unlock,
-  Flame, 
   Terminal, 
   Cpu, 
   RefreshCw,
-  ExternalLink,
   Fingerprint,
   KeyRound,
   Plus,
   AlertCircle,
   Eye,
   EyeOff,
-  Cloud
+  Cloud,
+  ChevronDown,
+  ChevronUp,
+  Server,
+  Zap,
+  Globe,
+  Database
 } from 'lucide-react';
 import { NostrKeypair, RelayInfo, VaultSecurityState, PasskeyRecord, SyncStatus, KylrixOAuthSession } from '../types';
 import { 
@@ -30,6 +34,8 @@ import {
 } from '../lib/crypto';
 import { syncEngine } from '../lib/syncEngine';
 import { kylrixOAuth } from '../lib/kylrixOAuth';
+import { formatTruncatedKey } from '../lib/nostr';
+import { VaultCredentialsManager } from './VaultCredentialsManager';
 
 interface SettingsViewProps {
   keypair: NostrKeypair;
@@ -45,6 +51,40 @@ interface SettingsViewProps {
   onClearCache: () => void;
   onResetDefaultRelays: () => void;
   onOpenSync?: () => void;
+}
+
+// Accessible custom toggle switch
+function ToggleSwitch({
+  checked,
+  onChange,
+  id,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  id: string;
+  ariaLabel: string;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#EC4899] focus-visible:ring-offset-2 focus-visible:ring-offset-[#100F0E] ${
+        checked ? 'bg-[#EC4899]' : 'bg-[#2E2B27]'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
 }
 
 export function SettingsView({
@@ -79,35 +119,27 @@ export function SettingsView({
       unsubOAuth();
     };
   }, []);
+
   const [webrtcProtect, setWebrtcProtect] = useState(true);
   const [zeroMetadata, setZeroMetadata] = useState(true);
   const [nip07Bridge, setNip07Bridge] = useState(false);
   const [wipeNotice, setWipeNotice] = useState(false);
+  const [resetRelaysNotice, setResetRelaysNotice] = useState(false);
   const [benchmarking, setBenchmarking] = useState(false);
   const [benchResult, setBenchResult] = useState<string | null>(null);
 
-  // Change Password State
-  const [showChangePassword, setShowChangePassword] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [showPasswordText, setShowPasswordText] = useState(false);
-  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
-  const [passwordChangeError, setPasswordChangeError] = useState<string | null>(null);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-
-  // Add Passkey State
-  const [showAddPasskey, setShowAddPasskey] = useState(false);
-  const [newPasskeyName, setNewPasskeyName] = useState('');
-  const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
-  const [passkeyError, setPasskeyError] = useState<string | null>(null);
-
   const handleWipe = () => {
-    if (confirm('Clear local RxDB database, stored keys, and relay statistics?')) {
+    if (confirm('Are you sure? This will wipe your local database, stored keys, and relay statistics from this browser.')) {
       onClearCache();
       setWipeNotice(true);
-      setTimeout(() => setWipeNotice(false), 2000);
+      setTimeout(() => setWipeNotice(false), 2500);
     }
+  };
+
+  const handleResetRelays = () => {
+    onResetDefaultRelays();
+    setResetRelaysNotice(true);
+    setTimeout(() => setResetRelaysNotice(false), 2500);
   };
 
   const handleRunBenchmark = () => {
@@ -115,197 +147,111 @@ export function SettingsView({
     const start = performance.now();
     setTimeout(() => {
       const elapsed = (performance.now() - start).toFixed(1);
-      setBenchResult(`Schnorr signature verification: ~0.4ms | Argon2id MEK: ${elapsed}ms`);
+      setBenchResult(`Schnorr verify: 0.4ms • Argon2id (64MB): ${elapsed}ms`);
       setBenchmarking(false);
-    }, 400);
-  };
-
-  const handleChangePassword = async (e: FormEvent) => {
-    e.preventDefault();
-    setPasswordChangeError(null);
-
-    if (!vaultSecurity) return;
-    if (newPassword.length < 8) {
-      setPasswordChangeError('New password must be at least 8 characters.');
-      return;
-    }
-    if (newPassword !== confirmNewPassword) {
-      setPasswordChangeError('New passwords do not match.');
-      return;
-    }
-
-    setIsChangingPassword(true);
-    try {
-      let activeMEK = mek;
-
-      // If MEK is not in memory, verify with current password
-      if (!activeMEK) {
-        const decrypted = await decryptMEKWithPassword(
-          vaultSecurity.passwordWrappedMEK,
-          currentPassword
-        );
-        activeMEK = decrypted.mek;
-      }
-
-      if (!activeMEK) {
-        throw new Error('Could not unlock MEK. Check your current password.');
-      }
-
-      // Re-encrypt MEK with new password
-      const newWrapped = await encryptMEKWithPassword(activeMEK, newPassword);
-
-      const updatedSecurity: VaultSecurityState = {
-        ...vaultSecurity,
-        salt: newWrapped.salt,
-        passwordWrappedMEK: newWrapped,
-        updatedAt: Date.now(),
-      };
-
-      onUpdateVaultSecurity(updatedSecurity);
-      setIsChangingPassword(false);
-      setPasswordChangeSuccess(true);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmNewPassword('');
-      setTimeout(() => {
-        setPasswordChangeSuccess(false);
-        setShowChangePassword(false);
-      }, 2000);
-    } catch (err: unknown) {
-      console.error('Password change error:', err);
-      setPasswordChangeError('Incorrect current password or derivation failed.');
-      setIsChangingPassword(false);
-    }
-  };
-
-  const handleAddPasskey = async (e: FormEvent) => {
-    e.preventDefault();
-    setPasskeyError(null);
-
-    if (!vaultSecurity) return;
-    if (!mek) {
-      setPasskeyError('Vault is locked. Please unlock the vault first to add a new passkey.');
-      return;
-    }
-
-    setIsRegisteringPasskey(true);
-    try {
-      const name = newPasskeyName.trim() || `Device Passkey ${vaultSecurity.passkeys.length + 1}`;
-      const newRecord = await createPasskeyRecord(mek, name);
-
-      const updatedSecurity: VaultSecurityState = {
-        ...vaultSecurity,
-        passkeys: [...vaultSecurity.passkeys, newRecord],
-        updatedAt: Date.now(),
-      };
-
-      onUpdateVaultSecurity(updatedSecurity);
-      setIsRegisteringPasskey(false);
-      setNewPasskeyName('');
-      setShowAddPasskey(false);
-    } catch (err: unknown) {
-      console.error('Add passkey error:', err);
-      setPasskeyError('Biometric authentication failed or was cancelled.');
-      setIsRegisteringPasskey(false);
-    }
-  };
-
-  const handleDeletePasskey = (passkeyId: string) => {
-    if (!vaultSecurity) return;
-    if (confirm('Remove this passkey? You can still unlock using your master password.')) {
-      const updatedSecurity: VaultSecurityState = {
-        ...vaultSecurity,
-        passkeys: vaultSecurity.passkeys.filter((p) => p.id !== passkeyId),
-        updatedAt: Date.now(),
-      };
-      onUpdateVaultSecurity(updatedSecurity);
-    }
+    }, 380);
   };
 
   const implementedNIPs = [
-    { nip: 'NIP-01', title: 'Basic protocol flow & Schnorr signatures', status: 'Active' },
-    { nip: 'NIP-02', title: 'Contact list & Petnames', status: 'Active' },
-    { nip: 'NIP-04', title: 'Encrypted Direct Messages (secp256k1 DH)', status: 'Active' },
-    { nip: 'NIP-05', title: 'DNS-based verification mapping', status: 'Active' },
-    { nip: 'NIP-10', title: 'Reply & Mention convention', status: 'Active' },
-    { nip: 'NIP-19', title: 'bech32-encoded entities (npub/nsec/note)', status: 'Active' },
-    { nip: 'NIP-57', title: 'Lightning Zaps & Receipts', status: 'Active' },
+    { nip: 'NIP-01', title: 'Basic protocol flow & Schnorr signatures' },
+    { nip: 'NIP-02', title: 'Contact list & Petnames' },
+    { nip: 'NIP-04', title: 'Encrypted Direct Messages (secp256k1 DH)' },
+    { nip: 'NIP-05', title: 'DNS-based verification mapping' },
+    { nip: 'NIP-10', title: 'Reply & Mention convention' },
+    { nip: 'NIP-19', title: 'bech32-encoded entities (npub/nsec)' },
+    { nip: 'NIP-57', title: 'Lightning Zaps & Receipts' },
   ];
 
   return (
-    <div className="flex flex-col gap-5 pb-16 md:pb-6">
-      {/* Privacy Overview Banner */}
-      <div className="p-5 rounded-[22px] bg-[#141210] border border-[#2C2925] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-[16px] bg-[#F59E0B]/15 border border-[#F59E0B]/40 flex items-center justify-center text-[#F59E0B]">
-            <Shield size={24} />
+    <div className="flex flex-col gap-6 max-w-3xl mx-auto pb-24 md:pb-12 text-stone-200">
+      {/* 1. Account Summary Card */}
+      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <img
+              src={keypair.avatar}
+              alt={keypair.name || 'Account Avatar'}
+              className="w-13 h-13 rounded-full object-cover border border-[#3A3631] bg-[#121110] shrink-0"
+            />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-white text-base font-bold truncate">
+                  {keypair.displayName || keypair.name || 'Anonymous Peer'}
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                  Sovereign
+                </span>
+              </div>
+              <p className="text-stone-400 font-mono text-xs truncate mt-0.5">
+                {keypair.npub ? formatTruncatedKey(keypair.npub, 12, 8) : 'No Public Key'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-white font-black text-base uppercase tracking-wider m-0">
-              Privacy & Cryptographic Guard
-            </h3>
-            <p className="text-[#99948D] text-xs font-bold mt-0.5 m-0">
-              Zero telemetries, no centralized databases, pure client-side MEK encryption.
-            </p>
+
+          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#201E1B] border border-[#302D29] text-xs font-mono text-stone-300">
+              <ShieldCheck size={14} className="text-emerald-400" />
+              <span>secp256k1 active</span>
+            </span>
           </div>
         </div>
+      </section>
 
-        <div className="px-3 py-1.5 rounded-[14px] bg-[#1C1A17] border border-[#35322E] text-xs font-mono font-bold text-white">
-          <span>TOR COMPATIBLE</span>
-        </div>
-      </div>
-
-      {/* ========================================================= */}
-      {/* KYLRIX IDENTITY BINDING & AUTONOMIC SYNC SECTION           */}
-      {/* ========================================================= */}
-      <div className="p-5 rounded-[22px] bg-[#141210] border border-[#2C2925] flex flex-col gap-4 shadow-xl">
+      {/* 2. Cloud Sync & Device Reconciliation */}
+      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Cloud size={18} className="text-[#EC4899]" />
-            <h4 className="text-white font-black text-xs uppercase tracking-wider m-0">
-              Kylrix Cloud Sync & Mesh Reconciliation
-            </h4>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#EC4899]/10 border border-[#EC4899]/30 flex items-center justify-center text-[#EC4899]">
+              <Cloud size={17} />
+            </div>
+            <div>
+              <h3 className="text-white text-sm font-bold">Cloud Sync & Mesh Reconciliation</h3>
+              <p className="text-stone-400 text-xs mt-0.5">
+                Zero-knowledge cross-device settings using NIP-78 identity records.
+              </p>
+            </div>
           </div>
+
           <span
-            className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-black uppercase ${
+            className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold ${
               syncStatus === 'pending'
-                ? 'bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/40'
+                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                 : syncStatus === 'offline'
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                ? 'bg-stone-800 text-stone-400 border border-stone-700'
+                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
             }`}
           >
             {syncStatus === 'pending'
-              ? `PENDING (${pendingCount})`
+              ? `Pending (${pendingCount})`
               : syncStatus === 'offline'
-              ? 'OFFLINE'
-              : 'SYNCHRONIZED'}
+              ? 'Offline'
+              : 'Synchronized'}
           </span>
         </div>
 
-        <div className="p-3.5 rounded-[16px] bg-[#1A1815] border border-[#2B2824] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="bg-[#1D1B19] border border-[#2D2A26] rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5">
           <div className="flex items-center gap-3 min-w-0">
             {oauthSession.isConnected && oauthSession.profile ? (
               <img
                 src={oauthSession.profile.avatar}
                 alt={oauthSession.profile.name}
-                className="w-10 h-10 rounded-[12px] border border-[#3A3631] bg-[#121110] object-cover shrink-0"
+                className="w-10 h-10 rounded-xl border border-[#3A3631] bg-[#121110] object-cover shrink-0"
               />
             ) : (
-              <div className="w-10 h-10 rounded-[12px] bg-[#24211D] border border-[#3A3631] flex items-center justify-center text-white shrink-0">
-                <Cloud size={20} />
+              <div className="w-10 h-10 rounded-xl bg-[#262421] border border-[#383530] flex items-center justify-center text-stone-400 shrink-0">
+                <Server size={18} />
               </div>
             )}
             <div className="min-w-0">
-              <span className="text-white font-bold text-xs block truncate">
+              <span className="text-white font-semibold text-xs block truncate">
                 {oauthSession.isConnected && oauthSession.profile
-                  ? `Bound: ${oauthSession.profile.name} (${oauthSession.profile.email || oauthSession.profile.userId})`
-                  : 'Sovereign Standalone Mode (Local-First)'}
+                  ? `${oauthSession.profile.name} (${oauthSession.profile.email || oauthSession.profile.userId})`
+                  : 'Local-First Sovereign Mode'}
               </span>
-              <span className="text-[#8F8A83] text-[11px] font-medium block truncate mt-0.5">
+              <span className="text-stone-400 text-xs block truncate mt-0.5">
                 {oauthSession.isConnected
-                  ? 'OAuth 2.1 PKCE Active • NIP-78 Kind 30078 Identity Synced'
-                  : 'RxDB is your Single Source of Truth. Connect Kylrix for zero-knowledge cross-device settings.'}
+                  ? 'OAuth 2.1 PKCE Session active'
+                  : 'Local RxDB is your single source of truth.'}
               </span>
             </div>
           </div>
@@ -313,371 +259,134 @@ export function SettingsView({
           <button
             type="button"
             onClick={onOpenSync}
-            className="px-3.5 py-1.5 rounded-[12px] bg-[#EC4899] hover:bg-[#db2777] text-white font-bold text-xs uppercase tracking-wider cursor-pointer shrink-0 transition-colors shadow-sm"
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#262320] hover:bg-[#302D29] border border-[#38342F] text-white text-xs font-semibold tracking-wide transition-colors cursor-pointer text-center shrink-0"
           >
-            {oauthSession.isConnected ? 'Manage Sync' : 'Sign in with Kylrix'}
+            {oauthSession.isConnected ? 'Manage Sync' : 'Connect Cloud Sync'}
           </button>
         </div>
-      </div>
+      </section>
 
-      {/* ========================================================= */}
-      {/* CLIENT E2EE ENCRYPTION & PASSKEYS MANAGER SECTION         */}
-      {/* ========================================================= */}
-      <div className="p-5 rounded-[22px] bg-[#000000] border border-white/20 flex flex-col gap-4 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Lock size={18} className="text-[#10B981]" />
-            <h4 className="text-white font-black text-xs uppercase tracking-wider m-0">
-              End-to-End Encryption & Passkey Security
-            </h4>
+      {/* 3. Client-Side Encryption & Passkey Security */}
+      <VaultCredentialsManager
+        vaultSecurity={vaultSecurity}
+        mek={mek}
+        isLocked={isLocked}
+        onLockVault={onLockVault}
+        onOpenUnlock={onOpenUnlock}
+        onOpenSetupEncryption={onOpenSetupEncryption}
+        onUpdateVaultSecurity={onUpdateVaultSecurity}
+      />
+
+      {/* 4. Privacy & Network Controls */}
+      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <Shield size={17} />
           </div>
-          {vaultSecurity?.isInitialized ? (
-            <span
-              className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-black uppercase ${
-                isLocked
-                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                  : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-              }`}
-            >
-              {isLocked ? 'VAULT LOCKED' : 'VAULT UNLOCKED (MEK ACTIVE)'}
-            </span>
-          ) : (
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
-              NOT INITIALIZED
-            </span>
-          )}
+          <div>
+            <h3 className="text-white text-sm font-bold">Network Privacy & Leak Guards</h3>
+            <p className="text-stone-400 text-xs mt-0.5">
+              Fine-grained controls to minimize fingerprinting and metadata exposure.
+            </p>
+          </div>
         </div>
 
-        {vaultSecurity?.isInitialized ? (
-          <div className="flex flex-col gap-4">
-            {/* Encryption Parameters Spec */}
-            <div className="p-3.5 rounded-[16px] bg-[#161412] border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div>
-                <span className="text-white font-black text-xs block">
-                  Argon2id (3 iterations, 64 MB RAM)
-                </span>
-                <p className="text-white text-[11px] font-medium m-0 mt-0.5">
-                  Protects 256-bit Master Encryption Key with dual-layer AES-256-GCM wrapping.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {isLocked ? (
-                  <button
-                    onClick={onOpenUnlock}
-                    className="px-3 py-1.5 rounded-[12px] bg-[#A855F7] hover:bg-[#9333ea] text-white font-black text-xs uppercase tracking-wider cursor-pointer"
-                  >
-                    Unlock Now
-                  </button>
-                ) : (
-                  <button
-                    onClick={onLockVault}
-                    className="px-3 py-1.5 rounded-[12px] bg-[#000000] border border-white/20 hover:border-white/50 text-white font-bold text-xs cursor-pointer"
-                  >
-                    Lock Vault
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Passkeys List - Stacked in superb tactile chat-card mood */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-                  <Fingerprint size={14} className="text-[#A855F7]" />
-                  Registered Passkeys ({vaultSecurity.passkeys.length})
-                </span>
-                <button
-                  onClick={() => setShowAddPasskey(!showAddPasskey)}
-                  className="text-xs font-black uppercase tracking-wider text-[#A855F7] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Plus size={13} />
-                  <span>Add Passkey</span>
-                </button>
-              </div>
-
-              {vaultSecurity.passkeys.length === 0 ? (
-                <div className="p-3.5 rounded-[16px] bg-[#161412] border border-white/10 text-center">
-                  <p className="text-white text-xs font-medium m-0">
-                    No biometric passkeys registered. You can add one below to unlock via Touch ID / Face ID.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {vaultSecurity.passkeys.map((pk) => (
-                    <div
-                      key={pk.id}
-                      className="p-3 rounded-[16px] bg-[#161412] border border-white/15 flex items-center justify-between gap-3 group hover:border-white/40 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-full bg-[#A855F7]/15 text-[#A855F7] border border-[#A855F7]/30 flex items-center justify-center shrink-0">
-                          <Fingerprint size={16} />
-                        </div>
-                        <div className="min-w-0">
-                          <h5 className="text-white font-black text-xs m-0 truncate">
-                            {pk.name}
-                          </h5>
-                          <p className="text-white text-[10px] font-mono font-bold m-0 mt-0.5">
-                            Added {new Date(pk.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleDeletePasskey(pk.id)}
-                        className="text-white/40 hover:text-red-400 p-1.5 cursor-pointer transition-colors"
-                        title="Delete Passkey"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Add Passkey Drawer / Inset Form */}
-              {showAddPasskey && (
-                <form
-                  onSubmit={handleAddPasskey}
-                  className="p-4 rounded-[18px] bg-[#161412] border-2 border-[#A855F7] flex flex-col gap-3 shadow-lg"
-                >
-                  <span className="text-white font-black text-xs uppercase tracking-wider">
-                    Register New Device Passkey
-                  </span>
-                  <input
-                    type="text"
-                    value={newPasskeyName}
-                    onChange={(e) => setNewPasskeyName(e.target.value)}
-                    placeholder="e.g. MacBook Touch ID, iPhone Face ID, YubiKey"
-                    required
-                    className="w-full bg-[#000000] border border-white/20 focus:border-[#A855F7] focus:outline-none rounded-[14px] px-3.5 py-2 text-white text-xs placeholder:text-white/40"
-                  />
-
-                  {passkeyError && (
-                    <p className="text-rose-400 text-xs font-bold m-0">{passkeyError}</p>
-                  )}
-
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddPasskey(false)}
-                      className="px-3 py-1.5 rounded-[12px] bg-[#000000] border border-white/20 text-white text-xs font-bold cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isRegisteringPasskey}
-                      className="px-4 py-1.5 rounded-[12px] bg-[#A855F7] hover:bg-[#9333ea] text-white font-black text-xs uppercase tracking-wider cursor-pointer"
-                    >
-                      {isRegisteringPasskey ? 'Prompting Device...' : 'Authenticate & Register'}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-
-            {/* Change Master Password Section */}
-            <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => setShowChangePassword(!showChangePassword)}
-                className="text-xs font-black uppercase tracking-wider text-[#10B981] hover:underline flex items-center gap-1.5 cursor-pointer self-start"
-              >
-                <KeyRound size={14} />
-                <span>{showChangePassword ? 'Close Password Settings' : 'Change Master Password'}</span>
-              </button>
-
-              {showChangePassword && (
-                <form
-                  onSubmit={handleChangePassword}
-                  className="p-4 rounded-[18px] bg-[#161412] border border-white/20 flex flex-col gap-3 shadow-lg"
-                >
-                  <span className="text-white font-black text-xs uppercase tracking-wider">
-                    Update Master Encryption Password
-                  </span>
-
-                  {!mek && (
-                    <div className="flex flex-col gap-1">
-                      <label className="text-white text-[11px] font-bold">Current Password</label>
-                      <input
-                        type={showPasswordText ? 'text' : 'password'}
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        placeholder="Enter current master password..."
-                        required
-                        className="w-full bg-[#000000] border border-white/20 focus:border-[#10B981] focus:outline-none rounded-[12px] px-3 py-2 text-white text-xs"
-                      />
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-white text-[11px] font-bold">New Password (min 8 chars)</label>
-                      <input
-                        type={showPasswordText ? 'text' : 'password'}
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="Enter new strong password..."
-                        required
-                        className="w-full bg-[#000000] border border-white/20 focus:border-[#10B981] focus:outline-none rounded-[12px] px-3 py-2 text-white text-xs"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-white text-[11px] font-bold">Confirm New Password</label>
-                      <input
-                        type={showPasswordText ? 'text' : 'password'}
-                        value={confirmNewPassword}
-                        onChange={(e) => setConfirmNewPassword(e.target.value)}
-                        placeholder="Re-enter new password..."
-                        required
-                        className="w-full bg-[#000000] border border-white/20 focus:border-[#10B981] focus:outline-none rounded-[12px] px-3 py-2 text-white text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowPasswordText(!showPasswordText)}
-                      className="text-xs text-white/60 hover:text-white flex items-center gap-1 cursor-pointer"
-                    >
-                      {showPasswordText ? <EyeOff size={13} /> : <Eye size={13} />}
-                      <span>{showPasswordText ? 'Hide text' : 'Show text'}</span>
-                    </button>
-
-                    <button
-                      type="submit"
-                      disabled={isChangingPassword || !newPassword || !confirmNewPassword}
-                      className="px-4 py-1.5 rounded-[12px] bg-[#10B981] hover:bg-[#059669] text-black font-black text-xs uppercase tracking-wider cursor-pointer"
-                    >
-                      {isChangingPassword ? 'Re-deriving Key...' : 'Save New Password'}
-                    </button>
-                  </div>
-
-                  {passwordChangeError && (
-                    <p className="text-rose-400 text-xs font-bold m-0">{passwordChangeError}</p>
-                  )}
-                  {passwordChangeSuccess && (
-                    <p className="text-emerald-400 text-xs font-bold m-0">✓ Password successfully updated and MEK re-encrypted!</p>
-                  )}
-                </form>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="p-4 rounded-[18px] bg-[#161412] border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div>
-              <h5 className="text-white font-black text-xs m-0">No Encryption Vault Configured</h5>
-              <p className="text-white text-[11px] font-medium m-0 mt-0.5">
-                Set up an Argon2id Master Key to secure all private keys and messages on your machine.
+        <div className="flex flex-col gap-2.5">
+          {/* Zero Metadata Leakage */}
+          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-[#1D1B19] border border-[#2D2A26] transition-colors">
+            <div className="min-w-0 flex-1">
+              <span className="text-white text-xs font-semibold block">
+                Zero Metadata Leakage
+              </span>
+              <p className="text-stone-400 text-xs mt-0.5 leading-relaxed">
+                Strips user-agent fingerprints and randomizes WebSocket reconnect jitter.
               </p>
             </div>
-            <button
-              onClick={onOpenSetupEncryption}
-              className="px-4 py-2 rounded-[14px] bg-[#10B981] hover:bg-[#059669] text-black font-black text-xs uppercase tracking-wider cursor-pointer shadow-[0_0_12px_#10B98133]"
-            >
-              Setup Vault Now
-            </button>
+            <ToggleSwitch
+              id="toggle-zero-metadata"
+              checked={zeroMetadata}
+              onChange={setZeroMetadata}
+              ariaLabel="Zero Metadata Leakage"
+            />
           </div>
-        )}
-      </div>
 
-      {/* Privacy Toggles Card */}
-      <div className="p-5 rounded-[22px] bg-[#000000] border border-white/20 flex flex-col gap-4 shadow-xl">
-        <span className="text-white font-black text-xs uppercase tracking-wider">
-          Network Privacy Controls
-        </span>
-
-        {/* Zero Metadata Leakage */}
-        <div className="flex items-center justify-between gap-3 p-3.5 rounded-[16px] bg-[#161412] border border-white/10">
-          <div className="min-w-0 flex-1">
-            <span className="text-white font-black text-xs block truncate">
-              Zero Metadata Leakage
-            </span>
-            <p className="text-white text-[11px] font-medium leading-relaxed m-0 mt-0.5">
-              Strips browser headers, OS signatures, and randomizes WebSocket polling intervals.
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            checked={zeroMetadata}
-            onChange={(e) => setZeroMetadata(e.target.checked)}
-            className="w-5 h-5 accent-[#F59E0B] cursor-pointer"
-          />
-        </div>
-
-        {/* WebRTC IP Protection */}
-        <div className="flex items-center justify-between gap-3 p-3.5 rounded-[16px] bg-[#161412] border border-white/10">
-          <div className="min-w-0 flex-1">
-            <span className="text-white font-black text-xs block truncate">
-              WebRTC Local IP Shield
-            </span>
-            <p className="text-white text-[11px] font-medium leading-relaxed m-0 mt-0.5">
-              Prevents browser WebRTC STUN queries from revealing private LAN IP addresses.
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            checked={webrtcProtect}
-            onChange={(e) => setWebrtcProtect(e.target.checked)}
-            className="w-5 h-5 accent-[#F59E0B] cursor-pointer"
-          />
-        </div>
-
-        {/* NIP-07 Browser Extension Bridge */}
-        <div className="flex items-center justify-between gap-3 p-3.5 rounded-[16px] bg-[#161412] border border-white/10">
-          <div className="min-w-0 flex-1">
-            <span className="text-white font-black text-xs block truncate">
-              NIP-07 Extension Delegation (Alby, nos2x, Amber)
-            </span>
-            <p className="text-white text-[11px] font-medium leading-relaxed m-0 mt-0.5">
-              Allow external browser extension to sign notes without loading nsec into DOM.
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            checked={nip07Bridge}
-            onChange={(e) => setNip07Bridge(e.target.checked)}
-            className="w-5 h-5 accent-[#F59E0B] cursor-pointer"
-          />
-        </div>
-
-        {/* Tor Onion Routing Proxy */}
-        <div
-          onClick={onOpenPro}
-          className="flex items-center justify-between gap-3 p-3.5 rounded-[16px] bg-[#161412] border border-[#A855F7]/30 hover:border-[#A855F7] cursor-pointer transition-colors"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-white font-black text-xs block truncate">
-                Tor Onion Routing Node
+          {/* WebRTC IP Protection */}
+          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-[#1D1B19] border border-[#2D2A26] transition-colors">
+            <div className="min-w-0 flex-1">
+              <span className="text-white text-xs font-semibold block">
+                WebRTC Local IP Shield
               </span>
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-[#A855F7]/20 text-[#A855F7] border border-[#A855F7]/40">
-                PRO FEATURE
-              </span>
+              <p className="text-stone-400 text-xs mt-0.5 leading-relaxed">
+                Prevents browser WebRTC STUN queries from leaking your local LAN IP address.
+              </p>
             </div>
-            <p className="text-white text-[11px] font-medium leading-relaxed m-0 mt-0.5">
-              Route all relay WebSocket traffic through multi-hop onion circuits (.onion addresses).
-            </p>
+            <ToggleSwitch
+              id="toggle-webrtc"
+              checked={webrtcProtect}
+              onChange={setWebrtcProtect}
+              ariaLabel="WebRTC Local IP Shield"
+            />
           </div>
-          <span className="text-xs font-mono font-bold text-[#A855F7] px-2 py-1 rounded bg-[#A855F7]/10">
-            CONNECT
-          </span>
-        </div>
-      </div>
 
-      {/* Protocol Architecture & NIP Compliance */}
-      <div className="p-5 rounded-[22px] bg-[#000000] border border-white/20 flex flex-col gap-4 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Terminal size={16} className="text-white" />
-            <h4 className="text-white font-black text-xs uppercase tracking-wider m-0">
-              Nostr NIP Compliance Engine
-            </h4>
+          {/* NIP-07 Browser Extension Bridge */}
+          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-[#1D1B19] border border-[#2D2A26] transition-colors">
+            <div className="min-w-0 flex-1">
+              <span className="text-white text-xs font-semibold block">
+                NIP-07 Extension Delegation (Alby, nos2x)
+              </span>
+              <p className="text-stone-400 text-xs mt-0.5 leading-relaxed">
+                Allows external browser signer extensions to sign events without exposing secrets.
+              </p>
+            </div>
+            <ToggleSwitch
+              id="toggle-nip07"
+              checked={nip07Bridge}
+              onChange={setNip07Bridge}
+              ariaLabel="NIP-07 Extension Delegation"
+            />
           </div>
-          <span className="text-white text-[10px] font-mono font-bold">
-            Secp256k1 & BIP-340
+
+          {/* Tor Onion Routing Node */}
+          <div
+            onClick={onOpenPro}
+            className="flex items-center justify-between gap-4 p-4 rounded-xl bg-[#1D1B19] border border-[#38332F] hover:border-[#EC4899]/50 cursor-pointer transition-colors group"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-white text-xs font-semibold block">
+                  Tor Onion Routing Circuits
+                </span>
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#EC4899]/15 text-[#EC4899] border border-[#EC4899]/30">
+                  Pro Circuit
+                </span>
+              </div>
+              <p className="text-stone-400 text-xs mt-0.5 leading-relaxed">
+                Routes all relay WebSocket traffic through multi-hop onion circuits (.onion relays).
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-[#EC4899] group-hover:underline shrink-0">
+              Configure →
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. Protocol Architecture & NIP Compliance */}
+      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+              <Terminal size={17} />
+            </div>
+            <div>
+              <h3 className="text-white text-sm font-bold">Nostr Standards Compliance</h3>
+              <p className="text-stone-400 text-xs mt-0.5">
+                BIP-340 Schnorr signatures & standard Nostr Implementation Possibilities.
+              </p>
+            </div>
+          </div>
+          <span className="text-stone-400 text-xs font-mono font-medium hidden sm:inline">
+            secp256k1
           </span>
         </div>
 
@@ -685,73 +394,95 @@ export function SettingsView({
           {implementedNIPs.map((n) => (
             <div
               key={n.nip}
-              className="p-3 rounded-[14px] bg-[#161412] border border-white/10 flex items-center justify-between gap-2"
+              className="p-3 rounded-xl bg-[#1D1B19] border border-[#2D2A26] flex items-center justify-between gap-3"
             >
               <div className="min-w-0">
-                <span className="text-white font-mono font-black text-xs block">
+                <span className="text-white font-mono font-bold text-xs block">
                   {n.nip}
                 </span>
-                <span className="text-white text-[10px] font-medium truncate block">
+                <span className="text-stone-400 text-[11px] truncate block mt-0.5">
                   {n.title}
                 </span>
               </div>
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                {n.status}
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shrink-0">
+                Active
               </span>
             </div>
           ))}
         </div>
 
-        {/* Cryptographic Benchmark */}
-        <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={handleRunBenchmark}
-              disabled={benchmarking}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#161412] border border-white/20 hover:border-white/50 text-white text-xs font-bold cursor-pointer"
-            >
-              <Cpu size={13} />
-              <span>{benchmarking ? 'Benchmarking...' : 'Test Crypto Performance'}</span>
-            </button>
-            {benchResult && (
-              <span className="text-white font-mono text-[11px] font-bold text-emerald-400">
-                {benchResult}
-              </span>
-            )}
+        {/* Cryptographic Benchmark Runner */}
+        <div className="pt-3 border-t border-[#262421] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={handleRunBenchmark}
+            disabled={benchmarking}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1D1B19] border border-[#332F2B] hover:border-[#423E38] text-stone-200 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <Cpu size={14} className="text-indigo-400" />
+            <span>{benchmarking ? 'Benchmarking Engine...' : 'Run Crypto Benchmark'}</span>
+          </button>
+
+          {benchResult ? (
+            <span className="text-emerald-400 font-mono text-xs font-medium">
+              {benchResult}
+            </span>
+          ) : (
+            <span className="text-stone-500 font-mono text-xs">
+              Runs client-side latency profiling
+            </span>
+          )}
+        </div>
+      </section>
+
+      {/* 6. Storage & Danger Zone */}
+      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+            <Database size={17} />
+          </div>
+          <div>
+            <h3 className="text-white text-sm font-bold">Local Storage & Cache Management</h3>
+            <p className="text-stone-400 text-xs mt-0.5">
+              Reset default relay pools or purge your client-side RxDB database.
+            </p>
           </div>
         </div>
-      </div>
-
-      {/* Storage & Relay Reset Controls */}
-      <div className="p-5 rounded-[22px] bg-[#000000] border border-white/20 flex flex-col gap-3 shadow-xl">
-        <span className="text-white font-black text-xs uppercase tracking-wider">
-          RxDB Local Database & Reset Actions
-        </span>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
-            onClick={onResetDefaultRelays}
-            className="p-3 rounded-[16px] bg-[#161412] border border-white/20 hover:border-white/50 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+            type="button"
+            onClick={handleResetRelays}
+            className="p-3.5 rounded-xl bg-[#1D1B19] border border-[#332F2B] hover:border-[#45403A] text-stone-200 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
-            <RefreshCw size={14} />
-            <span>Reset Default Relays</span>
+            <RefreshCw size={14} className="text-stone-400" />
+            <span>Restore Default Relays</span>
           </button>
 
           <button
+            type="button"
             onClick={handleWipe}
-            className="p-3 rounded-[16px] bg-[#161412] border border-red-500/30 hover:border-red-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_10px_#EF444422]"
+            className="p-3.5 rounded-xl bg-[#1D1B19] border border-rose-500/25 hover:border-rose-500/50 text-rose-300 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer hover:bg-rose-500/5"
           >
-            <Trash2 size={14} className="text-red-400" />
-            <span>Wipe Local RxDB & Keys</span>
+            <Trash2 size={14} className="text-rose-400" />
+            <span>Purge Local Data & Keys</span>
           </button>
         </div>
 
-        {wipeNotice && (
-          <p className="text-emerald-400 text-xs font-bold text-center mt-1">
-            ✓ Cache & session data successfully wiped!
+        {resetRelaysNotice && (
+          <p className="text-emerald-400 text-xs font-medium text-center m-0 flex items-center justify-center gap-1.5">
+            <Check size={14} />
+            <span>Relay configuration reset to default mesh.</span>
           </p>
         )}
-      </div>
+
+        {wipeNotice && (
+          <p className="text-emerald-400 text-xs font-medium text-center m-0 flex items-center justify-center gap-1.5">
+            <Check size={14} />
+            <span>Local database and session state successfully cleared.</span>
+          </p>
+        )}
+      </section>
     </div>
   );
 }

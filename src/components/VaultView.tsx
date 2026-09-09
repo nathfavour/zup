@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { NostrKeypair, StoredIdentity, VaultSecurityState } from '../types';
 import { createNewKeypair, formatTruncatedKey } from '../lib/nostr';
+import { VaultCredentialsManager } from './VaultCredentialsManager';
 
 interface VaultViewProps {
   keypair: NostrKeypair;
@@ -36,10 +37,13 @@ interface VaultViewProps {
   onOpenImportDrawer: () => void;
   onDeleteIdentity: (id: string) => void;
   vaultSecurity: VaultSecurityState | null;
+  mek?: Uint8Array | null;
   isLocked: boolean;
   onLockVault: () => void;
   onOpenUnlock: () => void;
   onOpenSetupEncryption: () => void;
+  onUpdateVaultSecurity?: (updated: VaultSecurityState) => void;
+  onUnlocked?: (mek: Uint8Array) => void;
 }
 
 export function VaultView({
@@ -53,10 +57,13 @@ export function VaultView({
   onOpenImportDrawer,
   onDeleteIdentity,
   vaultSecurity,
+  mek,
   isLocked,
   onLockVault,
   onOpenUnlock,
   onOpenSetupEncryption,
+  onUpdateVaultSecurity,
+  onUnlocked,
 }: VaultViewProps) {
   const [showPrivKey, setShowPrivKey] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -429,6 +436,20 @@ export function VaultView({
           <span>Export Backup JSON</span>
         </button>
       </div>
+
+      {/* Sovereign Vault Credentials & Passkeys Manager */}
+      {onUpdateVaultSecurity && (
+        <VaultCredentialsManager
+          vaultSecurity={vaultSecurity}
+          mek={mek ?? null}
+          isLocked={isLocked}
+          onLockVault={onLockVault}
+          onOpenUnlock={onOpenUnlock}
+          onOpenSetupEncryption={onOpenSetupEncryption}
+          onUpdateVaultSecurity={onUpdateVaultSecurity}
+          onUnlocked={onUnlocked}
+        />
+      )}
 
       {/* Profile Metadata & NIP Settings Card */}
       <form

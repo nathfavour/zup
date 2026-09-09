@@ -26,6 +26,7 @@ export interface PasskeyRecord {
   credentialId: string;
   createdAt: number;
   lastUsed?: number;
+  type?: 'platform' | 'cross-platform' | 'virtual';
   encryptedMEK: EncryptedPayload;
 }
 

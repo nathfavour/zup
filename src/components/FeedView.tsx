@@ -6,14 +6,12 @@ import {
   MessageSquare, 
   Copy, 
   Check, 
-  ShieldCheck, 
   Search,
   Bookmark,
   ArrowUp,
-  RefreshCw,
-  Shield,
   Loader2,
-  Sparkles
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
 import { FeedFilter, NostrEvent, NostrKeypair } from '../types';
 import { formatTimeAgo, formatTruncatedKey } from '../lib/nostr';
@@ -56,20 +54,14 @@ export function FeedView({
   const [searchQuery, setSearchQuery] = useState('');
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [quickZappedId, setQuickZappedId] = useState<string | null>(null);
-  const [enableQualityFilter, setEnableQualityFilter] = useState(true);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const topAnchorRef = useRef<HTMLDivElement | null>(null);
 
-  // 1. Filter and sort events (with Nostr quality shield)
+  // 1. Filter events cleanly (Quality Shield always protects in background)
   const filteredEvents = useMemo(() => {
-    let pool = [...events].sort((a, b) => b.created_at - a.created_at);
-
-    // Apply Nostr Quality Filters (rejects URI packed link farms, space spam, tag bombing)
-    if (enableQualityFilter) {
-      pool = pool.filter((e) => evaluateZupQuality(e).passes);
-    }
+    let pool = events.filter((e) => evaluateZupQuality(e).passes);
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -87,7 +79,7 @@ export function FeedView({
     }
 
     return pool;
-  }, [events, searchQuery, enableQualityFilter]);
+  }, [events, searchQuery]);
 
   // 2. Slice for infinite scrolling
   const visibleEvents = useMemo(() => {
@@ -142,6 +134,7 @@ export function FeedView({
   const handleTapNewContent = () => {
     if (onLoadNewEvents) {
       onLoadNewEvents();
+      setVisibleCount((prev) => prev + (newEventsCount || PAGE_SIZE));
     }
     topAnchorRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -150,115 +143,44 @@ export function FeedView({
     <div className="flex flex-col gap-3 pb-20 md:pb-6 relative">
       <div ref={topAnchorRef} className="h-0 w-0" />
 
-      {/* Top Search & Real-Time Indicator Bar */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Search
-            size={15}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none"
-          />
-          <input
-            id="feed-search-input"
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search clean notes, #tags, authors..."
-            className="w-full bg-[#000000] border border-white/20 focus:border-[#EC4899] focus:outline-none rounded-[16px] pl-10 pr-9 py-2.5 text-white text-xs sm:text-sm placeholder:text-white/40 transition-colors shadow-sm"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
-              aria-label="Clear search"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        {/* Tiny Real-Time Refresh / Notification Icon with Badge */}
-        <button
-          type="button"
-          id="feed-top-refresh-btn"
-          onClick={handleTapNewContent}
-          className={`relative p-2.5 rounded-[16px] border transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm ${
-            newEventsCount > 0
-              ? 'bg-[#EC4899]/20 border-[#EC4899] text-[#EC4899] shadow-[0_0_15px_rgba(236,72,153,0.4)] hover:bg-[#EC4899]/30'
-              : 'bg-[#000000] border-white/20 text-white/60 hover:text-white hover:bg-white/5'
-          }`}
-          title={
-            newEventsCount > 0
-              ? `${newEventsCount} new Zup${newEventsCount === 1 ? '' : 's'} available • Tap to view`
-              : 'Feed is up to date'
-          }
-          aria-label="Refresh feed"
-        >
-          <RefreshCw 
-            size={15} 
-            className={newEventsCount > 0 ? 'animate-spin-slow' : ''} 
-          />
-          {newEventsCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#EC4899] text-white text-[9px] font-black font-mono flex items-center justify-center animate-pulse shadow-md">
-              {newEventsCount > 9 ? '9+' : newEventsCount}
-            </span>
-          )}
-        </button>
-
-        {/* Quality Shield Filter Toggle */}
-        <button
-          type="button"
-          id="feed-quality-shield-btn"
-          onClick={() => setEnableQualityFilter((prev) => !prev)}
-          className={`p-2.5 rounded-[16px] border transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm ${
-            enableQualityFilter
-              ? 'bg-[#10B981]/15 border-[#10B981]/40 text-[#10B981] hover:bg-[#10B981]/25'
-              : 'bg-[#000000] border-white/20 text-white/40 hover:text-white/70'
-          }`}
-          title={
-            enableQualityFilter
-              ? `Quality Shield Active: Filters URI dumps, space spam & bot waterfall floods (${blockedSpamCount} blocked)`
-              : 'Quality Shield Disabled: Showing raw Nostr waterfall'
-          }
-          aria-label="Toggle Quality Shield"
-        >
-          <Shield size={15} />
-        </button>
+      {/* Clean Search Bar ONLY */}
+      <div className="relative w-full">
+        <Search
+          size={16}
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none"
+        />
+        <input
+          id="feed-search-input"
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search clean notes, #tags, authors..."
+          className="w-full bg-[#000000] border border-white/20 focus:border-[#EC4899] focus:outline-none rounded-[16px] pl-10 pr-9 py-2.5 text-white text-xs sm:text-sm placeholder:text-white/40 transition-colors shadow-sm"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+            aria-label="Clear search"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
-      {/* Quality Shield Status Bar */}
-      <div className="flex items-center justify-between px-1 text-[11px] font-mono text-white/50">
-        <div className="flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full ${enableQualityFilter ? 'bg-[#10B981]' : 'bg-amber-500'}`} />
-          <span>
-            {enableQualityFilter
-              ? 'Zup Ecosystem Shield: Active (Clean Feed)'
-              : 'Raw Waterfall (Unfiltered)'}
-          </span>
-          {blockedSpamCount > 0 && enableQualityFilter && (
-            <span className="text-[#10B981] font-bold">
-              • {blockedSpamCount} spams filtered
-            </span>
-          )}
-        </div>
-        <span className="hidden sm:inline">
-          Showing {visibleEvents.length} of {filteredEvents.length} notes
-        </span>
-      </div>
-
-      {/* Sticky Floating New Content Notification Pill (Zero-Jerk Feed Updates) */}
+      {/* Ephemeral Floating Refresh Bubble (Only shows when there are newer posts user hasn't seen) */}
       {newEventsCount > 0 && (
-        <div className="sticky top-[72px] sm:top-[80px] z-30 flex justify-center py-1 pointer-events-none">
+        <div className="sticky top-20 z-30 flex justify-center py-1.5 pointer-events-none">
           <button
             type="button"
-            id="feed-new-content-pill"
+            id="feed-ephemeral-refresh-bubble"
             onClick={handleTapNewContent}
-            className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#EC4899] to-[#A855F7] text-white text-xs font-extrabold shadow-[0_4px_20px_rgba(236,72,153,0.5)] hover:scale-105 active:scale-95 transition-all cursor-pointer animate-fadeIn"
+            className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-[#EC4899] to-[#8B5CF6] text-white text-xs font-black shadow-[0_4px_24px_rgba(236,72,153,0.55)] hover:scale-105 active:scale-95 transition-all cursor-pointer border border-white/20 animate-fadeIn"
           >
             <ArrowUp size={14} className="animate-bounce" />
             <span>
-              {newEventsCount} new {newEventsCount === 1 ? 'Zup' : 'Zups'} available • Tap to view
+              {newEventsCount} new {newEventsCount === 1 ? 'post' : 'posts'} • Tap to refresh
             </span>
-            <RefreshCw size={13} className="opacity-80" />
           </button>
         </div>
       )}

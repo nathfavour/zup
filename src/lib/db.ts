@@ -231,6 +231,7 @@ const vaultSecuritySchema = {
           credentialId: { type: 'string' },
           createdAt: { type: 'number' },
           lastUsed: { type: 'number' },
+          type: { type: 'string' },
           encryptedMEK: {
             type: 'object',
             properties: {

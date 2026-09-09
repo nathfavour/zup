@@ -130,6 +130,7 @@ export default function App() {
   // =========================================================================
   useEffect(() => {
     let isMounted = true;
+    const subs: { unsubscribe: () => void }[] = [];
 
     async function initRxDB() {
       try {
@@ -198,12 +199,14 @@ export default function App() {
             setEvents(mapped);
           }
         });
+        subs.push(notesSub);
 
         const relaysSub = database.relays.find().$.subscribe((docs) => {
           if (docs && docs.length > 0) {
             setRelays(docs.map((d) => d.toJSON() as RelayInfo));
           }
         });
+        subs.push(relaysSub);
 
         const msgsSub = database.messages.find().$.subscribe((docs) => {
           if (docs && docs.length > 0) {
@@ -212,12 +215,14 @@ export default function App() {
             setThreads(mapped);
           }
         });
+        subs.push(msgsSub);
 
         const idsSub = database.identities.find().$.subscribe((docs) => {
           if (docs) {
             setStoredIdentities(docs.map((d) => d.toJSON() as StoredIdentity));
           }
         });
+        subs.push(idsSub);
 
         const secSub = database.vault_security
           .findOne('primary_vault_security')
@@ -226,14 +231,7 @@ export default function App() {
               setVaultSecurity(doc.toJSON() as VaultSecurityState);
             }
           });
-
-        return () => {
-          notesSub.unsubscribe();
-          relaysSub.unsubscribe();
-          msgsSub.unsubscribe();
-          idsSub.unsubscribe();
-          secSub.unsubscribe();
-        };
+        subs.push(secSub);
       } catch (err) {
         console.error('Failed to bootstrap RxDB:', err);
       }
@@ -243,6 +241,7 @@ export default function App() {
 
     return () => {
       isMounted = false;
+      subs.forEach((s) => s.unsubscribe());
     };
   }, []);
 

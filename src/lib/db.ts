@@ -1,5 +1,6 @@
 import { createRxDatabase, RxDatabase, RxCollection } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
+import { getRxStorageMemory } from 'rxdb/plugins/storage-memory';
 import { 
   StoredIdentity, 
   NostrEvent, 
@@ -184,42 +185,54 @@ export async function getDatabase(): Promise<ZupDatabase> {
   if (dbPromise) return dbPromise;
 
   dbPromise = (async () => {
-    const db = await createRxDatabase<ZupDatabaseCollections>({
-      name: 'zup_cypher_db_v1',
-      storage: getRxStorageDexie(),
-      multiInstance: false,
-      ignoreDuplicate: true,
-    });
-
-    await db.addCollections({
-      identities: { schema: identitySchema },
-      notes: { schema: noteSchema },
-      relays: { schema: relaySchema },
-      messages: { schema: messageSchema },
-      vault_security: { schema: vaultSecuritySchema },
-    });
-
-    // Seed initial relays if empty
-    const existingRelays = await db.relays.find().exec();
-    if (existingRelays.length === 0) {
-      for (const r of DEFAULT_RELAYS) {
-        await db.relays.upsert(r);
+    try {
+      let db: ZupDatabase;
+      try {
+        db = await createRxDatabase<ZupDatabaseCollections>({
+          name: 'zup_cypher_db_v1',
+          storage: getRxStorageDexie(),
+          multiInstance: false,
+          closeDuplicates: true,
+        });
+      } catch (storageErr) {
+        console.warn('Dexie storage failed or unavailable, falling back to memory storage:', storageErr);
+        db = await createRxDatabase<ZupDatabaseCollections>({
+          name: `zup_cypher_db_fallback_${Date.now()}`,
+          storage: getRxStorageMemory(),
+          multiInstance: false,
+          closeDuplicates: true,
+        });
       }
-    }
 
-    // Clean up any legacy demo mock events from prior runs so feed is 100% real Nostr events
-    const demoNotes = await db.notes.find({
-      selector: {
-        id: {
-          $regex: '^e10'
+      await db.addCollections({
+        identities: { schema: identitySchema },
+        notes: { schema: noteSchema },
+        relays: { schema: relaySchema },
+        messages: { schema: messageSchema },
+        vault_security: { schema: vaultSecuritySchema },
+      });
+
+      // Seed initial relays if empty
+      const existingRelays = await db.relays.find().exec();
+      if (existingRelays.length === 0) {
+        for (const r of DEFAULT_RELAYS) {
+          await db.relays.upsert(r);
         }
       }
-    }).exec();
-    for (const doc of demoNotes) {
-      await doc.remove();
-    }
 
-    return db;
+      // Clean up any legacy demo mock events from prior runs so feed is 100% real Nostr events
+      const allNotes = await db.notes.find().exec();
+      for (const doc of allNotes) {
+        if (doc.id && doc.id.startsWith('e10')) {
+          await doc.remove();
+        }
+      }
+
+      return db;
+    } catch (err) {
+      dbPromise = null;
+      throw err;
+    }
   })();
 
   return dbPromise;

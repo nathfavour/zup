@@ -87,6 +87,9 @@ export interface NostrEvent {
   isReposted?: boolean;
   isZapped?: boolean;
   isBookmarked?: boolean;
+  isSpam?: boolean;
+  signalTier?: 'tier1' | 'tier2' | 'spam';
+  category?: 'tech' | 'stem' | 'ai' | 'systems';
 }
 
 export interface RelayInfo {
@@ -120,4 +123,15 @@ export interface DirectMessageThread {
 
 export type ActiveTab = 'feed' | 'relays' | 'messages' | 'vault' | 'settings';
 
-export type FeedFilter = 'global' | 'following' | 'privacy' | 'media';
+export type FeedFilter = 
+  | 'foryou'
+  | 'tech' 
+  | 'stem' 
+  | 'ai' 
+  | 'systems' 
+  | 'zapped'
+  | 'following' 
+  | 'all'
+  | 'global'
+  | 'privacy'
+  | 'media';

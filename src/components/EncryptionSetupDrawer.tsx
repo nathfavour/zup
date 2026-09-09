@@ -1,16 +1,17 @@
 import { useState, FormEvent } from 'react';
 import { 
   ShieldCheck, 
-  Lock, 
-  KeyRound, 
   Fingerprint, 
-  Check, 
   ArrowRight, 
   Sparkles, 
   Eye, 
   EyeOff, 
-  Shield, 
-  Cpu 
+  Flame,
+  KeyRound,
+  Radio,
+  Zap,
+  Check,
+  Cpu
 } from 'lucide-react';
 import { TactileDrawer } from './TactileDrawer';
 import { 
@@ -32,23 +33,96 @@ export function EncryptionSetupDrawer({
   onClose,
   onCompleteSetup,
 }: EncryptionSetupDrawerProps) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [viewMode, setViewMode] = useState<'consumer' | 'password' | 'passkey_finish'>('consumer');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [passkeyName, setPasskeyName] = useState('Primary Device Passkey');
+  const [passkeyName, setPasskeyName] = useState('My Device Passkey');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Intermediate state across steps
+  // Intermediate state
   const [generatedMEK, setGeneratedMEK] = useState<Uint8Array | null>(null);
   const [passwordWrapped, setPasswordWrapped] = useState<{
     cipherText: string;
     iv: string;
     salt: string;
   } | null>(null);
-  const [registeredPasskeys, setRegisteredPasskeys] = useState<PasskeyRecord[]>([]);
 
+  // 1. One-Tap Web2 Consumer Onboarding via Passkey (Face ID, Touch ID, Windows Hello)
+  const handleOneTapPasskey = async () => {
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const mek = generateMEK();
+      const passkey = await createPasskeyRecord(
+        mek,
+        passkeyName.trim() || 'Biometric Passkey'
+      );
+
+      // Derive secure auto-wrapped entropy so vault is encrypted locally
+      const internalEntropy = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const wrapped = await encryptMEKWithPassword(mek, internalEntropy);
+
+      const securityState: VaultSecurityState = {
+        id: 'primary_vault_security',
+        isInitialized: true,
+        salt: wrapped.salt,
+        passwordWrappedMEK: wrapped,
+        passkeys: [passkey],
+        argonConfig: {
+          iterations: ARGON2_CONFIG.iterations,
+          memorySize: ARGON2_CONFIG.memorySize,
+          hashLength: ARGON2_CONFIG.hashLength,
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      setIsProcessing(false);
+      onCompleteSetup(securityState, mek);
+    } catch (err: unknown) {
+      console.error('Fast passkey failed:', err);
+      setIsProcessing(false);
+      setError('Could not complete biometric authentication. You can continue as Guest or use a Password.');
+    }
+  };
+
+  // 2. Instant Guest / Burner Onboarding
+  const handleContinueAsGuest = async () => {
+    setIsProcessing(true);
+    try {
+      const mek = generateMEK();
+      const ephemeralEntropy = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const wrapped = await encryptMEKWithPassword(mek, ephemeralEntropy);
+
+      const securityState: VaultSecurityState = {
+        id: 'primary_vault_security',
+        isInitialized: true,
+        salt: wrapped.salt,
+        passwordWrappedMEK: wrapped,
+        passkeys: [],
+        argonConfig: {
+          iterations: ARGON2_CONFIG.iterations,
+          memorySize: ARGON2_CONFIG.memorySize,
+          hashLength: ARGON2_CONFIG.hashLength,
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setIsProcessing(false);
+      onCompleteSetup(securityState, mek);
+    } catch (err: unknown) {
+      console.error('Guest setup error:', err);
+      setIsProcessing(false);
+    }
+  };
+
+  // 3. Custom Argon2id Password Setup
   const handlePasswordSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -64,42 +138,35 @@ export function EncryptionSetupDrawer({
 
     setIsProcessing(true);
     try {
-      // 1. Generate 256-bit MEK
       const mek = generateMEK();
       setGeneratedMEK(mek);
-
-      // 2. Encrypt MEK with Argon2id derived KEK
       const wrapped = await encryptMEKWithPassword(mek, password);
       setPasswordWrapped(wrapped);
 
       setIsProcessing(false);
-      setStep(2);
+      setViewMode('passkey_finish');
     } catch (err: unknown) {
-      console.error('Failed to initialize encryption:', err);
+      console.error('Failed to derive Argon2id:', err);
       setError('Argon2id derivation failed. Please try a different password.');
       setIsProcessing(false);
     }
   };
 
-  const handleRegisterPasskey = async () => {
+  const handleFinishCustomPasskey = async () => {
     if (!generatedMEK || !passwordWrapped) return;
-    setError(null);
     setIsProcessing(true);
-
     try {
       const passkey = await createPasskeyRecord(
         generatedMEK,
         passkeyName.trim() || 'On-Device Biometric'
       );
-      const updatedPasskeys = [...registeredPasskeys, passkey];
-      setRegisteredPasskeys(updatedPasskeys);
 
       const securityState: VaultSecurityState = {
         id: 'primary_vault_security',
         isInitialized: true,
         salt: passwordWrapped.salt,
         passwordWrappedMEK: passwordWrapped,
-        passkeys: updatedPasskeys,
+        passkeys: [passkey],
         argonConfig: {
           iterations: ARGON2_CONFIG.iterations,
           memorySize: ARGON2_CONFIG.memorySize,
@@ -111,16 +178,13 @@ export function EncryptionSetupDrawer({
 
       setIsProcessing(false);
       onCompleteSetup(securityState, generatedMEK);
-    } catch (err: unknown) {
-      console.error('Failed to create passkey:', err);
-      setError('Could not complete biometric authentication. You can skip and use password.');
-      setIsProcessing(false);
+    } catch {
+      handleSkipCustomPasskey();
     }
   };
 
-  const handleSkipPasskey = () => {
+  const handleSkipCustomPasskey = () => {
     if (!generatedMEK || !passwordWrapped) return;
-
     const securityState: VaultSecurityState = {
       id: 'primary_vault_security',
       isInitialized: true,
@@ -135,7 +199,6 @@ export function EncryptionSetupDrawer({
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-
     onCompleteSetup(securityState, generatedMEK);
   };
 
@@ -144,53 +207,85 @@ export function EncryptionSetupDrawer({
       id="encryption-setup-drawer"
       isOpen={isOpen}
       onClose={onClose}
-      title={step === 1 ? 'Setup Client Encryption' : 'Add On-Device Passkey'}
-      subtitle={
-        step === 1
-          ? 'Argon2id Memory-Hard Key Derivation (Zero-Knowledge MEK)'
-          : 'Dual-Layer Unlock via Touch ID, Face ID, or Windows Hello'
-      }
+      title={viewMode === 'consumer' ? 'Welcome to Zup' : 'Vault Security'}
+      subtitle="Say what’s up. Get zapped."
     >
       <div className="flex flex-col gap-4">
-        {/* Step Indicator */}
-        <div className="flex items-center justify-between p-3 rounded-[16px] bg-[#000000] border border-white/20">
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-                step === 1
-                  ? 'bg-[#10B981] text-black shadow-[0_0_8px_#10B981]'
-                  : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-              }`}
-            >
-              1
-            </span>
-            <span className="text-white text-xs font-bold">Master Password</span>
-          </div>
-
-          <div className="h-0.5 w-8 bg-white/20" />
-
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-                step === 2
-                  ? 'bg-[#10B981] text-black shadow-[0_0_8px_#10B981]'
-                  : 'bg-white/10 text-white/50'
-              }`}
-            >
-              2
-            </span>
-            <span className="text-white text-xs font-bold">On-Device Passkey</span>
-          </div>
-        </div>
-
         {error && (
           <div className="p-3 rounded-[14px] bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-bold">
             {error}
           </div>
         )}
 
-        {step === 1 ? (
-          /* Step 1: Master Password Form */
+        {viewMode === 'consumer' && (
+          <div className="flex flex-col gap-4">
+            {/* Consumer Value Banner */}
+            <div className="p-4 rounded-[20px] bg-[#000000] border border-white/20 flex flex-col gap-2.5 shadow-xl">
+              <div className="flex items-center gap-2 text-[#EC4899]">
+                <Zap size={20} className="fill-[#EC4899]" />
+                <span className="text-sm font-black tracking-wide text-white uppercase">
+                  Say what’s up. Get zapped.
+                </span>
+              </div>
+              <p className="text-white/80 text-xs font-medium leading-relaxed m-0">
+                Experience Nostr with zero friction. No raw hex keys, no seed phrases, and no manual relay configuration. Connect in 1 second with on-device biometrics.
+              </p>
+              
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="flex items-center gap-2 p-2 rounded-[12px] bg-[#161412] border border-white/10 text-[11px] font-semibold text-white/90">
+                  <Fingerprint size={14} className="text-[#EC4899] shrink-0" />
+                  <span>Passkey Protected</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-[12px] bg-[#161412] border border-white/10 text-[11px] font-semibold text-white/90">
+                  <Radio size={14} className="text-emerald-400 shrink-0" />
+                  <span>Auto-Relay Routing</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Primary Action: 1-Tap Passkey Onboarding */}
+            <button
+              id="onboard-passkey-btn"
+              onClick={handleOneTapPasskey}
+              disabled={isProcessing}
+              className="w-full py-4 px-4 rounded-[18px] bg-gradient-to-r from-[#EC4899] to-[#db2777] hover:opacity-95 text-white font-black text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-3 cursor-pointer shadow-[0_0_20px_#EC489955] active:scale-[0.98]"
+            >
+              <Fingerprint size={20} />
+              <span>{isProcessing ? 'Creating Passkey...' : 'Continue with Passkey / Face ID'}</span>
+            </button>
+
+            {/* Secondary Action: Instant Burner / Guest */}
+            <button
+              id="onboard-guest-btn"
+              onClick={handleContinueAsGuest}
+              disabled={isProcessing}
+              className="w-full py-3 px-4 rounded-[16px] bg-[#161412] border border-white/20 hover:border-white/50 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Flame size={15} className="text-[#F59E0B]" />
+              <span>Start as Guest (Instant Burner Session)</span>
+            </button>
+
+            {/* Divider */}
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-white/15"></div>
+              <span className="flex-shrink mx-3 text-[10px] font-mono text-white/40 uppercase tracking-widest">
+                Advanced / Purists
+              </span>
+              <div className="flex-grow border-t border-white/15"></div>
+            </div>
+
+            {/* Switch to custom Argon2id password */}
+            <button
+              onClick={() => setViewMode('password')}
+              className="w-full py-2.5 rounded-[14px] bg-[#000000] border border-white/15 hover:border-white/40 text-white/70 hover:text-white text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <KeyRound size={14} />
+              <span>Set Custom Master Password (Argon2id)</span>
+            </button>
+          </div>
+        )}
+
+        {viewMode === 'password' && (
           <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
             <div className="p-4 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col gap-2 shadow-md">
               <div className="flex items-center gap-2 text-emerald-400">
@@ -200,7 +295,7 @@ export function EncryptionSetupDrawer({
                 </span>
               </div>
               <p className="text-white text-xs font-medium leading-relaxed m-0">
-                Your keys never leave your machine unencrypted. We derive a 256-bit MEK using Argon2id (64MB memory cost) to protect all identities, messages, and relays.
+                Derive a 256-bit MEK using Argon2id (64MB memory cost) to protect all identities, messages, and relays.
               </p>
             </div>
 
@@ -213,7 +308,7 @@ export function EncryptionSetupDrawer({
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter strong master password..."
+                  placeholder="Enter master password (min 8 chars)..."
                   required
                   className="w-full bg-[#000000] border border-white/20 focus:border-[#10B981] focus:outline-none rounded-[16px] pl-4 pr-11 py-3 text-white text-xs placeholder:text-white/40"
                 />
@@ -241,7 +336,6 @@ export function EncryptionSetupDrawer({
               />
             </div>
 
-            {/* Parameter spec badge */}
             <div className="flex items-center justify-between p-2.5 rounded-[12px] bg-[#000000] border border-white/10 text-[10px] font-mono font-bold text-white">
               <span className="flex items-center gap-1">
                 <Cpu size={12} className="text-emerald-400" />
@@ -259,67 +353,53 @@ export function EncryptionSetupDrawer({
                 <span>Deriving Key & Encrypting MEK...</span>
               ) : (
                 <>
-                  <span>Continue to Passkey Setup</span>
+                  <span>Continue</span>
                   <ArrowRight size={14} />
                 </>
               )}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('consumer')}
+              className="text-xs text-white/60 hover:text-white underline text-center cursor-pointer"
+            >
+              Back to Simple Onboarding
+            </button>
           </form>
-        ) : (
-          /* Step 2: Passkey / Biometric Setup */
+        )}
+
+        {viewMode === 'passkey_finish' && (
           <div className="flex flex-col gap-4">
             <div className="p-4 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col gap-2 shadow-md">
               <div className="flex items-center gap-2 text-[#A855F7]">
                 <Fingerprint size={18} />
                 <span className="text-xs font-black uppercase tracking-wider text-white">
-                  On-Device Biometric Unlock
+                  Add Optional Biometric Unlock
                 </span>
               </div>
               <p className="text-white text-xs font-medium leading-relaxed m-0">
-                Your MEK can also be encrypted with your device authenticator (Touch ID, Face ID, Windows Hello, or Security Key). When launching the app, you will be prompted for passkey first.
+                You can unlock seamlessly next time with Touch ID, Face ID, or Windows Hello.
               </p>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label className="text-white text-xs font-extrabold uppercase tracking-wider">
-                Passkey Label
-              </label>
-              <input
-                type="text"
-                value={passkeyName}
-                onChange={(e) => setPasskeyName(e.target.value)}
-                placeholder="e.g. MacBook Touch ID, iPhone Face ID"
-                className="w-full bg-[#000000] border border-white/20 focus:border-[#A855F7] focus:outline-none rounded-[16px] px-4 py-3 text-white text-xs placeholder:text-white/40"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={handleFinishCustomPasskey}
+              disabled={isProcessing}
+              className="w-full py-3.5 rounded-[16px] bg-[#A855F7] hover:bg-[#9333ea] disabled:opacity-40 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_14px_#A855F744]"
+            >
+              <Fingerprint size={16} />
+              <span>{isProcessing ? 'Authenticating with Device...' : 'Register On-Device Passkey'}</span>
+            </button>
 
-            {registeredPasskeys.length > 0 && (
-              <div className="p-3 rounded-[16px] bg-[#000000] border border-emerald-500/40 flex items-center gap-2 text-emerald-300 text-xs font-bold">
-                <Check size={16} />
-                <span>Passkey "{registeredPasskeys[0].name}" successfully configured!</span>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2 pt-2">
-              <button
-                type="button"
-                onClick={handleRegisterPasskey}
-                disabled={isProcessing}
-                className="w-full py-3.5 rounded-[16px] bg-[#A855F7] hover:bg-[#9333ea] disabled:opacity-40 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_14px_#A855F744]"
-              >
-                <Fingerprint size={16} />
-                <span>{isProcessing ? 'Authenticating with Device...' : 'Register On-Device Passkey'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSkipPasskey}
-                disabled={isProcessing}
-                className="w-full py-2.5 rounded-[16px] bg-[#000000] border border-white/20 hover:border-white/50 text-white text-xs font-bold transition-all cursor-pointer"
-              >
-                Skip for Now (Password Only)
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleSkipCustomPasskey}
+              className="w-full py-2.5 rounded-[16px] bg-[#000000] border border-white/20 hover:border-white/50 text-white text-xs font-bold transition-all cursor-pointer"
+            >
+              Skip (Password Only)
+            </button>
           </div>
         )}
       </div>

@@ -41,8 +41,8 @@ export function Header({
               <span className="text-white font-black text-base sm:text-lg tracking-wider uppercase leading-none">
                 Zup
               </span>
-              <span className="text-[9px] font-mono text-white/50 font-bold uppercase tracking-widest leading-tight hidden xs:inline">
-                Mesh Protocol
+              <span className="text-[10px] sm:text-[11px] font-semibold text-[#EC4899] tracking-normal leading-tight hidden xs:inline">
+                Say what’s up. Get zapped.
               </span>
             </div>
           </div>
@@ -50,15 +50,16 @@ export function Header({
           {/* Minimalist Live Node Status Pill */}
           <div
             id="header-relay-indicator"
-            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#161412] border border-white/15 text-[11px] font-mono font-bold text-white/90"
-            title={`${connectedRelays} of ${relays.length} Decentralized Relays Connected`}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#161412] border border-white/15 text-[11px] font-mono font-bold text-white/90 shadow-inner"
+            title={`Smart Auto-Routing: Connected across ${connectedRelays} decentralized relays without manual configuration`}
           >
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span className="text-[10px] sm:text-[11px] tracking-wider">
-              {connectedRelays}/{relays.length} <span className="hidden sm:inline">NODES</span>
+            <span className="text-[10px] sm:text-[11px] tracking-tight">
+              <span className="hidden sm:inline text-white/70">Auto-Routing: </span>
+              {connectedRelays}/{relays.length} <span className="hidden xs:inline">Nodes</span>
             </span>
           </div>
         </div>

@@ -58,7 +58,7 @@ export default function App() {
 
   // Navigation & Filter State
   const [activeTab, setActiveTab] = useState<ActiveTab>('feed');
-  const [feedFilter, setFeedFilter] = useState<FeedFilter>('global');
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>('tech');
 
   // Identities & Active Keypair
   const [storedIdentities, setStoredIdentities] = useState<StoredIdentity[]>([]);

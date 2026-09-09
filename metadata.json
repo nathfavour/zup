@@ -1,6 +1,6 @@
 {
   "name": "Zup",
-  "description": "A minimalist, privacy-first Nostr client for seamless decentralized social networking.",
+  "description": "Say what’s up. Get zapped.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

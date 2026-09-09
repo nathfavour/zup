@@ -15,6 +15,7 @@ import {
   VaultSecurityState,
   NostrNotification
 } from './types';
+import * as nip19 from 'nostr-tools/nip19';
 import { 
   createNewKeypair, 
   DEFAULT_RELAYS, 
@@ -106,6 +107,51 @@ export default function App() {
   // Set of pubkeys already requested for Kind 0
   const requestedPubkeysRef = useRef<Set<string>>(new Set());
 
+  // Automatically decrypt active identity private key & nsec whenever MEK or active identity changes
+  useEffect(() => {
+    if (!activeIdentityId || storedIdentities.length === 0) return;
+    const active = storedIdentities.find((i) => i.id === activeIdentityId);
+    if (!active) return;
+
+    async function syncActiveKeypair() {
+      let resolvedPrivHex: string | undefined;
+      let resolvedNsec: string | undefined;
+
+      if (mek && active?.encryptedPrivkeyHex) {
+        try {
+          resolvedPrivHex = await decryptSecret(active.encryptedPrivkeyHex, mek);
+          if (active.encryptedNsec) {
+            resolvedNsec = await decryptSecret(active.encryptedNsec, mek);
+          }
+        } catch (err) {
+          console.warn('Could not decrypt stored private key:', err);
+        }
+      }
+
+      setKeypair((prev) => {
+        const nextPriv = resolvedPrivHex || prev.privkeyHex;
+        let nextNsec = resolvedNsec || prev.nsec;
+        if (!nextNsec && nextPriv) {
+          try {
+            nextNsec = nip19.nsecEncode(hexToBytes(nextPriv));
+          } catch {
+            // Ignore
+          }
+        }
+
+        if (nextPriv === prev.privkeyHex && nextNsec === prev.nsec) return prev;
+        return {
+          ...prev,
+          privkeyHex: nextPriv,
+          nsec: nextNsec,
+          isWatchOnly: active.isWatchOnly,
+        };
+      });
+    }
+
+    syncActiveKeypair();
+  }, [mek, activeIdentityId, storedIdentities]);
+
   // =========================================================================
   // 1. Initialize RxDB and Reactive Subscriptions
   // =========================================================================
@@ -129,11 +175,7 @@ export default function App() {
             setIsVaultLocked(false);
           } else {
             setIsVaultLocked(true);
-            setIsUnlockOpen(true);
           }
-        } else {
-          // First time launch: prompt encryption setup drawer
-          setIsSetupEncryptionOpen(true);
         }
 
         // Keep tabs in sync with MasterPassCrypto volatile MEK

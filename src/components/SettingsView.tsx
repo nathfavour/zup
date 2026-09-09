@@ -23,7 +23,9 @@ import {
   Server,
   Zap,
   Globe,
-  Database
+  Database,
+  Key,
+  Copy
 } from 'lucide-react';
 import { NostrKeypair, RelayInfo, VaultSecurityState, PasskeyRecord, SyncStatus, KylrixOAuthSession } from '../types';
 import { 
@@ -128,6 +130,15 @@ export function SettingsView({
   const [benchmarking, setBenchmarking] = useState(false);
   const [benchResult, setBenchResult] = useState<string | null>(null);
 
+  const [showPrivKeySettings, setShowPrivKeySettings] = useState(false);
+  const [copiedKeySettings, setCopiedKeySettings] = useState<string | null>(null);
+
+  const handleCopySettings = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKeySettings(label);
+    setTimeout(() => setCopiedKeySettings(null), 2000);
+  };
+
   const handleWipe = () => {
     if (confirm('Are you sure? This will wipe your local database, stored keys, and relay statistics from this browser.')) {
       onClearCache();
@@ -164,9 +175,9 @@ export function SettingsView({
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl mx-auto pb-24 md:pb-12 text-stone-200">
-      {/* 1. Account Summary Card */}
-      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 shadow-sm">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* 1. Account Summary & Identity Keys Card */}
+      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#262421]">
           <div className="flex items-center gap-3.5 min-w-0">
             <img
               src={keypair.avatar}
@@ -193,6 +204,99 @@ export function SettingsView({
               <ShieldCheck size={14} className="text-emerald-400" />
               <span>secp256k1 active</span>
             </span>
+          </div>
+        </div>
+
+        {/* Cryptographic Keys Section (npub & nsec) */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <Key size={15} className="text-[#EC4899]" />
+              <span>Active Identity Keys (NIP-19)</span>
+            </span>
+            {isLocked && vaultSecurity?.isInitialized && (
+              <button
+                type="button"
+                onClick={onOpenUnlock}
+                className="text-xs font-bold text-[#EC4899] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Unlock size={12} />
+                <span>Unlock to view nsec</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Public Key (npub) */}
+            <div className="p-3.5 rounded-xl bg-[#1D1B19] border border-[#2D2A26] flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-stone-400 uppercase">Public Key (npub)</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopySettings(keypair.npub, 'npub')}
+                  className="text-stone-400 hover:text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  {copiedKeySettings === 'npub' ? (
+                    <Check size={12} className="text-emerald-400" />
+                  ) : (
+                    <Copy size={12} />
+                  )}
+                  <span>{copiedKeySettings === 'npub' ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+              <p className="font-mono text-xs text-white break-all m-0 select-all">
+                {keypair.npub}
+              </p>
+            </div>
+
+            {/* Private Key (nsec) */}
+            <div className="p-3.5 rounded-xl bg-[#1D1B19] border border-[#2D2A26] flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-stone-400 uppercase">Private Key (nsec)</span>
+                {keypair.nsec && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivKeySettings(!showPrivKeySettings)}
+                      className="text-stone-400 hover:text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {showPrivKeySettings ? <EyeOff size={12} /> : <Eye size={12} />}
+                      <span>{showPrivKeySettings ? 'Hide' : 'Show'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCopySettings(keypair.nsec!, 'nsec')}
+                      className="text-stone-400 hover:text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedKeySettings === 'nsec' ? (
+                        <Check size={12} className="text-emerald-400" />
+                      ) : (
+                        <Copy size={12} />
+                      )}
+                      <span>{copiedKeySettings === 'nsec' ? 'Copied' : 'Copy nsec'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+              <p className="font-mono text-xs text-white break-all m-0 select-all">
+                {keypair.nsec ? (
+                  showPrivKeySettings ? (
+                    keypair.nsec
+                  ) : (
+                    '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••'
+                  )
+                ) : isLocked ? (
+                  <span className="text-amber-400 text-xs flex items-center gap-1 font-sans">
+                    <Lock size={12} />
+                    Vault is locked. Unlock above to display nsec.
+                  </span>
+                ) : (
+                  <span className="text-stone-500 text-xs font-sans">
+                    Watch-only identity (No private key loaded)
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
         </div>
       </section>

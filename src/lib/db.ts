@@ -312,30 +312,17 @@ export async function getDatabase(): Promise<ZupDatabase> {
       try {
         await db.addCollections(collectionsConfig);
       } catch (collErr) {
-        console.warn('addCollections encountered schema mismatch or error on database instance. Initiating self-healing recovery:', collErr);
+        console.warn('addCollections encountered error on database instance:', collErr);
+        // Do NOT call db.remove() or wipe existing data on collection error
         try {
-          await db.remove();
-        } catch {
-          // Ignore remove failure
-        }
-        
-        try {
-          db = await createRxDatabase<ZupDatabaseCollections>({
-            name: `zup_cypher_db_v2`,
-            storage: getRxStorageDexie(),
-            multiInstance: false,
-            closeDuplicates: true,
-          });
-          await db.addCollections(collectionsConfig);
-        } catch (v2Err) {
-          console.warn('Dexie v2 fallback failed, booting ephemeral memory storage:', v2Err);
-          db = await createRxDatabase<ZupDatabaseCollections>({
-            name: `zup_cypher_db_mem_${Date.now()}`,
-            storage: getRxStorageMemory(),
-            multiInstance: false,
-            closeDuplicates: true,
-          });
-          await db.addCollections(collectionsConfig);
+          // Attempt adding collections individually in case some already exist
+          for (const [key, config] of Object.entries(collectionsConfig)) {
+            if (!db.collections[key]) {
+              await db.addCollections({ [key]: config } as any);
+            }
+          }
+        } catch (retryErr) {
+          console.warn('Individual collection addition fallback:', retryErr);
         }
       }
 

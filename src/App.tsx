@@ -46,6 +46,7 @@ import { NotificationsView } from './components/NotificationsView';
 import { ComposeDrawer } from './components/ComposeDrawer';
 import { ZapModal } from './components/ZapModal';
 import { ReplyDrawer } from './components/ReplyDrawer';
+import { PostDetailDrawer } from './components/PostDetailDrawer';
 import { ProUpgradeDrawer } from './components/ProUpgradeDrawer';
 import { EncryptionSetupDrawer } from './components/EncryptionSetupDrawer';
 import { UnlockDrawer } from './components/UnlockDrawer';
@@ -94,6 +95,7 @@ export default function App() {
   const [proFeatureName, setProFeatureName] = useState('Pro Mesh Network');
   const [zapTargetEvent, setZapTargetEvent] = useState<NostrEvent | null>(null);
   const [replyTargetEvent, setReplyTargetEvent] = useState<NostrEvent | null>(null);
+  const [selectedPostEvent, setSelectedPostEvent] = useState<NostrEvent | null>(null);
 
   // WebSocket connections reference
   const activeSocketsRef = useRef<Map<string, WebSocket>>(new Map());
@@ -1090,7 +1092,9 @@ export default function App() {
       />
 
       {/* Main Workspace Frame */}
-      <div className="flex-1 flex w-full max-w-7xl mx-auto px-3 sm:px-6 pt-3 sm:pt-4 gap-4 lg:gap-6">
+      <div className={`flex-1 flex w-full max-w-7xl mx-auto px-3 sm:px-6 pt-3 sm:pt-4 gap-4 lg:gap-6 transition-all duration-200 ${
+        selectedPostEvent ? 'md:mr-[440px]' : ''
+      }`}>
         {/* Navigation Sidebar (Desktop) & Floating Dock (Mobile) */}
         <Navigation
           activeTab={activeTab}
@@ -1118,6 +1122,7 @@ export default function App() {
               onLikeEvent={handleLikeEvent}
               onRepostEvent={handleRepostEvent}
               onReplyEvent={(ev) => setReplyTargetEvent(ev)}
+              onSelectPost={(ev) => setSelectedPostEvent(ev)}
               newEventsCount={pendingNewEvents.length}
               onLoadNewEvents={handleLoadNewEvents}
               onLoadOlderEvents={handleLoadOlderEvents}
@@ -1165,6 +1170,7 @@ export default function App() {
               onLikeEvent={handleLikeEvent}
               onRepostEvent={handleRepostEvent}
               onReplyEvent={(ev) => setReplyTargetEvent(ev)}
+              onSelectPost={(ev) => setSelectedPostEvent(ev)}
               onBackToFeed={() => setActiveTab('feed')}
               relays={relays}
               onAddRelay={handleAddRelay}
@@ -1268,6 +1274,18 @@ export default function App() {
         onClose={() => setReplyTargetEvent(null)}
         keypair={keypair}
         relays={relays}
+        onSubmitReply={handleReplyNote}
+      />
+
+      <PostDetailDrawer
+        post={selectedPostEvent}
+        isOpen={!!selectedPostEvent}
+        onClose={() => setSelectedPostEvent(null)}
+        keypair={keypair}
+        relays={relays}
+        onLikeEvent={handleLikeEvent}
+        onRepostEvent={handleRepostEvent}
+        onOpenZap={(ev) => setZapTargetEvent(ev)}
         onSubmitReply={handleReplyNote}
       />
 

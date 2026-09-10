@@ -352,99 +352,76 @@ export function FeedView({
                   </div>
                 )}
 
-                {/* Action Bar */}
+                {/* Standard Action Bar (Clean Single-Row Twitter/X Style) */}
                 <div
-                  className="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-white text-xs font-bold"
+                  className="pt-2 border-t border-white/10 flex items-center justify-between max-w-md gap-2 text-white text-xs font-bold"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Left: Engagement Controls */}
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    {/* Reply */}
-                    <button
-                      onClick={() => onReplyEvent(event)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white transition-all cursor-pointer"
-                      title="Reply to Note"
-                    >
-                      <MessageSquare size={13} />
-                      <span className="font-mono text-[11px] font-bold">
-                        {event.repliesCount || 0}
-                      </span>
-                    </button>
+                  {/* Reply */}
+                  <button
+                    onClick={() => onReplyEvent(event)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white transition-all cursor-pointer"
+                    title="Reply to Note"
+                  >
+                    <MessageSquare size={14} />
+                    <span className="font-mono text-[11px] font-bold">
+                      {event.repliesCount || 0}
+                    </span>
+                  </button>
 
-                    {/* Repost */}
-                    <button
-                      onClick={() => onRepostEvent(event.id)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] transition-all cursor-pointer ${
-                        isReposted
-                          ? 'bg-[#10B981]/20 border border-[#10B981] text-emerald-300 shadow-[0_0_10px_#10B98133]'
-                          : 'bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white'
-                      }`}
-                      title="Repost Note"
-                    >
-                      <Repeat2 size={13} className={isReposted ? 'text-emerald-400' : 'text-white/80'} />
-                      <span className="font-mono text-[11px] font-bold">
-                        {event.repostsCount || 0}
-                      </span>
-                    </button>
+                  {/* Repost */}
+                  <button
+                    onClick={() => onRepostEvent(event.id)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] transition-all cursor-pointer ${
+                      isReposted
+                        ? 'bg-[#10B981]/20 border border-[#10B981] text-emerald-300 shadow-[0_0_10px_#10B98133]'
+                        : 'bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white'
+                    }`}
+                    title="Repost Note"
+                  >
+                    <Repeat2 size={14} className={isReposted ? 'text-emerald-400' : 'text-white/80'} />
+                    <span className="font-mono text-[11px] font-bold">
+                      {event.repostsCount || 0}
+                    </span>
+                  </button>
 
-                    {/* Like */}
-                    <button
-                      onClick={() => onLikeEvent(event.id)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] transition-all cursor-pointer ${
-                        isLiked
-                          ? 'bg-[#EC4899]/20 border border-[#EC4899] text-[#EC4899] shadow-[0_0_10px_#EC489933]'
-                          : 'bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white'
-                      }`}
-                      title="Like note"
-                    >
-                      <Heart
-                        size={13}
-                        className={isLiked ? 'fill-[#EC4899] text-[#EC4899]' : 'text-white/80'}
-                      />
-                      <span className="font-mono text-[11px] font-bold">
-                        {event.likesCount || 0}
-                      </span>
-                    </button>
-                  </div>
+                  {/* Like */}
+                  <button
+                    onClick={() => onLikeEvent(event.id)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] transition-all cursor-pointer ${
+                      isLiked
+                        ? 'bg-[#EC4899]/20 border border-[#EC4899] text-[#EC4899] shadow-[0_0_10px_#EC489933]'
+                        : 'bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white'
+                    }`}
+                    title="Like note"
+                  >
+                    <Heart
+                      size={14}
+                      className={isLiked ? 'fill-[#EC4899] text-[#EC4899]' : 'text-white/80'}
+                    />
+                    <span className="font-mono text-[11px] font-bold">
+                      {event.likesCount || 0}
+                    </span>
+                  </button>
 
-                  {/* Right: Quick Lightning Zaps */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      onClick={() => handleQuickZap(event, 21)}
-                      className="px-2 py-1 rounded-[10px] bg-[#161412] hover:bg-[#F59E0B]/20 border border-white/15 hover:border-[#F59E0B] text-white/90 text-[10px] font-mono font-black transition-all cursor-pointer flex items-center gap-1"
-                      title="Quick Zap 21 satoshis"
-                    >
-                      <Zap size={10} className="text-[#F59E0B]" />
-                      <span>+21</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleQuickZap(event, 100)}
-                      className="px-2 py-1 rounded-[10px] bg-[#161412] hover:bg-[#F59E0B]/20 border border-white/15 hover:border-[#F59E0B] text-white/90 text-[10px] font-mono font-black transition-all cursor-pointer flex items-center gap-1"
-                      title="Quick Zap 100 satoshis"
-                    >
-                      <Zap size={10} className="text-[#F59E0B]" />
-                      <span>+100</span>
-                    </button>
-
-                    <button
-                      onClick={() => onOpenZap(event)}
-                      className={`flex items-center gap-1.5 px-3 py-1 rounded-[12px] transition-all cursor-pointer ${
-                        isZapped
-                          ? 'bg-[#F59E0B]/25 border border-[#F59E0B] text-amber-300 shadow-[0_0_12px_#F59E0B44]'
-                          : 'bg-[#161412] border border-white/15 hover:border-[#F59E0B] text-white'
-                      }`}
-                      title="Custom Lightning Zap"
-                    >
-                      <Zap
-                        size={13}
-                        className={isZapped ? 'fill-[#F59E0B] text-[#F59E0B]' : 'text-[#F59E0B]'}
-                      />
-                      <span className="font-mono text-[11px] font-extrabold text-[#F59E0B]">
-                        {event.zapsCount ? `${event.zapsCount.toLocaleString()} sats` : 'Zap'}
-                      </span>
-                    </button>
-                  </div>
+                  {/* Zap */}
+                  <button
+                    onClick={() => onOpenZap(event)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] transition-all cursor-pointer ${
+                      isZapped
+                        ? 'bg-[#F59E0B]/25 border border-[#F59E0B] text-amber-300 shadow-[0_0_12px_#F59E0B44]'
+                        : 'bg-[#161412] border border-white/15 hover:border-[#F59E0B] text-white'
+                    }`}
+                    title="Lightning Zap"
+                  >
+                    <Zap
+                      size={14}
+                      className={isZapped ? 'fill-[#F59E0B] text-[#F59E0B]' : 'text-[#F59E0B]'}
+                    />
+                    <span className="font-mono text-[11px] font-extrabold text-[#F59E0B]">
+                      {event.zapsCount ? `${event.zapsCount.toLocaleString()}` : 0}
+                    </span>
+                  </button>
                 </div>
               </article>
             );

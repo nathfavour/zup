@@ -106,18 +106,18 @@ export function KylrixSyncModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-none"
     >
       {/* Opaque Ash Container adhering strictly to OpenBricks 4.0 */}
-      <div className="relative w-full max-w-lg bg-[#141210] border border-[#2C2925] rounded-[24px] p-5 sm:p-6 shadow-2xl overflow-y-auto max-h-[90vh] text-white">
+      <div className="relative w-full max-w-lg bg-[#161412] border border-white/20 rounded-[24px] p-5 sm:p-6 shadow-2xl overflow-y-auto max-h-[90vh] text-white">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#24221F]">
+        <div className="flex items-center justify-between pb-4 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-[14px] bg-[#1C1A17] border border-[#35322E] flex items-center justify-center text-[#EC4899]">
+            <div className="w-10 h-10 rounded-[14px] bg-[#000000] border border-white/20 flex items-center justify-center text-[#EC4899]">
               <Cloud size={20} />
             </div>
             <div>
-              <h2 id="kylrix-sync-modal-title" className="text-base sm:text-lg font-black tracking-wide text-white">
+              <h2 id="kylrix-sync-modal-title" className="text-base sm:text-lg font-black tracking-wide text-white m-0">
                 Kylrix Sync & Identity Anchor
               </h2>
-              <p className="text-xs text-[#99948D] font-medium">
+              <p className="text-xs text-white/70 font-medium m-0 mt-0.5">
                 Local-First Content SoT & Autonomic Cloud Reconciliation
               </p>
             </div>
@@ -125,14 +125,14 @@ export function KylrixSyncModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#1C1A17] border border-[#35322E] flex items-center justify-center text-[#99948D] hover:text-white cursor-pointer transition-colors"
+            className="w-8 h-8 rounded-full bg-[#000000] border border-white/20 flex items-center justify-center text-white/80 hover:text-white cursor-pointer transition-colors"
           >
             <X size={16} />
           </button>
         </div>
 
         {/* Live Sync Status Banner */}
-        <div className="mt-4 p-3.5 rounded-[18px] bg-[#1A1815] border border-[#2B2824] flex items-center justify-between">
+        <div className="mt-4 p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-2.5">
             {syncStatus === 'pending' ? (
               <span className="relative flex h-3 w-3">
@@ -195,13 +195,13 @@ export function KylrixSyncModal({
 
           {oauthSession.isConnected && oauthSession.profile ? (
             /* Connected State */
-            <div className="p-4 rounded-[18px] bg-[#1A1815] border border-[#2B2824] flex flex-col gap-3">
+            <div className="p-4 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col gap-3 shadow-md">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <img
                     src={oauthSession.profile.avatar}
                     alt={oauthSession.profile.name}
-                    className="w-11 h-11 rounded-[14px] border border-[#3A3631] bg-[#121110] object-cover"
+                    className="w-11 h-11 rounded-[14px] border border-white/20 bg-black object-cover"
                   />
                   <div>
                     <div className="flex items-center gap-1.5">
@@ -212,7 +212,7 @@ export function KylrixSyncModal({
                         Linked
                       </span>
                     </div>
-                    <span className="text-xs text-[#8F8A83] block">
+                    <span className="text-xs text-white/70 block">
                       {oauthSession.profile.email || oauthSession.profile.userId}
                     </span>
                   </div>
@@ -230,27 +230,27 @@ export function KylrixSyncModal({
               </div>
 
               {/* Binding Specs */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#262420] text-[11px]">
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10 text-[11px]">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[#8F8A83]">Bound Nostr Pubkey</span>
+                  <span className="text-white/60">Bound Nostr Pubkey</span>
                   <span className="font-mono text-white font-semibold">
                     {formatTruncatedKey(keypair.npub, 6, 4)}
                   </span>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[#8F8A83]">NIP-78 Anchor</span>
+                  <span className="text-white/60">NIP-78 Anchor</span>
                   <span className="text-[#10B981] font-semibold flex items-center gap-1">
                     <CheckCircle2 size={11} /> Kind 30078 Synced
                   </span>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[#8F8A83]">Sync Origin</span>
+                  <span className="text-white/60">Sync Origin</span>
                   <span className="font-mono text-[#EC4899] uppercase font-bold">
                     {oauthSession.syncOrigin}
                   </span>
                 </div>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[#8F8A83]">Appwrite Prefs</span>
+                  <span className="text-white/60">Appwrite Prefs</span>
                   <span className="text-[#10B981] font-semibold flex items-center gap-1">
                     <CheckCircle2 size={11} /> Multi-Device Anchored
                   </span>
@@ -259,39 +259,40 @@ export function KylrixSyncModal({
             </div>
           ) : (
             /* Disconnected State */
-            <div className="p-4 rounded-[18px] bg-[#1A1815] border border-[#2B2824] flex flex-col gap-3.5">
+            <div className="p-4 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col gap-3.5 shadow-md">
               <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-[12px] bg-[#24211D] border border-[#3A3631] flex items-center justify-center text-white shrink-0 mt-0.5">
+                <div className="w-9 h-9 rounded-[12px] bg-[#161412] border border-white/20 flex items-center justify-center text-white shrink-0 mt-0.5">
                   <Shield size={18} />
                 </div>
-                <div className="text-xs text-[#B5AFA7] leading-relaxed">
+                <div className="text-xs text-white/80 leading-relaxed font-medium">
                   Connect your <strong className="text-white">Kylrix Sovereign Identity</strong> to enable zero-knowledge multi-device settings sync, cloud backup, and verified NIP-05 routing without sacrificing local sovereign control.
                 </div>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">
-                {/* Primary Button: Sign in with Kylrix */}
+                {/* Primary Button: Sign in with Kylrix (Real OAuth 2.1 PKCE Flow) */}
                 <button
                   type="button"
                   id="signin-kylrix-main-btn"
-                  onClick={handleSimulatedSignIn}
+                  onClick={handleRealOAuthRedirect}
                   disabled={isSigningIn}
                   className="flex-1 py-2.5 px-4 rounded-[14px] bg-[#EC4899] hover:bg-[#db2777] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-98"
                 >
                   <Sparkles size={14} />
-                  <span>{isSigningIn ? 'Connecting...' : 'Sign in with Kylrix'}</span>
+                  <span>{isSigningIn ? 'Redirecting to Kylrix...' : 'Sign in with Kylrix'}</span>
                 </button>
 
-                {/* Secondary Option: Open PKCE Consent URL */}
+                {/* Secondary Option: Instant Local Sandbox Sign-In */}
                 <button
                   type="button"
-                  id="signin-kylrix-redirect-btn"
-                  onClick={handleRealOAuthRedirect}
+                  id="signin-kylrix-sandbox-btn"
+                  onClick={handleSimulatedSignIn}
+                  disabled={isSigningIn}
                   className="py-2.5 px-3 rounded-[14px] bg-[#24211D] border border-[#3A3631] hover:border-[#524D46] text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                  title="Open official Kylrix OAuth Consent Screen"
+                  title="Authenticate local test identity without redirecting"
                 >
-                  <ExternalLink size={13} />
-                  <span>PKCE URL</span>
+                  <Key size={13} />
+                  <span>Sandbox Auth</span>
                 </button>
               </div>
 

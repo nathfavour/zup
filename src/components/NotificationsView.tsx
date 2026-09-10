@@ -155,10 +155,15 @@ export function NotificationsView({
                 </div>
 
                 {/* Content */}
-                <div className="min-w-0 flex-1 space-y-1">
+                <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-white font-black text-xs">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <img
+                        src={notif.sourceAvatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${notif.sourcePubkey}`}
+                        alt={notif.sourceName}
+                        className="w-5 h-5 rounded-full border border-white/20 bg-black shrink-0 object-cover"
+                      />
+                      <span className="text-white font-black text-xs truncate max-w-[140px] sm:max-w-none">
                         {notif.sourceName}
                       </span>
                       <span className="text-white text-xs font-semibold">
@@ -181,10 +186,34 @@ export function NotificationsView({
                   )}
 
                   {notif.targetEventContent && (
-                    <div className="p-2.5 rounded-[12px] bg-[#161412] border border-white/20 text-white text-xs font-medium line-clamp-2">
+                    <div className="p-2.5 rounded-[14px] bg-[#161412] border border-white/20 text-white text-xs font-medium line-clamp-2">
                       {notif.targetEventContent}
                     </div>
                   )}
+
+                  {/* Notification actions */}
+                  <div className="flex items-center gap-2 pt-0.5">
+                    {notif.targetEventId && onReplyTarget && (
+                      <button
+                        type="button"
+                        onClick={() => onReplyTarget(notif.targetEventId!)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[10px] bg-[#161412] hover:bg-[#25221f] border border-white/20 text-white text-[11px] font-bold cursor-pointer transition-colors"
+                      >
+                        <MessageSquare size={12} />
+                        <span>Reply</span>
+                      </button>
+                    )}
+                    {notif.targetEventId && onOpenZapTarget && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenZapTarget(notif.targetEventId!)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[10px] bg-[#F59E0B]/15 hover:bg-[#F59E0B]/25 border border-[#F59E0B]/30 text-[#F59E0B] text-[11px] font-bold cursor-pointer transition-colors"
+                      >
+                        <Zap size={12} />
+                        <span>Zap Back</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );

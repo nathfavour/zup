@@ -13,7 +13,7 @@ import {
   Zap
 } from 'lucide-react';
 import { TactileDrawer } from './TactileDrawer';
-import { importKey, formatTruncatedKey } from '../lib/nostr';
+import { importKey, formatTruncatedKey, fetchNostrProfile } from '../lib/nostr';
 import { encryptSecret } from '../lib/crypto';
 import { StoredIdentity, NostrKeypair } from '../types';
 
@@ -70,8 +70,27 @@ export function ImportIdentityDrawer({
         }
       }
 
-      const finalName = customName.trim() || parsedKeypair.name || `User_${parsedKeypair.pubkeyHex.slice(0, 6)}`;
-      const finalDisplayName = customDisplayName.trim() || parsedKeypair.displayName || 'Decentralized Sovereign';
+      let finalName = customName.trim() || parsedKeypair.name || `nostr_${parsedKeypair.pubkeyHex.slice(0, 8)}`;
+      let finalDisplayName = customDisplayName.trim() || parsedKeypair.displayName || `Nostr (${parsedKeypair.pubkeyHex.slice(0, 6)}...${parsedKeypair.pubkeyHex.slice(-4)})`;
+      let finalAvatar = parsedKeypair.avatar;
+      let finalAbout: string | undefined;
+      let finalNip05: string | undefined;
+      let finalLud16: string | undefined = lud16.trim() || undefined;
+
+      // Try fetching real Kind 0 profile from directory relays immediately
+      try {
+        const onChain = await fetchNostrProfile(parsedKeypair.pubkeyHex);
+        if (onChain) {
+          if (!customName.trim() && onChain.name) finalName = onChain.name;
+          if (!customDisplayName.trim() && onChain.displayName) finalDisplayName = onChain.displayName;
+          if (onChain.avatar) finalAvatar = onChain.avatar;
+          if (onChain.about) finalAbout = onChain.about;
+          if (onChain.nip05) finalNip05 = onChain.nip05;
+          if (!finalLud16 && onChain.lud16) finalLud16 = onChain.lud16;
+        }
+      } catch (profileErr) {
+        console.warn('Could not query on-chain profile for imported key:', profileErr);
+      }
 
       const stored: StoredIdentity = {
         id: `id_${parsedKeypair.pubkeyHex.slice(0, 12)}_${Date.now()}`,
@@ -79,8 +98,10 @@ export function ImportIdentityDrawer({
         npub: parsedKeypair.npub,
         name: finalName,
         displayName: finalDisplayName,
-        avatar: parsedKeypair.avatar,
-        lud16: lud16.trim() || undefined,
+        about: finalAbout,
+        avatar: finalAvatar,
+        nip05: finalNip05,
+        lud16: finalLud16,
         isEphemeral: false,
         isWatchOnly: !isPrivate,
         encryptedPrivkeyHex: encryptedPrivHex,
@@ -99,8 +120,10 @@ export function ImportIdentityDrawer({
         isWatchOnly: !isPrivate,
         name: finalName,
         displayName: finalDisplayName,
-        avatar: parsedKeypair.avatar,
-        lud16: lud16.trim() || undefined,
+        about: finalAbout,
+        avatar: finalAvatar,
+        nip05: finalNip05,
+        lud16: finalLud16,
       };
 
       onIdentityImported(stored, resolvedKeypair);

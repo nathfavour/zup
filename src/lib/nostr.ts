@@ -126,8 +126,8 @@ export function importKey(input: string): NostrKeypair | null {
           nsec: trimmed,
           npub,
           isEphemeral: false,
-          name: `Nostr_${pubHex.slice(0, 6)}`,
-          displayName: 'Decentralized Peer',
+          name: `nostr_${pubHex.slice(0, 8)}`,
+          displayName: `Nostr (${pubHex.slice(0, 6)}...${pubHex.slice(-4)})`,
           avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubHex}`,
         };
       }
@@ -139,8 +139,8 @@ export function importKey(input: string): NostrKeypair | null {
           pubkeyHex: pubHex,
           npub: trimmed,
           isEphemeral: false,
-          name: `Watch_${pubHex.slice(0, 6)}`,
-          displayName: 'Watch-Only Peer',
+          name: `watch_${pubHex.slice(0, 8)}`,
+          displayName: `Watch (${pubHex.slice(0, 6)}...${pubHex.slice(-4)})`,
           avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubHex}`,
         };
       }
@@ -337,7 +337,7 @@ export async function queryRelays(
   filters: Record<string, unknown>[],
   timeoutMs = 4000
 ): Promise<any[]> {
-  if (typeof WebSocket === 'undefined') return [];
+  if (typeof WebSocket === 'undefined' || relays.length === 0) return [];
 
   const byId = new Map<string, any>();
   const sockets: WebSocket[] = [];
@@ -361,7 +361,7 @@ export async function queryRelays(
 
         ws.onopen = () => {
           try {
-            ws.send(JSON.stringify(['REQ', `query_${Date.now().toString(36)}`, ...filters]));
+            ws.send(JSON.stringify(['REQ', `query_${Math.random().toString(36).slice(2, 8)}`, ...filters]));
           } catch {
             // ignore
           }
@@ -413,9 +413,9 @@ export async function queryRelays(
 }
 
 /**
- * Fetch Kind 0 profile metadata for a pubkey from directory relays
+ * Fetch Kind 0 profile metadata for a pubkey from directory relays and default relays
  */
-export async function fetchNostrProfile(pubkeyHex: string): Promise<{
+export async function fetchNostrProfile(pubkeyHex: string, extraRelays: string[] = []): Promise<{
   name?: string;
   displayName?: string;
   about?: string;
@@ -423,15 +423,17 @@ export async function fetchNostrProfile(pubkeyHex: string): Promise<{
   nip05?: string;
   lud16?: string;
 } | null> {
-  const directoryRelays = [
+  const directoryRelays = Array.from(new Set([
     'wss://purplepag.es',
     'wss://user.kindpag.es',
     'wss://relay.damus.io',
     'wss://nos.lol',
     'wss://relay.primal.net',
-  ];
+    'wss://relay.nostr.band',
+    ...extraRelays,
+  ]));
 
-  const events = await queryRelays(directoryRelays, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }], 3500);
+  const events = await queryRelays(directoryRelays, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }], 3000);
   if (!events.length) return null;
 
   // Pick the newest event

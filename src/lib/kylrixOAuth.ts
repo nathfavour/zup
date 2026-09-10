@@ -2,11 +2,11 @@ import { KylrixOAuthSession, KylrixProfile, SyncOrigin } from '../types';
 import { bytesToHex, generateRandomBytes } from './crypto';
 
 const KYLRIX_OAUTH_CONFIG = {
-  clientId: 'zup-nostr-client',
-  authEndpoint: 'https://www.kylrix.space/oauth/consent',
-  tokenEndpoint: 'https://www.kylrix.space/api/v1/oauth/token',
-  userInfoEndpoint: 'https://www.kylrix.space/api/v1/me',
-  scope: 'openid profile email notes:read profile:read',
+  clientId: (import.meta as any).env?.VITE_KYLRIX_OAUTH_CLIENT_ID || 'zup-nostr-client',
+  authEndpoint: (import.meta as any).env?.VITE_KYLRIX_OAUTH_AUTH_ENDPOINT || 'https://www.kylrix.space/oauth/consent',
+  tokenEndpoint: (import.meta as any).env?.VITE_KYLRIX_OAUTH_TOKEN_ENDPOINT || 'https://www.kylrix.space/api/v1/oauth/token',
+  userInfoEndpoint: (import.meta as any).env?.VITE_KYLRIX_OAUTH_USERINFO_ENDPOINT || 'https://www.kylrix.space/api/v1/me',
+  scope: (import.meta as any).env?.VITE_KYLRIX_OAUTH_SCOPE || 'openid profile email notes:read profile:read',
 };
 
 const STORAGE_KEYS = {

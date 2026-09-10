@@ -24,7 +24,8 @@ import {
   signRepost,
   pubkeyToNpub,
   bytesToHex,
-  hexToBytes
+  hexToBytes,
+  fetchNostrProfile
 } from './lib/nostr';
 import { getDatabase, ZupDatabase } from './lib/db';
 import { 
@@ -233,6 +234,27 @@ export default function App() {
             isEphemeral: false,
             isWatchOnly: active.isWatchOnly,
           });
+
+          // If identity has generic or placeholder name, immediately query directory relays in background
+          if (active.pubkeyHex && (!active.displayName || active.displayName.includes('Peer') || active.displayName.includes('Anon') || active.displayName.includes('Nostr ('))) {
+            fetchNostrProfile(active.pubkeyHex).then(async (onChain) => {
+              if (onChain && (onChain.displayName || onChain.name)) {
+                const updatedFields = {
+                  displayName: onChain.displayName || active.displayName,
+                  name: onChain.name || active.name,
+                  avatar: onChain.avatar || active.avatar,
+                  nip05: onChain.nip05 || active.nip05,
+                  lud16: onChain.lud16 || active.lud16,
+                  about: onChain.about || active.about,
+                };
+                setKeypair((prev) => ({ ...prev, ...updatedFields }));
+                const doc = await database.identities.findOne(active.id).exec();
+                if (doc) {
+                  await doc.update({ $set: updatedFields });
+                }
+              }
+            }).catch(() => {});
+          }
         } else {
           // Seed initial default identity
           const fresh = createNewKeypair(false);
@@ -389,6 +411,20 @@ export default function App() {
                     return e;
                   })
                 );
+
+                // Update any notifications from this author
+                setNotifications((prev) =>
+                  prev.map((n) => {
+                    if (n.sourcePubkey === incoming.pubkey) {
+                      return {
+                        ...n,
+                        sourceName: profile.displayName || profile.name || n.sourceName,
+                        sourceAvatar: profile.avatar || n.sourceAvatar,
+                      };
+                    }
+                    return n;
+                  })
+                );
               } catch {
                 // Ignore invalid metadata
               }
@@ -425,7 +461,7 @@ export default function App() {
                 id: incoming.id,
                 type: notifType,
                 sourcePubkey: incoming.pubkey,
-                sourceName: cachedAuthor?.displayName || cachedAuthor?.name || `Peer ${incoming.pubkey.slice(0, 6)}`,
+                sourceName: cachedAuthor?.displayName || cachedAuthor?.name || `nostr_${incoming.pubkey.slice(0, 8)}`,
                 sourceAvatar: cachedAuthor?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${incoming.pubkey}`,
                 sourceNpub: pubkeyToNpub(incoming.pubkey),
                 targetEventId,
@@ -434,6 +470,22 @@ export default function App() {
                 timestamp: incoming.created_at || Math.floor(Date.now() / 1000),
                 read: false,
               };
+
+              // Request Kind 0 profile if not in cache
+              if (!cachedAuthor && !requestedPubkeysRef.current.has(incoming.pubkey)) {
+                requestedPubkeysRef.current.add(incoming.pubkey);
+                try {
+                  ws.send(
+                    JSON.stringify([
+                      'REQ',
+                      `meta_${incoming.pubkey.slice(0, 8)}`,
+                      { kinds: [0], authors: [incoming.pubkey], limit: 1 },
+                    ])
+                  );
+                } catch {
+                  // pass
+                }
+              }
 
               setNotifications((prev) => {
                 if (prev.some((n) => n.id === newNotif.id)) return prev;

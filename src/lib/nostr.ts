@@ -21,6 +21,28 @@ export function hexToBytes(hex: string): Uint8Array {
 
 export const DEFAULT_RELAYS: RelayInfo[] = [
   {
+    url: 'wss://purplepag.es',
+    status: 'connected',
+    read: true,
+    write: true,
+    eventsReceived: 0,
+    eventsSent: 0,
+    latencyMs: 50,
+    description: 'NIP-01 Directory & Profile Relay',
+    isDefault: true,
+  },
+  {
+    url: 'wss://user.kindpag.es',
+    status: 'connected',
+    read: true,
+    write: true,
+    eventsReceived: 0,
+    eventsSent: 0,
+    latencyMs: 55,
+    description: 'Profile & Metadata Directory Relay',
+    isDefault: true,
+  },
+  {
     url: 'wss://relay.damus.io',
     status: 'connected',
     read: true,
@@ -43,28 +65,6 @@ export const DEFAULT_RELAYS: RelayInfo[] = [
     isDefault: true,
   },
   {
-    url: 'wss://relay.nostr.band',
-    status: 'connected',
-    read: true,
-    write: true,
-    eventsReceived: 0,
-    eventsSent: 0,
-    latencyMs: 110,
-    description: 'High Performance Discovery & Search Relay',
-    isDefault: true,
-  },
-  {
-    url: 'wss://relay.snort.social',
-    status: 'connected',
-    read: true,
-    write: false,
-    eventsReceived: 0,
-    eventsSent: 0,
-    latencyMs: 124,
-    description: 'Snort Global Read Relay',
-    isDefault: true,
-  },
-  {
     url: 'wss://relay.primal.net',
     status: 'connected',
     read: true,
@@ -73,6 +73,17 @@ export const DEFAULT_RELAYS: RelayInfo[] = [
     eventsSent: 0,
     latencyMs: 64,
     description: 'Primal High-Speed Media & Event Cache',
+    isDefault: true,
+  },
+  {
+    url: 'wss://relay.nostr.band',
+    status: 'connected',
+    read: true,
+    write: true,
+    eventsReceived: 0,
+    eventsSent: 0,
+    latencyMs: 110,
+    description: 'High Performance Discovery & Search Relay',
     isDefault: true,
   },
 ];
@@ -281,3 +292,246 @@ export function formatTimeAgo(timestamp: number): string {
   const days = Math.floor(hours / 24);
   return `${days}d`;
 }
+
+// Sign and finalize a Profile Metadata event (Kind 0)
+export function signProfileMetadata(
+  profile: {
+    name?: string;
+    displayName?: string;
+    about?: string;
+    avatar?: string;
+    nip05?: string;
+    lud16?: string;
+  },
+  keypair: NostrKeypair
+): any | null {
+  if (!keypair.privkeyHex) return null;
+  try {
+    const sk = hexToBytes(keypair.privkeyHex);
+    const content = JSON.stringify({
+      name: profile.name,
+      display_name: profile.displayName || profile.name,
+      about: profile.about,
+      picture: profile.avatar,
+      nip05: profile.nip05,
+      lud16: profile.lud16,
+    });
+    const template = {
+      kind: 0,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [],
+      content,
+    };
+    return finalizeEvent(template, sk);
+  } catch (err) {
+    console.error('Error signing profile metadata:', err);
+    return null;
+  }
+}
+
+/**
+ * Query connected relays for events matching the given filter
+ */
+export async function queryRelays(
+  relays: string[],
+  filters: Record<string, unknown>[],
+  timeoutMs = 4000
+): Promise<any[]> {
+  if (typeof WebSocket === 'undefined') return [];
+
+  const byId = new Map<string, any>();
+  const sockets: WebSocket[] = [];
+
+  const queryPromise = new Promise<any[]>((resolve) => {
+    let pendingCount = relays.length;
+
+    const finish = () => {
+      sockets.forEach((ws) => {
+        try { ws.close(); } catch { /* ignore */ }
+      });
+      resolve(Array.from(byId.values()));
+    };
+
+    const timer = setTimeout(finish, timeoutMs);
+
+    relays.forEach((url) => {
+      try {
+        const ws = new WebSocket(url);
+        sockets.push(ws);
+
+        ws.onopen = () => {
+          try {
+            ws.send(JSON.stringify(['REQ', `query_${Date.now().toString(36)}`, ...filters]));
+          } catch {
+            // ignore
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data[0] === 'EVENT' && data[2]?.id) {
+              byId.set(data[2].id, data[2]);
+            } else if (data[0] === 'EOSE') {
+              pendingCount--;
+              if (pendingCount <= 0) {
+                clearTimeout(timer);
+                finish();
+              }
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        ws.onerror = () => {
+          pendingCount--;
+          if (pendingCount <= 0) {
+            clearTimeout(timer);
+            finish();
+          }
+        };
+
+        ws.onclose = () => {
+          pendingCount--;
+          if (pendingCount <= 0) {
+            clearTimeout(timer);
+            finish();
+          }
+        };
+      } catch {
+        pendingCount--;
+        if (pendingCount <= 0) {
+          clearTimeout(timer);
+          finish();
+        }
+      }
+    });
+  });
+
+  return queryPromise;
+}
+
+/**
+ * Fetch Kind 0 profile metadata for a pubkey from directory relays
+ */
+export async function fetchNostrProfile(pubkeyHex: string): Promise<{
+  name?: string;
+  displayName?: string;
+  about?: string;
+  avatar?: string;
+  nip05?: string;
+  lud16?: string;
+} | null> {
+  const directoryRelays = [
+    'wss://purplepag.es',
+    'wss://user.kindpag.es',
+    'wss://relay.damus.io',
+    'wss://nos.lol',
+    'wss://relay.primal.net',
+  ];
+
+  const events = await queryRelays(directoryRelays, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }], 3500);
+  if (!events.length) return null;
+
+  // Pick the newest event
+  events.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  const latest = events[0];
+  try {
+    const meta = JSON.parse(latest.content);
+    return {
+      name: meta.name || meta.username,
+      displayName: meta.display_name || meta.displayName || meta.name,
+      about: meta.about,
+      avatar: meta.picture,
+      nip05: meta.nip05,
+      lud16: meta.lud16,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch authored notes (Kind 1 without reply e tags) for a pubkey
+ */
+export async function fetchUserNotesFromRelays(pubkeyHex: string, relays: string[]): Promise<any[]> {
+  const events = await queryRelays(relays, [{ kinds: [1], authors: [pubkeyHex], limit: 60 }], 4000);
+  return events
+    .filter((e) => !e.tags?.some((t: string[]) => t[0] === 'e'))
+    .sort((a, b) => b.created_at - a.created_at);
+}
+
+/**
+ * Fetch user replies (Kind 1 with e tags) for a pubkey
+ */
+export async function fetchUserRepliesFromRelays(pubkeyHex: string, relays: string[]): Promise<any[]> {
+  const events = await queryRelays(relays, [{ kinds: [1], authors: [pubkeyHex], limit: 60 }], 4000);
+  return events
+    .filter((e) => e.tags?.some((t: string[]) => t[0] === 'e'))
+    .sort((a, b) => b.created_at - a.created_at);
+}
+
+/**
+ * Fetch user reactions (Kind 7) for a pubkey
+ */
+export async function fetchUserReactionsFromRelays(pubkeyHex: string, relays: string[]): Promise<any[]> {
+  const events = await queryRelays(relays, [{ kinds: [7], authors: [pubkeyHex], limit: 60 }], 4000);
+  return events.sort((a, b) => b.created_at - a.created_at);
+}
+
+/**
+ * Publish signed event to an array of relay WebSocket URLs
+ */
+export async function broadcastEventToRelays(event: any, relayUrls: string[]): Promise<number> {
+  let successCount = 0;
+  const promises = relayUrls.map((url) => {
+    return new Promise<void>((resolve) => {
+      try {
+        const ws = new WebSocket(url);
+        const timer = setTimeout(() => {
+          try { ws.close(); } catch { /* ignore */ }
+          resolve();
+        }, 3500);
+
+        ws.onopen = () => {
+          try {
+            ws.send(JSON.stringify(['EVENT', event]));
+            successCount++;
+          } catch {
+            // ignore
+          }
+        };
+
+        ws.onmessage = (msg) => {
+          try {
+            const data = JSON.parse(msg.data);
+            if (data[0] === 'OK') {
+              clearTimeout(timer);
+              try { ws.close(); } catch { /* ignore */ }
+              resolve();
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        ws.onerror = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+
+        ws.onclose = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      } catch {
+        resolve();
+      }
+    });
+  });
+
+  await Promise.all(promises);
+  return successCount;
+}
+

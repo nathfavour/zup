@@ -33,6 +33,7 @@ import {
   masterPassCrypto 
 } from './lib/crypto';
 import { syncEngine } from './lib/syncEngine';
+import { kylrixOAuth } from './lib/kylrixOAuth';
 import { evaluateZupQuality, sanitizeZupContent } from './lib/nostrFilters';
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
@@ -163,6 +164,16 @@ export default function App() {
 
     async function initRxDB() {
       try {
+        // Automatically handle OAuth 2.1 callback if returning with ?code= & ?state=
+        try {
+          const authProfile = await kylrixOAuth.handleAuthCallback();
+          if (authProfile) {
+            console.log('Successfully authenticated with Kylrix OAuth 2.1:', authProfile.name);
+          }
+        } catch (authErr) {
+          console.warn('OAuth callback handling notice:', authErr);
+        }
+
         const database = await getDatabase();
         if (!isMounted) return;
         setDb(database);

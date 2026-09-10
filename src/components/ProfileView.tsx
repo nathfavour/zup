@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { 
   Settings, 
   ArrowLeft, 
@@ -26,7 +26,16 @@ import {
   VaultSecurityState, 
   StoredIdentity 
 } from '../types';
-import { formatTruncatedKey } from '../lib/nostr';
+import { 
+  formatTruncatedKey, 
+  signProfileMetadata, 
+  broadcastEventToRelays, 
+  fetchNostrProfile,
+  fetchUserNotesFromRelays,
+  fetchUserRepliesFromRelays,
+  fetchUserReactionsFromRelays,
+  pubkeyToNpub
+} from '../lib/nostr';
 import { ProfileSettingsDrawer } from './ProfileSettingsDrawer';
 
 interface ProfileViewProps {
@@ -96,7 +105,14 @@ export function ProfileView({
   const [activeSubTab, setActiveSubTab] = useState<ProfileSubTab>('zups');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isLoadingRelayData, setIsLoadingRelayData] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+
+  // Relay data caches
+  const [relayZups, setRelayZups] = useState<NostrEvent[]>([]);
+  const [relayReplies, setRelayReplies] = useState<NostrEvent[]>([]);
+  const [relayReactions, setRelayReactions] = useState<NostrEvent[]>([]);
 
   // Edit Profile Form State
   const [editDisplayName, setEditDisplayName] = useState(keypair.displayName || '');
@@ -106,16 +122,104 @@ export function ProfileView({
   const [editNip05, setEditNip05] = useState(keypair.nip05 || '');
   const [editLud16, setEditLud16] = useState(keypair.lud16 || '');
 
+  // Fetch real Kind 0 metadata on mount / pubkey change
+  useEffect(() => {
+    let isMounted = true;
+    async function loadOnChainProfile() {
+      if (!keypair.pubkeyHex) return;
+      try {
+        const onChain = await fetchNostrProfile(keypair.pubkeyHex);
+        if (onChain && isMounted) {
+          const updated: NostrKeypair = {
+            ...keypair,
+            displayName: onChain.displayName || keypair.displayName,
+            name: onChain.name || keypair.name,
+            about: onChain.about || keypair.about,
+            avatar: onChain.avatar || keypair.avatar,
+            nip05: onChain.nip05 || keypair.nip05,
+            lud16: onChain.lud16 || keypair.lud16,
+          };
+          onUpdateKeypair(updated);
+          setEditDisplayName(updated.displayName || '');
+          setEditName(updated.name || '');
+          setEditAbout(updated.about || '');
+          setEditAvatar(updated.avatar || '');
+          setEditNip05(updated.nip05 || '');
+          setEditLud16(updated.lud16 || '');
+        }
+      } catch (err) {
+        console.warn('Could not fetch on-chain profile metadata:', err);
+      }
+    }
+
+    loadOnChainProfile();
+    return () => { isMounted = false; };
+  }, [keypair.pubkeyHex]);
+
+  // Fetch user notes and replies directly from relays
+  useEffect(() => {
+    let isMounted = true;
+    async function loadRelayActivity() {
+      if (!keypair.pubkeyHex) return;
+      setIsLoadingRelayData(true);
+      const writeRelays = relays.filter((r) => r.write).map((r) => r.url);
+      const queryRelayUrls = writeRelays.length > 0 ? writeRelays : relays.map((r) => r.url);
+
+      try {
+        const [notes, replies, reactions] = await Promise.all([
+          fetchUserNotesFromRelays(keypair.pubkeyHex, queryRelayUrls),
+          fetchUserRepliesFromRelays(keypair.pubkeyHex, queryRelayUrls),
+          fetchUserReactionsFromRelays(keypair.pubkeyHex, queryRelayUrls),
+        ]);
+
+        if (isMounted) {
+          const formatToEvent = (raw: any): NostrEvent => ({
+            id: raw.id,
+            pubkey: raw.pubkey,
+            created_at: raw.created_at,
+            kind: raw.kind,
+            tags: raw.tags || [],
+            content: raw.content || '',
+            sig: raw.sig || '',
+            author: {
+              name: keypair.name,
+              displayName: keypair.displayName,
+              avatar: keypair.avatar,
+              npub: keypair.npub,
+              nip05: keypair.nip05,
+            },
+            likesCount: 0,
+            repostsCount: 0,
+            zapsCount: 0,
+            repliesCount: 0,
+          });
+
+          setRelayZups(notes.map(formatToEvent));
+          setRelayReplies(replies.map(formatToEvent));
+          setRelayReactions(reactions.map(formatToEvent));
+        }
+      } catch (err) {
+        console.warn('Could not load user activity from relays:', err);
+      } finally {
+        if (isMounted) setIsLoadingRelayData(false);
+      }
+    }
+
+    loadRelayActivity();
+    return () => { isMounted = false; };
+  }, [keypair.pubkeyHex, relays]);
+
   const handleCopyNpub = () => {
     navigator.clipboard.writeText(keypair.npub);
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
-  const handleSaveProfile = (e: FormEvent) => {
+  const handleSaveProfile = async (e: FormEvent) => {
     e.preventDefault();
-    const updated: NostrKeypair = {
-      ...keypair,
+    setIsSavingProfile(true);
+
+    const profileData = {
       displayName: editDisplayName.trim() || undefined,
       name: editName.trim() || undefined,
       about: editAbout.trim() || undefined,
@@ -123,20 +227,50 @@ export function ProfileView({
       nip05: editNip05.trim() || undefined,
       lud16: editLud16.trim() || undefined,
     };
+
+    const updated: NostrKeypair = {
+      ...keypair,
+      ...profileData,
+    };
+
+    // If private key is available, sign and broadcast real Kind 0 event to relays
+    if (keypair.privkeyHex) {
+      try {
+        const signedKind0 = signProfileMetadata(profileData, keypair);
+        if (signedKind0) {
+          const writeUrls = relays.filter((r) => r.write).map((r) => r.url);
+          const targets = writeUrls.length > 0 ? writeUrls : relays.map((r) => r.url);
+          await broadcastEventToRelays(signedKind0, targets);
+        }
+      } catch (err) {
+        console.error('Failed to sign and publish Kind 0 metadata:', err);
+      }
+    }
+
     onUpdateKeypair(updated);
+    setIsSavingProfile(false);
     setIsEditProfileOpen(false);
   };
 
-  // Filter notes for each sub-tab:
-  // 1. Zups: notes authored by the current user
-  const userZups = events.filter((e) => e.pubkey === keypair.pubkeyHex);
-  // 2. Replies: notes that have e tags or are replies
-  const userReplies = events.filter((e) => 
-    e.pubkey === keypair.pubkeyHex && e.tags.some((t) => t[0] === 'e')
+  // Merge local state with relay data, deduplicating by event id
+  const mergeEvents = (localList: NostrEvent[], relayList: NostrEvent[]): NostrEvent[] => {
+    const map = new Map<string, NostrEvent>();
+    localList.forEach((e) => map.set(e.id, e));
+    relayList.forEach((e) => {
+      if (!map.has(e.id)) map.set(e.id, e);
+    });
+    return Array.from(map.values()).sort((a, b) => b.created_at - a.created_at);
+  };
+
+  const userZups = mergeEvents(
+    events.filter((e) => e.pubkey === keypair.pubkeyHex && !e.tags.some((t) => t[0] === 'e')),
+    relayZups
   );
-  // 3. Likes: notes marked as liked by this client
+  const userReplies = mergeEvents(
+    events.filter((e) => e.pubkey === keypair.pubkeyHex && e.tags.some((t) => t[0] === 'e')),
+    relayReplies
+  );
   const userLikes = events.filter((e) => e.isLiked);
-  // 4. Zaps: notes marked as zapped by this client
   const userZaps = events.filter((e) => e.isZapped);
 
   const connectedRelaysCount = relays.filter((r) => r.status === 'connected').length;
@@ -622,9 +756,10 @@ export function ProfileView({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-[12px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] text-white text-xs font-black uppercase tracking-wider cursor-pointer"
+                  disabled={isSavingProfile}
+                  className="px-5 py-2 rounded-[12px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] text-white text-xs font-black uppercase tracking-wider cursor-pointer disabled:opacity-50"
                 >
-                  Save Profile
+                  {isSavingProfile ? 'Publishing...' : 'Save & Broadcast'}
                 </button>
               </div>
             </form>

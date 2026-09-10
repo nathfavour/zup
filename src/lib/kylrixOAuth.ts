@@ -128,6 +128,123 @@ class KylrixOAuthManager {
   }
 
   /**
+   * Exchanges an authorization code with the PKCE code_verifier for access and refresh tokens
+   */
+  public async exchangeCode(code: string, redirectUri: string): Promise<KylrixProfile | null> {
+    if (typeof window === 'undefined') return null;
+
+    const codeVerifier = sessionStorage.getItem(STORAGE_KEYS.PKCE_VERIFIER);
+    if (!codeVerifier) {
+      console.warn('No PKCE code_verifier found in sessionStorage');
+      return null;
+    }
+
+    try {
+      const body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: KYLRIX_OAUTH_CONFIG.clientId,
+        code,
+        code_verifier: codeVerifier,
+        redirect_uri: redirectUri,
+      });
+
+      const tokenRes = await fetch(KYLRIX_OAUTH_CONFIG.tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+      });
+
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        console.warn('OAuth token exchange failed:', tokenRes.status, errText);
+        return null;
+      }
+
+      const tokenData = await tokenRes.json();
+      const accessToken = tokenData.access_token;
+      const refreshToken = tokenData.refresh_token;
+      const expiresIn = tokenData.expires_in || 3600;
+      const idToken = tokenData.id_token;
+
+      // Fetch user profile from /api/v1/me
+      let profile: KylrixProfile = {
+        userId: 'kylrix_user',
+        name: 'Kylrix Peer',
+      };
+
+      try {
+        const userRes = await fetch(KYLRIX_OAUTH_CONFIG.userInfoEndpoint, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          profile = {
+            userId: userData.$id || userData.id || userData.userId || 'kylrix_user',
+            name: userData.name || userData.displayName || 'Kylrix Sovereign',
+            email: userData.email,
+            avatar: userData.avatarUrl || userData.avatar,
+            nostr_pubkey: userData.nostr_pubkey || userData.active_identity,
+            active_identity: userData.active_identity || userData.nostr_pubkey,
+          };
+        }
+      } catch (err) {
+        console.warn('Could not fetch user profile from /api/v1/me:', err);
+      }
+
+      // Clean up PKCE transient state
+      sessionStorage.removeItem(STORAGE_KEYS.PKCE_VERIFIER);
+      sessionStorage.removeItem(STORAGE_KEYS.CSRF_STATE);
+
+      await this.completeExchange({
+        accessToken,
+        refreshToken,
+        idToken,
+        expiresIn,
+        profile,
+        syncOrigin: 'kylrix',
+      });
+
+      return profile;
+    } catch (err) {
+      console.error('Error during OAuth code exchange:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Automatically checks URL for OAuth callback parameters (?code=&state=)
+   * Exchanges code and cleans up the browser query string
+   */
+  public async handleAuthCallback(): Promise<KylrixProfile | null> {
+    if (typeof window === 'undefined') return null;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+
+    if (!code) return null;
+
+    const storedState = sessionStorage.getItem(STORAGE_KEYS.CSRF_STATE);
+    if (storedState && state && storedState !== state) {
+      console.warn('OAuth state mismatch: possible CSRF');
+      return null;
+    }
+
+    const redirectUri = window.location.origin + window.location.pathname;
+    const profile = await this.exchangeCode(code, redirectUri);
+
+    // Clean URL without triggering page reload
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    return profile;
+  }
+
+  /**
    * Completes OAuth exchange with code and sets session
    */
   public async completeExchange(params: {

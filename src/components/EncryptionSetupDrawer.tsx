@@ -45,7 +45,7 @@ export function EncryptionSetupDrawer({
   const [passwordWrapped, setPasswordWrapped] = useState<{
     cipherText: string;
     iv: string;
-    salt: string;
+    salt?: string;
   } | null>(null);
 
   // 1. Step 1: Create Password -> Set up MEK and wrap with Argon2id + AES-256-GCM

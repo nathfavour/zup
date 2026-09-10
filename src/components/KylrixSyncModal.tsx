@@ -70,9 +70,7 @@ export function KylrixSyncModal({
     try {
       setIsSigningIn(true);
       const url = await buildKylrixAuthUrl();
-      // In production window, open auth URL
-      window.open(url, '_blank');
-      setIsSigningIn(false);
+      window.location.href = url;
     } catch {
       setIsSigningIn(false);
     }

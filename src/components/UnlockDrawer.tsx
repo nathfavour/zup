@@ -31,8 +31,6 @@ export function UnlockDrawer({
   onUnlocked,
 }: UnlockDrawerProps) {
   const hasPasskeys = (securityState?.passkeys?.length || 0) > 0;
-  // Prompt for passkey first by default if passkeys exist
-  const [usePasskey, setUsePasskey] = useState(hasPasskeys);
   const [selectedPasskeyId, setSelectedPasskeyId] = useState<string>(
     hasPasskeys ? securityState!.passkeys[0].id : ''
   );
@@ -55,7 +53,7 @@ export function UnlockDrawer({
         securityState.passkeys[0];
 
       if (!targetPasskey) {
-        throw new Error('No passkey registered. Use your master password instead.');
+        throw new Error('No passkey registered. Enter your master password below.');
       }
 
       const mek = await unlockMEKWithPasskey(targetPasskey);
@@ -64,10 +62,8 @@ export function UnlockDrawer({
       onClose();
     } catch (err: unknown) {
       console.error('Passkey unlock failed:', err);
-      setError('Biometric authentication failed or was cancelled. Please unlock with your master password below.');
+      setError('Biometric authentication failed or was cancelled. Use your master password below.');
       setIsAuthenticating(false);
-      // Seamless fallback to password unlock
-      setUsePasskey(false);
     }
   };
 
@@ -130,68 +126,28 @@ export function UnlockDrawer({
           </div>
         )}
 
-        {/* Tab Selector: Passkey (default) vs Password */}
-        <div className="grid grid-cols-2 gap-2 p-1 rounded-[16px] bg-[#000000] border border-white/20">
-          <button
-            type="button"
-            onClick={() => setUsePasskey(true)}
-            className={`py-2 px-3 rounded-[12px] text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
-              usePasskey
-                ? 'bg-[#A855F7] text-white shadow-[0_0_10px_#A855F744]'
-                : 'text-white/60 hover:text-white'
-            }`}
-          >
-            <Fingerprint size={14} />
-            <span>Passkey (Default)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setUsePasskey(false)}
-            className={`py-2 px-3 rounded-[12px] text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
-              !usePasskey
-                ? 'bg-[#10B981] text-black shadow-[0_0_10px_#10B98144]'
-                : 'text-white/60 hover:text-white'
-            }`}
-          >
-            <KeyRound size={14} />
-            <span>Password</span>
-          </button>
-        </div>
-
-        {/* Passkey Unlock View */}
-        {usePasskey && hasPasskeys && (
-          <div className="flex flex-col gap-4">
-            <div className="p-5 rounded-[20px] bg-[#000000] border border-white/20 flex flex-col items-center justify-center text-center gap-3">
-              <div className="w-16 h-16 rounded-[22px] bg-[#A855F7]/15 border border-[#A855F7]/40 flex items-center justify-center text-[#A855F7] animate-pulse shadow-[0_0_20px_#A855F733]">
-                <Fingerprint size={32} />
+        {/* Passkey Quick Trigger (when passkeys are enrolled) */}
+        {hasPasskeys && (
+          <div className="p-4 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#A855F7]">
+                <Fingerprint size={18} />
+                <span className="text-xs font-black uppercase tracking-wider text-white">
+                  Passkey / Biometric Unlock
+                </span>
               </div>
-              <div>
-                <h4 className="text-white font-black text-sm uppercase tracking-wider m-0">
-                  Touch ID / Biometric Passkey
-                </h4>
-                <p className="text-white text-xs font-medium mt-1 m-0">
-                  Authenticate with your device to unwrap the Master Encryption Key.
-                </p>
-              </div>
-
               {securityState.passkeys.length > 1 && (
-                <div className="w-full mt-2 flex flex-col gap-1.5 text-left">
-                  <label className="text-white text-[10px] font-mono font-bold uppercase tracking-wider">
-                    Select Authenticator:
-                  </label>
-                  <select
-                    value={selectedPasskeyId}
-                    onChange={(e) => setSelectedPasskeyId(e.target.value)}
-                    className="w-full bg-[#161412] border border-white/20 rounded-[12px] px-3 py-2 text-white text-xs"
-                  >
-                    {securityState.passkeys.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} (Added {new Date(p.createdAt).toLocaleDateString()})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  value={selectedPasskeyId}
+                  onChange={(e) => setSelectedPasskeyId(e.target.value)}
+                  className="bg-[#161412] border border-white/20 rounded-[10px] px-2 py-1 text-white text-[11px]"
+                >
+                  {securityState.passkeys.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
 
@@ -199,91 +155,60 @@ export function UnlockDrawer({
               type="button"
               onClick={() => handlePasskeyUnlock()}
               disabled={isAuthenticating}
-              className="w-full py-3.5 rounded-[16px] bg-[#A855F7] hover:bg-[#9333ea] disabled:opacity-40 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_14px_#A855F744]"
+              className="w-full py-3 rounded-[14px] bg-[#A855F7] hover:bg-[#9333ea] disabled:opacity-40 text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_14px_#A855F744]"
             >
               <Fingerprint size={16} />
-              <span>{isAuthenticating ? 'Waiting for Biometrics...' : 'Authenticate with Device'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setUsePasskey(false)}
-              className="text-xs text-white/60 hover:text-white text-center cursor-pointer"
-            >
-              Or unlock with Master Password instead
+              <span>{isAuthenticating ? 'Waiting for Biometrics...' : 'Unlock with Passkey / Touch ID'}</span>
             </button>
           </div>
         )}
 
-        {/* Passkey empty fallback notice */}
-        {usePasskey && !hasPasskeys && (
-          <div className="flex flex-col gap-3 p-4 rounded-[18px] bg-[#000000] border border-white/20 text-center">
-            <p className="text-white text-xs font-medium m-0">
-              No passkeys configured on this device yet. Please unlock with your Master Password, then add a passkey in Settings.
-            </p>
-            <button
-              type="button"
-              onClick={() => setUsePasskey(false)}
-              className="py-2.5 rounded-[14px] bg-[#10B981] text-black font-black text-xs uppercase tracking-wider cursor-pointer"
-            >
-              Use Master Password
-            </button>
-          </div>
-        )}
-
-        {/* Password Unlock View */}
-        {!usePasskey && (
-          <form onSubmit={handlePasswordUnlock} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-white text-xs font-extrabold uppercase tracking-wider">
-                Master Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your master password..."
-                  required
-                  autoFocus
-                  className="w-full bg-[#000000] border border-white/20 focus:border-[#10B981] focus:outline-none rounded-[16px] pl-4 pr-11 py-3 text-white text-xs placeholder:text-white/40"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/60 hover:text-white cursor-pointer"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isAuthenticating || !password}
-              className="w-full py-3.5 rounded-[16px] bg-[#10B981] hover:bg-[#059669] disabled:opacity-40 text-black font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_14px_#10B98144]"
-            >
-              {isAuthenticating ? (
-                <span>Computing Argon2id & Decrypting MEK...</span>
-              ) : (
-                <>
-                  <span>Unlock Sovereign Vault</span>
-                  <ArrowRight size={14} />
-                </>
+        {/* Password Unlock View (Always visible) */}
+        <form onSubmit={handlePasswordUnlock} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <label className="text-white text-xs font-extrabold uppercase tracking-wider flex items-center justify-between">
+              <span>Master Password</span>
+              {hasPasskeys && (
+                <span className="text-[10px] font-normal text-white/50 normal-case">
+                  Or enter password directly
+                </span>
               )}
-            </button>
-
-            {hasPasskeys && (
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your master password..."
+                required
+                autoFocus={!hasPasskeys}
+                className="w-full bg-[#000000] border border-white/20 focus:border-[#10B981] focus:outline-none rounded-[16px] pl-4 pr-11 py-3 text-white text-xs placeholder:text-white/40"
+              />
               <button
                 type="button"
-                onClick={() => setUsePasskey(true)}
-                className="text-xs text-white/60 hover:text-white text-center cursor-pointer"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/60 hover:text-white cursor-pointer"
               >
-                Switch back to On-Device Passkey (Default)
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isAuthenticating || !password}
+            className="w-full py-3.5 rounded-[16px] bg-[#10B981] hover:bg-[#059669] disabled:opacity-40 text-black font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_14px_#10B98144]"
+          >
+            {isAuthenticating ? (
+              <span>Decrypting MEK with Argon2id...</span>
+            ) : (
+              <>
+                <span>Unlock Sovereign Vault</span>
+                <ArrowRight size={14} />
+              </>
             )}
-          </form>
-        )}
+          </button>
+        </form>
       </div>
     </TactileDrawer>
   );

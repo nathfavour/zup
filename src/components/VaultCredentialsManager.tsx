@@ -761,7 +761,7 @@ export function VaultCredentialsManager({
                       setPasskeyName(preset.label);
                       setAuthenticatorType(preset.type);
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-[#24221F] hover:bg-[#302D29] border border-[#35322D] text-[11px] text-stone-300 hover:text-white cursor-pointer transition-colors"
+                    className="px-2 py-0.5 rounded-md bg-[#24221F] hover:bg-[#302D29] border border-[#35322D] text-[10px] text-stone-300 hover:text-white cursor-pointer transition-colors"
                   >
                     + {preset.label}
                   </button>
@@ -785,63 +785,45 @@ export function VaultCredentialsManager({
             </div>
 
             {/* Authenticator Attachment Selector */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1">
               <label className="text-stone-300 text-xs font-medium">
                 Authenticator Attachment:
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setAuthenticatorType('any')}
-                  className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                  className={`py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all text-xs font-semibold ${
                     authenticatorType === 'any'
                       ? 'bg-emerald-500/10 border-emerald-500 text-white'
                       : 'bg-[#121110] border-[#302D29] text-stone-400 hover:text-stone-200'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-white">
-                    <Sparkles size={13} className="text-emerald-400" />
-                    <span>Auto Picker</span>
-                  </div>
-                  <p className="text-[10px] text-stone-400 m-0 mt-0.5">
-                    Browser detects platform or USB key
-                  </p>
+                  Auto
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setAuthenticatorType('platform')}
-                  className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                  className={`py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all text-xs font-semibold ${
                     authenticatorType === 'platform'
                       ? 'bg-emerald-500/10 border-emerald-500 text-white'
                       : 'bg-[#121110] border-[#302D29] text-stone-400 hover:text-stone-200'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-white">
-                    <Fingerprint size={13} className="text-emerald-400" />
-                    <span>Biometric Only</span>
-                  </div>
-                  <p className="text-[10px] text-stone-400 m-0 mt-0.5">
-                    Touch ID, Face ID, Hello PIN
-                  </p>
+                  Biometric
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setAuthenticatorType('cross-platform')}
-                  className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                  className={`py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all text-xs font-semibold ${
                     authenticatorType === 'cross-platform'
                       ? 'bg-emerald-500/10 border-emerald-500 text-white'
                       : 'bg-[#121110] border-[#302D29] text-stone-400 hover:text-stone-200'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-white">
-                    <Shield size={13} className="text-emerald-400" />
-                    <span>Hardware FIDO2</span>
-                  </div>
-                  <p className="text-[10px] text-stone-400 m-0 mt-0.5">
-                    YubiKey, USB dongle, Phone QR
-                  </p>
+                  FIDO2 Key
                 </button>
               </div>
             </div>

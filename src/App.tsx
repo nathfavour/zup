@@ -192,8 +192,24 @@ export default function App() {
         if (idDocs.length > 0) {
           const list = idDocs.map((d) => d.toJSON() as StoredIdentity);
           setStoredIdentities(list);
-          const active = list[0];
+          let savedActiveId: string | null = null;
+          try {
+            savedActiveId = localStorage.getItem('zup_active_identity_id');
+          } catch {
+            // ignore localStorage restriction
+          }
+          let active = list.find((i) => i.id === savedActiveId);
+          if (!active) {
+            // Fallback to identity with most recent activity
+            const sortedByLastActive = [...list].sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
+            active = sortedByLastActive[0];
+          }
           setActiveIdentityId(active.id);
+          try {
+            localStorage.setItem('zup_active_identity_id', active.id);
+          } catch {
+            // ignore
+          }
           setKeypair({
             id: active.id,
             pubkeyHex: active.pubkeyHex,
@@ -224,6 +240,11 @@ export default function App() {
           await database.identities.upsert(initialStored);
           setStoredIdentities([initialStored]);
           setActiveIdentityId(initialStored.id);
+          try {
+            localStorage.setItem('zup_active_identity_id', initialStored.id);
+          } catch {
+            // ignore
+          }
           setKeypair(fresh);
         }
 
@@ -629,6 +650,11 @@ export default function App() {
   // =========================================================================
   const handleSelectIdentity = async (identity: StoredIdentity) => {
     setActiveIdentityId(identity.id);
+    try {
+      localStorage.setItem('zup_active_identity_id', identity.id);
+    } catch {
+      // ignore
+    }
 
     let resolvedPrivHex: string | undefined;
     let resolvedNsec: string | undefined;
@@ -662,22 +688,37 @@ export default function App() {
 
     setKeypair(updatedKp);
 
+    const now = Date.now();
+    const updatedStored = {
+      ...identity,
+      lastActiveAt: now,
+    };
+
     if (db) {
-      await db.identities.upsert({
-        ...identity,
-        lastActiveAt: Date.now(),
-      });
+      await db.identities.upsert(updatedStored);
     }
+    setStoredIdentities((prev) =>
+      prev.map((i) => (i.id === identity.id ? updatedStored : i))
+    );
   };
 
   const handleIdentityImported = async (
     stored: StoredIdentity,
     resolvedKeypair: NostrKeypair
   ) => {
+    const updatedStored = {
+      ...stored,
+      lastActiveAt: Date.now(),
+    };
     if (db) {
-      await db.identities.upsert(stored);
+      await db.identities.upsert(updatedStored);
     }
-    setStoredIdentities((prev) => [stored, ...prev.filter((i) => i.id !== stored.id)]);
+    try {
+      localStorage.setItem('zup_active_identity_id', stored.id);
+    } catch {
+      // ignore
+    }
+    setStoredIdentities((prev) => [updatedStored, ...prev.filter((i) => i.id !== stored.id)]);
     setActiveIdentityId(stored.id);
     setKeypair(resolvedKeypair);
   };

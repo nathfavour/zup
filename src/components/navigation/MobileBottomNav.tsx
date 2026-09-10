@@ -61,7 +61,7 @@ export function MobileBottomNav({
           <Send
             size={20}
             style={{
-              color: activeTab === 'messages' ? '#6366F1' : '#FFFFFF',
+              color: activeTab === 'messages' ? '#EC4899' : '#FFFFFF',
             }}
             className="transition-colors"
           />
@@ -73,7 +73,7 @@ export function MobileBottomNav({
         </div>
         <div
           style={{
-            backgroundColor: activeTab === 'messages' ? '#6366F1' : 'transparent',
+            backgroundColor: activeTab === 'messages' ? '#EC4899' : 'transparent',
           }}
           className="w-1.5 h-1.5 rounded-full mt-1 transition-all"
         />

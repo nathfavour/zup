@@ -36,6 +36,12 @@ import {
 import { syncEngine } from './lib/syncEngine';
 import { kylrixOAuth } from './lib/kylrixOAuth';
 import { evaluateZupQuality, sanitizeZupContent } from './lib/nostrFilters';
+import { 
+  evaluateWireLayer, 
+  processIngressFunnel, 
+  CURATED_SEED_ACCOUNTS, 
+  type WoTGraphState 
+} from './lib/ingressPipeline';
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
 import { FeedView } from './components/FeedView';
@@ -382,6 +388,13 @@ export default function App() {
             const incoming = data[2];
             if (!incoming || !incoming.id) return;
 
+            // Tier 1 Ingress Funnel: Layer 1 Wire-Drop (Zero-allocation / O(1) checks)
+            const wireCheck = evaluateWireLayer(incoming);
+            if (wireCheck.drop) {
+              setBlockedSpamCount((prev) => prev + 1);
+              return;
+            }
+
             // 1. Handle Kind 0 (Author Profile Metadata)
             if (incoming.kind === 0 && incoming.pubkey && incoming.content) {
               try {
@@ -494,9 +507,30 @@ export default function App() {
               });
             }
 
-            // 3. Handle Kind 1 (Real Public Nostr Note with Quality Shield)
+            // 3. Handle Kind 1 (Real Public Nostr Note with Tier 1 Ingress Funnel)
             if (incoming.kind === 1 && incoming.content) {
-              // Zup Quality Shield: Filter out URI dumps, space spams, tag bombing, and bot floods
+              const cached = profileCacheRef.current.get(incoming.pubkey);
+
+              // Construct WoT graph state for client-side scoring
+              const wotState: WoTGraphState = {
+                userPubkey: keypair.pubkeyHex,
+                hop1Pubkeys: new Set<string>(), // Followed by user
+                hop2Pubkeys: new Set<string>(),
+                seedPubkeys: CURATED_SEED_ACCOUNTS,
+              };
+
+              // Tier 1 Ingress Funnel: Layers 1-4
+              const funnelDecision = processIngressFunnel(incoming, wotState, {
+                hasNip05: Boolean(cached?.nip05),
+                lifetimeZapsSats: 0,
+              });
+
+              if (funnelDecision.action === 'purge') {
+                setBlockedSpamCount((prev) => prev + 1);
+                return; // Instant purge on arrival!
+              }
+
+              // Legacy Zup Quality Shield: Filter out remaining URI dumps, space spams, and bot floods
               const quality = evaluateZupQuality(incoming);
               if (!quality.passes) {
                 setBlockedSpamCount((prev) => prev + 1);
@@ -504,7 +538,6 @@ export default function App() {
               }
 
               const cleanContent = sanitizeZupContent(incoming.content);
-              const cached = profileCacheRef.current.get(incoming.pubkey);
               const npub = pubkeyToNpub(incoming.pubkey);
 
               const formatted: NostrEvent = {
@@ -519,7 +552,7 @@ export default function App() {
                 likesCount: 0,
                 repostsCount: 0,
                 zapsCount: 0,
-                repliesCount: 0,
+                signalTier: funnelDecision.action === 'admit' ? 'tier1' : 'tier2',
                 author: {
                   name: cached?.name || `npub...${incoming.pubkey.slice(0, 6)}`,
                   displayName: cached?.displayName || `Peer ${incoming.pubkey.slice(0, 6)}`,

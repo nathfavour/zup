@@ -97,8 +97,14 @@ export function isUriPacked(content: string): boolean {
 
   if (!matches || matches.length === 0) return false;
 
-  const urlCount = matches.length;
-  const totalUrlLength = matches.reduce((acc, url) => acc + url.length, 0);
+  // Distinguish non-image links from legitimate media attachments
+  const nonImageLinks = matches.filter(
+    (url) => !/\.(?:png|jpe?g|gif|webp|avif|bmp|svg)(?:\?.*)?$/i.test(url) &&
+             !/(?:image\.nostr\.build|nostr\.build\/i|i\.imgur\.com|media\.tenor\.com|pbs\.twimg\.com|nostr\.download)/i.test(url)
+  );
+
+  const urlCount = nonImageLinks.length;
+  const totalUrlLength = nonImageLinks.reduce((acc, url) => acc + url.length, 0);
 
   // 3. More than 3 URLs in a short post (<320 chars) is almost always spam
   if (urlCount >= 3 && textLength < 320) return true;
@@ -106,10 +112,10 @@ export function isUriPacked(content: string): boolean {
   // 4. More than 4 URLs regardless of length (link farm)
   if (urlCount >= 5) return true;
 
-  // 5. URLs consume more than 50% of the entire post body when multiple URLs exist
+  // 5. Non-image URLs consume more than 50% of the entire post body when multiple URLs exist
   if (urlCount >= 2 && totalUrlLength / textLength > 0.5) return true;
 
-  // 6. Post is purely URLs with less than 10 non-URL characters
+  // 6. Post is purely non-image URLs with less than 10 non-URL characters
   const nonUrlLength = textLength - totalUrlLength;
   if (urlCount >= 2 && nonUrlLength < 10) return true;
 

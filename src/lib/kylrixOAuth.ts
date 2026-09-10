@@ -1,13 +1,27 @@
 import { KylrixOAuthSession, KylrixProfile, SyncOrigin } from '../types';
 import { bytesToHex, generateRandomBytes } from './crypto';
 
-const KYLRIX_OAUTH_CONFIG = {
+export const KYLRIX_OAUTH_CONFIG = {
   clientId: (import.meta as any).env?.VITE_KYLRIX_OAUTH_CLIENT_ID || 'zup-nostr-client',
+  redirectUri: (import.meta as any).env?.VITE_KYLRIX_OAUTH_REDIRECT_URI || '',
   authEndpoint: (import.meta as any).env?.VITE_KYLRIX_OAUTH_AUTH_ENDPOINT || 'https://www.kylrix.space/oauth/consent',
   tokenEndpoint: (import.meta as any).env?.VITE_KYLRIX_OAUTH_TOKEN_ENDPOINT || 'https://www.kylrix.space/api/v1/oauth/token',
   userInfoEndpoint: (import.meta as any).env?.VITE_KYLRIX_OAUTH_USERINFO_ENDPOINT || 'https://www.kylrix.space/api/v1/me',
   scope: (import.meta as any).env?.VITE_KYLRIX_OAUTH_SCOPE || 'openid profile email notes:read profile:read',
 };
+
+/**
+ * Returns canonical Redirect URI for OAuth2 client registration in Kylrix.
+ * Defaults to window.location.origin in browser, or environment variable override,
+ * or standard local port http://localhost:3000.
+ */
+export function getKylrixRedirectUri(): string {
+  if (KYLRIX_OAUTH_CONFIG.redirectUri) return KYLRIX_OAUTH_CONFIG.redirectUri;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  return 'http://localhost:3000';
+}
 
 const STORAGE_KEYS = {
   SESSION: 'zup_kylrix_oauth_session_v1',
@@ -56,7 +70,7 @@ export async function generatePKCE(): Promise<{ codeVerifier: string; codeChalle
  */
 export async function buildKylrixAuthUrl(redirectUri?: string): Promise<string> {
   const { codeChallenge, state } = await generatePKCE();
-  const callbackUri = redirectUri || (typeof window !== 'undefined' ? window.location.origin : 'https://localhost:3000');
+  const callbackUri = redirectUri || getKylrixRedirectUri();
 
   const params = new URLSearchParams({
     client_id: KYLRIX_OAUTH_CONFIG.clientId,
@@ -234,7 +248,7 @@ class KylrixOAuthManager {
       return null;
     }
 
-    const redirectUri = window.location.origin + window.location.pathname;
+    const redirectUri = getKylrixRedirectUri();
     const profile = await this.exchangeCode(code, redirectUri);
 
     // Clean URL without triggering page reload

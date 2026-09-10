@@ -28,14 +28,15 @@ import {
 } from '../types';
 import { 
   formatTruncatedKey, 
-  signProfileMetadata, 
-  broadcastEventToRelays, 
+  pubkeyToNpub, 
   fetchNostrProfile,
   fetchUserNotesFromRelays,
   fetchUserRepliesFromRelays,
   fetchUserReactionsFromRelays,
-  pubkeyToNpub
+  broadcastEventToRelays,
+  signProfileMetadata
 } from '../lib/nostr';
+import { extractPostMedia } from '../lib/momentMedia';
 import { ProfileSettingsDrawer } from './ProfileSettingsDrawer';
 
 interface ProfileViewProps {
@@ -853,9 +854,52 @@ function ProfileNoteCard({
             )}
           </div>
 
-          <p className="text-white/90 text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap break-words m-0">
-            {event.content}
-          </p>
+          {(() => {
+            const media = extractPostMedia(event.content, event.tags);
+            const cleanText = media.cleanText;
+
+            return (
+              <>
+                {cleanText && (
+                  <p className="text-white/90 text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-wrap break-words m-0">
+                    {cleanText}
+                  </p>
+                )}
+
+                {media.images.length > 0 && (
+                  <div
+                    className={`grid gap-1.5 rounded-[14px] overflow-hidden border border-white/15 bg-black/40 my-2 ${
+                      media.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'
+                    }`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {media.images.map((imgUrl, imgIdx) => (
+                      <a
+                        key={imgIdx}
+                        href={imgUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="relative group overflow-hidden bg-[#161412] flex items-center justify-center max-h-[260px]"
+                      >
+                        <img
+                          src={imgUrl}
+                          alt="Post Media"
+                          loading="lazy"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                        <div className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/70 border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity text-white">
+                          <ExternalLink size={10} />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* Action Bar (Reply, Repost, Like, Zap) */}
           <div

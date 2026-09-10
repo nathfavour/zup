@@ -10,12 +10,14 @@ import {
   ShieldCheck,
   Radio,
   Bookmark,
-  Share2
+  Share2,
+  ExternalLink
 } from 'lucide-react';
 import { NostrEvent, NostrKeypair, RelayInfo } from '../types';
 import { TactileDrawer } from './TactileDrawer';
 import { formatTimeAgo, formatTruncatedKey, pubkeyToNpub } from '../lib/nostr';
 import { sanitizeZupContent } from '../lib/nostrFilters';
+import { extractPostMedia } from '../lib/momentMedia';
 
 interface PostDetailDrawerProps {
   post: NostrEvent | null;
@@ -248,28 +250,67 @@ export function PostDetailDrawer({
         </div>
 
         {/* Main Post Content */}
-        <div className="p-5 rounded-[22px] bg-[#000000] border border-white/20 shadow-xl flex flex-col gap-4">
-          <div className="text-white text-base sm:text-lg leading-relaxed font-medium whitespace-pre-wrap break-words">
-            {sanitizeZupContent(post.content)}
-          </div>
+        {(() => {
+          const postMedia = extractPostMedia(post.content, post.tags);
+          const cleanBody = sanitizeZupContent(postMedia.cleanText);
 
-          {/* Tags */}
-          {post.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1 border-t border-white/10">
-              {post.tags
-                .filter((t) => t[0] === 't')
-                .map((t, idx) => (
-                  <span
-                    key={idx}
-                    className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-[8px] bg-[#161412] text-white/80 border border-white/15"
-                  >
-                    #{t[1]}
-                  </span>
-                ))}
-            </div>
-          )}
+          return (
+            <div className="p-5 rounded-[22px] bg-[#000000] border border-white/20 shadow-xl flex flex-col gap-4">
+              {cleanBody && (
+                <div className="text-white text-base sm:text-lg leading-relaxed font-medium whitespace-pre-wrap break-words">
+                  {cleanBody}
+                </div>
+              )}
 
-          {/* Interactive Engagement Bar */}
+              {/* Extracted Images Gallery */}
+              {postMedia.images.length > 0 && (
+                <div
+                  className={`grid gap-2 rounded-[16px] overflow-hidden border border-white/15 bg-black/40 ${
+                    postMedia.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'
+                  }`}
+                >
+                  {postMedia.images.map((imgUrl, imgIdx) => (
+                    <a
+                      key={imgIdx}
+                      href={imgUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="relative group overflow-hidden bg-[#161412] flex items-center justify-center max-h-[380px]"
+                    >
+                      <img
+                        src={imgUrl}
+                        alt="Post Attachment"
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                      <div className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity text-white">
+                        <ExternalLink size={14} />
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {/* Tags */}
+              {post.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1 border-t border-white/10">
+                  {post.tags
+                    .filter((t) => t[0] === 't')
+                    .map((t, idx) => (
+                      <span
+                        key={idx}
+                        className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-[8px] bg-[#161412] text-white/80 border border-white/15"
+                      >
+                        #{t[1]}
+                      </span>
+                    ))}
+                </div>
+              )}
+
+              {/* Interactive Engagement Bar */}
           <div className="pt-3 border-t border-white/15 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 sm:gap-3">
               {/* Like */}
@@ -294,12 +335,12 @@ export function PostDetailDrawer({
                 onClick={() => onRepostEvent(post.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] transition-all cursor-pointer ${
                   post.isReposted
-                    ? 'bg-[#10B981]/20 border border-[#10B981] text-emerald-300 shadow-[0_0_10px_#10B98133]'
+                    ? 'bg-[#F59E0B]/20 border border-[#F59E0B] text-[#F59E0B] shadow-[0_0_10px_#F59E0B33]'
                     : 'bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white'
                 }`}
                 title="Repost Zup"
               >
-                <Repeat2 size={15} className={post.isReposted ? 'text-emerald-400' : 'text-white/80'} />
+                <Repeat2 size={15} className={post.isReposted ? 'text-[#F59E0B]' : 'text-white/80'} />
                 <span className="font-mono text-xs font-bold">{repostsCount}</span>
               </button>
 
@@ -328,6 +369,8 @@ export function PostDetailDrawer({
             </span>
           </div>
         </div>
+        );
+      })()}
 
         {/* Reply Box Input */}
         <form onSubmit={handleSendReply} className="flex flex-col gap-2 p-4 rounded-[20px] bg-[#000000] border border-white/20 shadow-md">

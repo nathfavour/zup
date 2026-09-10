@@ -1,4 +1,4 @@
-import { Globe2, Send, Plus, Bell, Wallet, Settings } from 'lucide-react';
+import { Globe2, Send, Plus, Bell, Settings } from 'lucide-react';
 import { ActiveTab, NostrKeypair } from '../../types';
 
 interface MobileBottomNavProps {
@@ -122,33 +122,7 @@ export function MobileBottomNav({
         />
       </button>
 
-      {/* 5. Wallet Icon */}
-      <button
-        type="button"
-        id="mobile-nav-wallet"
-        onClick={() => onSelectTab('wallet')}
-        className="flex flex-col items-center justify-center py-1.5 px-2 relative group cursor-pointer transition-transform active:scale-95"
-        aria-label="Wallet"
-        title="Lightning Wallet"
-      >
-        <div className="relative flex items-center justify-center">
-          <Wallet
-            size={20}
-            style={{
-              color: activeTab === 'wallet' ? '#F59E0B' : '#FFFFFF',
-            }}
-            className="transition-colors"
-          />
-        </div>
-        <div
-          style={{
-            backgroundColor: activeTab === 'wallet' ? '#F59E0B' : 'transparent',
-          }}
-          className="w-1.5 h-1.5 rounded-full mt-1 transition-all"
-        />
-      </button>
-
-      {/* 6. Settings Icon */}
+      {/* 5. Settings Icon */}
       <button
         type="button"
         id="mobile-nav-settings"

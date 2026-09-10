@@ -11,11 +11,13 @@ import {
   ArrowUp,
   Loader2,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  ExternalLink
 } from 'lucide-react';
 import { FeedFilter, NostrEvent, NostrKeypair } from '../types';
 import { formatTimeAgo, formatTruncatedKey } from '../lib/nostr';
 import { evaluateZupQuality, sanitizeZupContent } from '../lib/nostrFilters';
+import { extractPostMedia } from '../lib/momentMedia';
 
 interface FeedViewProps {
   events: NostrEvent[];
@@ -229,7 +231,8 @@ export function FeedView({
             const isReposted = event.isReposted;
             const isBookmarked = bookmarkedIds.has(event.id);
             const isJustZapped = quickZappedId === event.id;
-            const cleanContent = sanitizeZupContent(event.content);
+            const media = extractPostMedia(event.content, event.tags);
+            const cleanContent = sanitizeZupContent(media.cleanText);
 
             return (
               <article
@@ -288,7 +291,7 @@ export function FeedView({
                     </div>
                   </div>
 
-                  {/* Quick Bookmark / ID Copy */}
+                  {/* Header Actions (Bookmark & Copy ID) */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     {event.relayUrl && (
                       <span className="hidden sm:inline-flex text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#161412] text-white/70 border border-white/15 truncate max-w-[130px]">
@@ -332,10 +335,49 @@ export function FeedView({
                   </div>
                 </div>
 
-                {/* Note Content Text (Sanitized from whitespace spam) */}
-                <div className="text-white text-[13.5px] sm:text-sm leading-relaxed font-medium whitespace-pre-wrap break-words">
-                  {cleanContent}
-                </div>
+                {/* Note Content Text (Cleaned from raw image URLs) */}
+                {cleanContent && (
+                  <div className="text-white text-[13.5px] sm:text-sm leading-relaxed font-medium whitespace-pre-wrap break-words">
+                    {cleanContent}
+                  </div>
+                )}
+
+                {/* Extracted Images Gallery Grid (Matching Kylrix Moments) */}
+                {media.images.length > 0 && (
+                  <div
+                    className={`grid gap-2 rounded-[16px] overflow-hidden border border-white/15 bg-black/40 ${
+                      media.images.length === 1
+                        ? 'grid-cols-1'
+                        : media.images.length === 2
+                        ? 'grid-cols-2'
+                        : 'grid-cols-2'
+                    }`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {media.images.map((imgUrl, imgIdx) => (
+                      <a
+                        key={imgIdx}
+                        href={imgUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="relative group overflow-hidden bg-[#161412] flex items-center justify-center max-h-[320px]"
+                      >
+                        <img
+                          src={imgUrl}
+                          alt="Post Media"
+                          loading="lazy"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                        <div className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity text-white">
+                          <ExternalLink size={12} />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
 
                 {/* Tags Row */}
                 {event.tags.length > 0 && (

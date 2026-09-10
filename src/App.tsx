@@ -1225,12 +1225,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#100F0E] text-white flex flex-col selection:bg-[#EC4899]/30 selection:text-white">
-      {/* Topbar Chrome: Minimalist Logo, Central Notification Icon & Profile Circle */}
+      {/* Topbar Chrome: Minimalist Logo, Central Notification Icon, Wallet Icon & Profile Circle */}
       <Header
         keypair={keypair}
         unreadNotificationsCount={unreadNotificationsCount}
         onOpenNotifications={() => setActiveTab('notifications')}
         onOpenProfile={() => setActiveTab('profile')}
+        onOpenWallet={() => setActiveTab('wallet')}
         onGoToFeed={() => setActiveTab('feed')}
       />
 

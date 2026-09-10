@@ -31,14 +31,16 @@ export function NotificationsView({
 }: NotificationsViewProps) {
   const [filter, setFilter] = useState<NotificationFilter>('all');
 
-  const filteredNotifications = notifications.filter((n) => {
-    if (filter === 'all') return true;
-    if (filter === 'zaps') return n.type === 'zap';
-    if (filter === 'likes') return n.type === 'like';
-    if (filter === 'reposts') return n.type === 'repost';
-    if (filter === 'mentions') return n.type === 'mention' || n.type === 'reply';
-    return true;
-  });
+  const filteredNotifications = notifications
+    .filter((n) => {
+      if (filter === 'all') return true;
+      if (filter === 'zaps') return n.type === 'zap';
+      if (filter === 'likes') return n.type === 'like';
+      if (filter === 'reposts') return n.type === 'repost';
+      if (filter === 'mentions') return n.type === 'mention' || n.type === 'reply';
+      return true;
+    })
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

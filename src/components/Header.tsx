@@ -1,4 +1,4 @@
-import { Bell } from 'lucide-react';
+import { Bell, Wallet } from 'lucide-react';
 import { NostrKeypair } from '../types';
 import { ZupLogo } from './ZupLogo';
 
@@ -7,6 +7,7 @@ interface HeaderProps {
   unreadNotificationsCount?: number;
   onOpenNotifications: () => void;
   onOpenProfile: () => void;
+  onOpenWallet?: () => void;
   onGoToFeed?: () => void;
 }
 
@@ -15,6 +16,7 @@ export function Header({
   unreadNotificationsCount = 0,
   onOpenNotifications,
   onOpenProfile,
+  onOpenWallet,
   onGoToFeed,
 }: HeaderProps) {
   return (
@@ -68,8 +70,21 @@ export function Header({
           </button>
         </div>
 
-        {/* Right: Profile Circle Icon */}
-        <div className="flex items-center justify-end">
+        {/* Right: Wallet Icon and Profile Circle Icon */}
+        <div className="flex items-center justify-end gap-2.5">
+          {/* Topbar Lightning Wallet Icon Button */}
+          <button
+            type="button"
+            id="topbar-wallet-btn"
+            onClick={onOpenWallet}
+            className="p-2 rounded-[14px] bg-[#161412] hover:bg-[#25221f] border border-white/20 hover:border-[#F59E0B]/80 text-[#F59E0B] transition-all cursor-pointer shadow-sm flex items-center justify-center group active:scale-95"
+            title="Lightning Wallet & Zaps"
+            aria-label="Lightning Wallet"
+          >
+            <Wallet size={18} className="transition-transform group-hover:scale-105" />
+          </button>
+
+          {/* Profile Circle Icon */}
           <button
             type="button"
             id="topbar-profile-btn"

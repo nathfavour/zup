@@ -39,8 +39,8 @@ export function getNavTabs(
       sublabel: 'End-to-End Encrypted DMs',
       icon: Send,
       badge: unreadMessagesCount > 0 ? unreadMessagesCount : undefined,
-      accent: '#6366F1', // Indigo
-      glow: 'shadow-[0_0_14px_#6366F144]',
+      accent: '#EC4899', // Pink
+      glow: 'shadow-[0_0_14px_#EC489944]',
     },
     {
       id: 'notifications',
@@ -56,7 +56,7 @@ export function getNavTabs(
       label: 'Wallet',
       sublabel: 'Lightning Zaps & Satoshis',
       icon: Wallet,
-      accent: '#F59E0B', // Gold / Amber
+      accent: '#F59E0B', // Amber
       glow: 'shadow-[0_0_14px_#F59E0B44]',
     },
     {
@@ -64,16 +64,16 @@ export function getNavTabs(
       label: 'Profile',
       sublabel: keypair.displayName || keypair.name || 'Sovereign Identity',
       icon: User,
-      accent: '#10B981', // Emerald
-      glow: 'shadow-[0_0_14px_#10B98144]',
+      accent: '#EC4899', // Pink
+      glow: 'shadow-[0_0_14px_#EC489944]',
     },
     {
       id: 'settings',
       label: 'Settings',
       sublabel: 'Vault, Relays & Sync',
       icon: Settings,
-      accent: '#A855F7', // Purple
-      glow: 'shadow-[0_0_14px_#A855F744]',
+      accent: '#F59E0B', // Amber
+      glow: 'shadow-[0_0_14px_#F59E0B44]',
     },
   ];
 }

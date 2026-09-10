@@ -101,7 +101,7 @@ export function DesktopSidebar({
       <div className="flex flex-col gap-2 pt-3 border-t border-white/10 mt-auto">
         <div className="px-3 py-2 rounded-[14px] bg-[#000000] border border-white/20 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
-            <Shield size={14} className={keypair.isEphemeral ? 'text-[#F59E0B]' : 'text-[#10B981]'} />
+            <Shield size={14} className={keypair.isEphemeral ? 'text-[#F59E0B]' : 'text-white'} />
             <span className="text-white text-[11px] font-bold truncate">
               {keypair.isEphemeral ? 'Burner Identity' : 'Sovereign Node'}
             </span>

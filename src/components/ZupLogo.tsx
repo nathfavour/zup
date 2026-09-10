@@ -18,16 +18,16 @@ export function ZupLogo({ size = 36, className = '', ...props }: ZupLogoProps) {
       {...props}
     >
       <defs>
-        {/* Pink conversation gradient for top chat segment ("Say what's up") */}
+        {/* Pink segment: #EC4899 */}
         <linearGradient id="zup-pink-grad" x1="20" y1="20" x2="80" y2="45" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="#EC4899" />
-          <stop offset="100%" stopColor="#A855F7" />
+          <stop offset="100%" stopColor="#EC4899" />
         </linearGradient>
 
-        {/* Gold lightning gradient for bottom zap segment ("Get zapped") */}
+        {/* Amber zap segment: #F59E0B */}
         <linearGradient id="zup-gold-grad" x1="44" y1="50" x2="80" y2="85" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="#F59E0B" />
-          <stop offset="100%" stopColor="#F97316" />
+          <stop offset="100%" stopColor="#F59E0B" />
         </linearGradient>
       </defs>
 

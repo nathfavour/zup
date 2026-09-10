@@ -202,8 +202,8 @@ export function FeedView({
               </>
             ) : (
               <>
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#10B981]/15 border border-[#10B981]/30 text-[#10B981] text-xs font-mono font-bold">
-                  <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
+                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#F59E0B]/15 border border-[#F59E0B]/30 text-[#F59E0B] text-xs font-mono font-bold">
+                  <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-ping" />
                   <span>Connecting to Relays</span>
                 </div>
                 <h4 className="text-white font-black text-sm uppercase tracking-wider m-0">
@@ -215,7 +215,7 @@ export function FeedView({
                 <button
                   type="button"
                   onClick={onOpenCompose}
-                  className="mt-2 px-5 py-2 rounded-[14px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] hover:opacity-90 text-white font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_15px_#EC489933]"
+                  className="mt-2 px-5 py-2 rounded-[14px] bg-[#EC4899] hover:bg-[#db2777] text-white font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-[0_0_15px_#EC489933]"
                 >
                   Publish First Note
                 </button>
@@ -297,19 +297,20 @@ export function FeedView({
                     )}
 
                     <button
+                      id={`bookmark-note-${event.id}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleToggleBookmark(event.id);
                       }}
                       className={`p-1.5 rounded-[10px] border transition-colors cursor-pointer ${
                         isBookmarked
-                          ? 'bg-[#A855F7]/20 border-[#A855F7] text-[#A855F7]'
+                          ? 'bg-[#EC4899]/20 border-[#EC4899] text-[#EC4899]'
                           : 'bg-[#161412] border-white/20 text-white/60 hover:text-white'
                       }`}
                       title={isBookmarked ? 'Saved in Bookmarks' : 'Bookmark Note'}
                       aria-label="Bookmark Note"
                     >
-                      <Bookmark size={12} className={isBookmarked ? 'fill-[#A855F7]' : ''} />
+                      <Bookmark size={12} className={isBookmarked ? 'fill-[#EC4899]' : ''} />
                     </button>
 
                     <button
@@ -323,7 +324,7 @@ export function FeedView({
                       aria-label="Copy Note ID"
                     >
                       {copiedId === event.id ? (
-                        <Check size={12} className="text-emerald-400" />
+                        <Check size={12} className="text-[#F59E0B]" />
                       ) : (
                         <Copy size={12} />
                       )}
@@ -360,10 +361,10 @@ export function FeedView({
                   {/* Reply */}
                   <button
                     onClick={() => onReplyEvent(event)}
-                    className="flex items-center gap-1.5 py-1 px-1.5 text-white/70 hover:text-[#6366F1] transition-colors cursor-pointer group"
+                    className="flex items-center gap-1.5 py-1 px-1.5 text-white/70 hover:text-[#EC4899] transition-colors cursor-pointer group"
                     title="Reply to Note"
                   >
-                    <div className="p-1.5 rounded-full group-hover:bg-[#6366F1]/15 transition-colors">
+                    <div className="p-1.5 rounded-full group-hover:bg-[#EC4899]/15 transition-colors">
                       <MessageSquare size={15} />
                     </div>
                     <span className="font-mono text-[11px] font-bold">
@@ -375,12 +376,12 @@ export function FeedView({
                   <button
                     onClick={() => onRepostEvent(event.id)}
                     className={`flex items-center gap-1.5 py-1 px-1.5 transition-colors cursor-pointer group ${
-                      isReposted ? 'text-emerald-400' : 'text-white/70 hover:text-emerald-400'
+                      isReposted ? 'text-[#F59E0B]' : 'text-white/70 hover:text-[#F59E0B]'
                     }`}
                     title="Repost Note"
                   >
-                    <div className={`p-1.5 rounded-full transition-colors ${isReposted ? 'bg-emerald-500/20' : 'group-hover:bg-emerald-500/15'}`}>
-                      <Repeat2 size={16} className={isReposted ? 'text-emerald-400' : ''} />
+                    <div className={`p-1.5 rounded-full transition-colors ${isReposted ? 'bg-[#F59E0B]/20' : 'group-hover:bg-[#F59E0B]/15'}`}>
+                      <Repeat2 size={16} className={isReposted ? 'text-[#F59E0B]' : ''} />
                     </div>
                     <span className="font-mono text-[11px] font-bold">
                       {event.repostsCount || 0}

@@ -441,13 +441,14 @@ export async function fetchNostrProfile(pubkeyHex: string, extraRelays: string[]
   const latest = events[0];
   try {
     const meta = JSON.parse(latest.content);
+    const resolvedAvatar = meta.picture || meta.image || meta.avatar || undefined;
     return {
       name: meta.name || meta.username,
       displayName: meta.display_name || meta.displayName || meta.name,
-      about: meta.about,
-      avatar: meta.picture,
+      about: meta.about || meta.bio,
+      avatar: resolvedAvatar,
       nip05: meta.nip05,
-      lud16: meta.lud16,
+      lud16: meta.lud16 || meta.lud06,
     };
   } catch {
     return null;

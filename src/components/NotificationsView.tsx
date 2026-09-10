@@ -66,7 +66,7 @@ export function NotificationsView({
             onClick={onMarkAllAsRead}
             className="px-3 py-1.5 rounded-[12px] bg-[#161412] hover:bg-[#25221f] border border-white/20 text-white/80 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <CheckCheck size={14} className="text-[#10B981]" />
+            <CheckCheck size={14} className="text-[#F59E0B]" />
             <span>Mark read</span>
           </button>
         )}
@@ -78,8 +78,8 @@ export function NotificationsView({
           { id: 'all', label: 'All', icon: Bell },
           { id: 'zaps', label: 'Zaps ⚡', icon: Zap, color: 'text-[#F59E0B]' },
           { id: 'likes', label: 'Reactions ❤️', icon: Heart, color: 'text-[#EC4899]' },
-          { id: 'mentions', label: 'Mentions 💬', icon: MessageSquare, color: 'text-[#6366F1]' },
-          { id: 'reposts', label: 'Reposts 🔁', icon: Repeat, color: 'text-[#10B981]' },
+          { id: 'mentions', label: 'Mentions 💬', icon: MessageSquare, color: 'text-[#EC4899]' },
+          { id: 'reposts', label: 'Reposts 🔁', icon: Repeat, color: 'text-[#F59E0B]' },
         ].map((tab) => {
           const isActive = filter === tab.id;
 
@@ -143,12 +143,12 @@ export function NotificationsView({
                     </div>
                   )}
                   {notif.type === 'repost' && (
-                    <div className="w-8 h-8 rounded-[10px] bg-[#10B981]/20 border border-[#10B981] text-[#10B981] flex items-center justify-center shadow-[0_0_8px_#10B98144]">
+                    <div className="w-8 h-8 rounded-[10px] bg-[#F59E0B]/20 border border-[#F59E0B] text-[#F59E0B] flex items-center justify-center shadow-[0_0_8px_#F59E0B44]">
                       <Repeat size={16} />
                     </div>
                   )}
                   {(notif.type === 'reply' || notif.type === 'mention') && (
-                    <div className="w-8 h-8 rounded-[10px] bg-[#6366F1]/20 border border-[#6366F1] text-[#6366F1] flex items-center justify-center shadow-[0_0_8px_#6366F144]">
+                    <div className="w-8 h-8 rounded-[10px] bg-[#EC4899]/20 border border-[#EC4899] text-[#EC4899] flex items-center justify-center shadow-[0_0_8px_#EC489944]">
                       <MessageSquare size={16} />
                     </div>
                   )}

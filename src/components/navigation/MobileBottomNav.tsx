@@ -160,13 +160,13 @@ export function MobileBottomNav({
         <Settings
           size={20}
           style={{
-            color: activeTab === 'settings' ? '#A855F7' : '#FFFFFF',
+            color: activeTab === 'settings' ? '#EC4899' : '#FFFFFF',
           }}
           className="transition-colors"
         />
         <div
           style={{
-            backgroundColor: activeTab === 'settings' ? '#A855F7' : 'transparent',
+            backgroundColor: activeTab === 'settings' ? '#EC4899' : 'transparent',
           }}
           className="w-1.5 h-1.5 rounded-full mt-1 transition-all"
         />

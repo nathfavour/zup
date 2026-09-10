@@ -270,8 +270,22 @@ export function ProfileView({
     events.filter((e) => e.pubkey === keypair.pubkeyHex && e.tags.some((t) => t[0] === 'e')),
     relayReplies
   );
-  const userLikes = events.filter((e) => e.isLiked);
+  const userLikes = mergeEvents(
+    events.filter((e) => e.isLiked),
+    relayReactions.map((r) => {
+      const targetId = r.tags.find((t) => t[0] === 'e')?.[1];
+      const matching = events.find((ev) => ev.id === targetId);
+      return matching ? { ...matching, isLiked: true } : r;
+    })
+  );
   const userZaps = events.filter((e) => e.isZapped);
+
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
+
+  // Reset avatar error when keypair avatar changes
+  useEffect(() => {
+    setAvatarLoadError(false);
+  }, [keypair.avatar]);
 
   const connectedRelaysCount = relays.filter((r) => r.status === 'connected').length;
 
@@ -317,10 +331,10 @@ export function ProfileView({
       {/* 2. Main Profile Card with Banner & Header */}
       <div className="rounded-[24px] bg-[#000000] border border-white/20 overflow-hidden shadow-2xl">
         {/* Ambient Cover Banner */}
-        <div className="h-32 sm:h-44 w-full bg-gradient-to-r from-[#161412] via-[#2A1B28] to-[#121A24] relative overflow-hidden border-b border-white/10">
-          <div className="absolute inset-0 opacity-25 bg-[radial-gradient(#EC4899_1px,transparent_1px)] [background-size:16px_16px]" />
-          <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-[10px] font-mono text-[#10B981] font-bold">
-            <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
+        <div className="h-32 sm:h-44 w-full bg-[#161412] relative overflow-hidden border-b border-white/10">
+          <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#EC4899_1px,transparent_1px)] [background-size:16px_16px]" />
+          <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/80 backdrop-blur-md border border-white/20 text-[10px] font-mono text-[#F59E0B] font-bold">
+            <span className="w-2 h-2 rounded-full bg-[#F59E0B] animate-ping" />
             <span>P2P Sovereign Mesh</span>
           </div>
         </div>
@@ -331,21 +345,22 @@ export function ProfileView({
             {/* Avatar */}
             <div className="relative">
               <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-[24px] sm:rounded-[28px] bg-black border-4 border-[#000000] overflow-hidden shadow-2xl flex items-center justify-center shrink-0">
-                {keypair.avatar ? (
+                {keypair.avatar && !avatarLoadError ? (
                   <img
                     src={keypair.avatar}
                     alt={keypair.displayName || 'Profile Avatar'}
                     referrerPolicy="no-referrer"
+                    onError={() => setAvatarLoadError(true)}
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-[#EC4899] to-[#A855F7] flex items-center justify-center text-white font-black text-2xl">
+                  <div className="w-full h-full bg-[#161412] border border-white/10 flex items-center justify-center text-white font-black text-2xl">
                     {(keypair.displayName || keypair.name || 'Z')[0].toUpperCase()}
                   </div>
                 )}
               </div>
               <div 
-                className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#10B981] border-2 border-black" 
+                className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-[#F59E0B] border-2 border-black" 
                 title="Active Sovereign Signer"
               />
             </div>
@@ -358,7 +373,7 @@ export function ProfileView({
                 className="px-3 py-1.5 rounded-[14px] bg-[#161412] hover:bg-[#25221f] border border-white/20 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
                 title="Share npub"
               >
-                {copiedKey ? <Check size={14} className="text-[#10B981]" /> : <Share2 size={14} />}
+                {copiedKey ? <Check size={14} className="text-[#F59E0B]" /> : <Share2 size={14} />}
                 <span className="hidden xs:inline">{copiedKey ? 'Copied' : 'Share'}</span>
               </button>
 
@@ -381,7 +396,7 @@ export function ProfileView({
                   {keypair.displayName || keypair.name || 'Sovereign Broadcaster'}
                 </h1>
                 {keypair.nip05 && (
-                  <span className="px-2 py-0.5 rounded-full bg-[#10B981]/20 border border-[#10B981]/40 text-[#10B981] text-[10px] font-mono font-bold">
+                  <span className="px-2 py-0.5 rounded-full bg-[#EC4899]/20 border border-[#EC4899]/40 text-[#EC4899] text-[10px] font-mono font-bold">
                     ✓ {keypair.nip05}
                   </span>
                 )}
@@ -412,7 +427,7 @@ export function ProfileView({
                 title="Copy full npub"
               >
                 <span>{formatTruncatedKey(keypair.npub)}</span>
-                {copiedKey ? <Check size={12} className="text-[#10B981]" /> : <Copy size={12} />}
+                {copiedKey ? <Check size={12} className="text-[#F59E0B]" /> : <Copy size={12} />}
               </button>
 
               {/* Lightning Address (lud16) */}
@@ -427,14 +442,14 @@ export function ProfileView({
               <button 
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
-                className="flex items-center gap-1 text-[#A855F7] font-mono text-[11px] hover:underline cursor-pointer bg-transparent border-0 p-0"
+                className="flex items-center gap-1 text-[#EC4899] font-mono text-[11px] hover:underline cursor-pointer bg-transparent border-0 p-0"
               >
                 <Radio size={13} />
                 <span>{connectedRelaysCount} Relays Connected</span>
               </button>
 
               {/* Signer Key State */}
-              <div className="flex items-center gap-1 text-[#10B981] font-mono text-[11px]">
+              <div className="flex items-center gap-1 text-[#F59E0B] font-mono text-[11px]">
                 <Shield size={12} />
                 <span>{keypair.isEphemeral ? 'Ephemeral RAM Key' : 'Local Sovereign Key'}</span>
               </div>
@@ -488,7 +503,7 @@ export function ProfileView({
                 )}
                 {/* Active Underline Indicator */}
                 {isActive && (
-                  <div className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full bg-gradient-to-r from-[#EC4899] to-[#A855F7] shadow-[0_0_8px_#EC4899]" />
+                  <div className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full bg-[#EC4899] shadow-[0_0_8px_#EC4899]" />
                 )}
               </button>
             );
@@ -514,7 +529,7 @@ export function ProfileView({
               <button
                 type="button"
                 onClick={onOpenCompose}
-                className="mt-2 px-5 py-2.5 rounded-[14px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] text-white font-black text-xs uppercase tracking-wider cursor-pointer shadow-[0_0_15px_#EC489933] active:scale-95 transition-all"
+                className="mt-2 px-5 py-2.5 rounded-[14px] bg-[#EC4899] hover:bg-[#db2777] text-white font-black text-xs uppercase tracking-wider cursor-pointer shadow-[0_0_15px_#EC489933] active:scale-95 transition-all"
               >
                 Create First Zup
               </button>
@@ -757,7 +772,7 @@ export function ProfileView({
                 <button
                   type="submit"
                   disabled={isSavingProfile}
-                  className="px-5 py-2 rounded-[12px] bg-gradient-to-r from-[#EC4899] to-[#A855F7] text-white text-xs font-black uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-[12px] bg-[#EC4899] hover:bg-[#db2777] text-white text-xs font-black uppercase tracking-wider cursor-pointer disabled:opacity-50 transition-all"
                 >
                   {isSavingProfile ? 'Publishing...' : 'Save & Broadcast'}
                 </button>
@@ -813,7 +828,7 @@ function ProfileNoteCard({
           {avatar ? (
             <img src={avatar} alt={displayName} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-[#EC4899] to-[#6366F1] flex items-center justify-center text-white font-black text-sm">
+            <div className="w-full h-full bg-[#161412] border border-white/10 flex items-center justify-center text-white font-black text-sm">
               {displayName[0].toUpperCase()}
             </div>
           )}
@@ -862,7 +877,7 @@ function ProfileNoteCard({
               type="button"
               onClick={() => onRepostEvent(event.id)}
               className={`flex items-center gap-1 transition-colors cursor-pointer text-xs ${
-                event.isReposted ? 'text-[#10B981]' : 'hover:text-[#10B981]'
+                event.isReposted ? 'text-[#F59E0B]' : 'hover:text-white'
               }`}
             >
               <Repeat size={14} />

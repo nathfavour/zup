@@ -43,6 +43,8 @@ const SPAM_SIGNATURES = [
   /contact.*on.*whatsapp/i,
   /passcode.*unlock/i,
   /recovery.*agent/i,
+  /#stickerpals_broadcast/i,
+  /#bot_broadcast/i,
 ];
 
 // Regex for detecting hashtag and mention floods in text
@@ -168,10 +170,22 @@ export function isGibberish(content: string): boolean {
     if (sig.test(trimmed)) return true;
   }
 
-  // 2. Keyboard mash / string repetition slop (e.g. "asdfghjasdfghjasdfghjasdfghjasdfghj" or "123123123123123")
+  // 2. Detect raw JSON protocol / app presence payloads (e.g. {"type":"presence", ...})
+  if (/^\s*\{.*"type"\s*:\s*".*"\s*.*\}\s*$/s.test(trimmed) || /^\s*\{.*"payload"\s*:\s*.*\}\s*$/s.test(trimmed)) {
+    return true;
+  }
+
+  // 3. Detect raw npub / key dumps or author header copy-paste slop in content
+  const npubCount = (trimmed.match(/npub1[a-z0-9]{58}/gi) || []).length;
+  if (npubCount >= 2 && trimmed.length < 300) return true;
+
+  // 4. Keyboard mash / string repetition slop (e.g. "asdfghjasdfghjasdfghjasdfghjasdfghj" or "123123123123123")
   if (/(.{2,8})\1{4,}/i.test(trimmed)) return true;
 
-  // 3. Long continuous word without vowels or spaces (excluding URLs/hashes)
+  // 5. Unending digits / dangling broken URL path fragments (e.g., isolated standalone "609101/" or long digit gibberish)
+  if (/(?:^|\s)\d{5,}\/(?:\s|$)/.test(trimmed)) return true;
+
+  // 6. Long continuous word without vowels or spaces (excluding URLs/hashes)
   // Clean out URLs and nostr identifiers first
   const cleanText = trimmed.replace(URI_REGEX, '').trim();
   const words = cleanText.split(/\s+/);

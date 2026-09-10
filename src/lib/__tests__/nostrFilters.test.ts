@@ -128,6 +128,24 @@ describe('Nostr Anti-Spam & Waterfall Quality Filters', () => {
     test('flags long non-vowel gibberish words', () => {
       expect(isGibberish('Look at this bcdfghjklmnpqrstvwxzbcdfghj post')).toBe(true);
     });
+
+    test('flags raw JSON presence protocol payload dumps', () => {
+      const jsonSpam = '{"type":"presence","payload":"online"}\n#stickerpals_broadcast';
+      expect(isGibberish(jsonSpam)).toBe(true);
+      expect(evaluateZupQuality({ content: jsonSpam }).passes).toBe(false);
+    });
+
+    test('flags npub line dumps in content', () => {
+      const npubSpam = 'npub16xq2p3x...2p3x\nPeer d18058\nnpub16xq2p3x...2p3x';
+      // If full npubs exist
+      const fullNpubSpam = 'npub16xq5gvgj2p3x0cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkws\nnpub10yxypf30cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkws';
+      expect(isGibberish(fullNpubSpam)).toBe(true);
+    });
+
+    test('flags dangling digit fragments and bot broadcast hashtags', () => {
+      const digitFragment = 'Check out this post https://example.com/posts/202\n\n609101/\n';
+      expect(isGibberish(digitFragment)).toBe(true);
+    });
   });
 
   describe('evaluateZupQuality (End-to-End Validator)', () => {

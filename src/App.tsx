@@ -54,6 +54,7 @@ import { EncryptionSetupDrawer } from './components/EncryptionSetupDrawer';
 import { UnlockDrawer } from './components/UnlockDrawer';
 import { ImportIdentityDrawer } from './components/ImportIdentityDrawer';
 import { KylrixSyncModal } from './components/KylrixSyncModal';
+import { WalletView } from './components/WalletView';
 
 export default function App() {
   // Database instance
@@ -597,6 +598,40 @@ export default function App() {
                 });
               }
             }
+
+            // 4. Handle Kind 7 (Reactions/Likes), Kind 6 (Reposts), and Kind 9735 (Zap Receipts) targeting notes
+            if ([6, 7, 9735].includes(incoming.kind) && incoming.tags) {
+              const targetNoteId = incoming.tags.find((t: string[]) => t[0] === 'e')?.[1];
+              if (targetNoteId) {
+                setEvents((prev) =>
+                  prev.map((e) => {
+                    if (e.id !== targetNoteId) return e;
+                    if (incoming.kind === 7) {
+                      return {
+                        ...e,
+                        likesCount: (e.likesCount || 0) + 1,
+                        isLiked: incoming.pubkey === keypair.pubkeyHex ? true : e.isLiked,
+                      };
+                    }
+                    if (incoming.kind === 6) {
+                      return {
+                        ...e,
+                        repostsCount: (e.repostsCount || 0) + 1,
+                        isReposted: incoming.pubkey === keypair.pubkeyHex ? true : e.isReposted,
+                      };
+                    }
+                    if (incoming.kind === 9735) {
+                      return {
+                        ...e,
+                        zapsCount: (e.zapsCount || 0) + 21,
+                        isZapped: incoming.pubkey === keypair.pubkeyHex ? true : e.isZapped,
+                      };
+                    }
+                    return e;
+                  })
+                );
+              }
+            }
           } catch {
             // Ignored
           }
@@ -844,6 +879,10 @@ export default function App() {
   };
 
   const handleReplyNote = async (content: string, targetEvent: NostrEvent) => {
+    if ((!keypair.privkeyHex || keypair.isWatchOnly) && isVaultLocked) {
+      setIsUnlockOpen(true);
+      return;
+    }
     const tags = [
       ['e', targetEvent.id, targetEvent.relayUrl || '', 'reply'],
       ['p', targetEvent.pubkey],
@@ -1261,6 +1300,15 @@ export default function App() {
                 const target = events.find((e) => e.id === eventId);
                 if (target) setReplyTargetEvent(target);
               }}
+            />
+          )}
+
+          {activeTab === 'wallet' && (
+            <WalletView
+              keypair={keypair}
+              notifications={notifications}
+              onOpenUnlock={() => setIsUnlockOpen(true)}
+              isVaultLocked={isVaultLocked}
             />
           )}
 

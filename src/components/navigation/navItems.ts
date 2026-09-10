@@ -2,6 +2,7 @@ import {
   Send, 
   Globe2,
   Bell,
+  Wallet,
   User,
   Settings,
   Plus
@@ -48,6 +49,14 @@ export function getNavTabs(
       icon: Bell,
       badge: unreadNotificationsCount > 0 ? unreadNotificationsCount : undefined,
       accent: '#F59E0B', // Amber
+      glow: 'shadow-[0_0_14px_#F59E0B44]',
+    },
+    {
+      id: 'wallet',
+      label: 'Wallet',
+      sublabel: 'Lightning Zaps & Satoshis',
+      icon: Wallet,
+      accent: '#F59E0B', // Gold / Amber
       glow: 'shadow-[0_0_14px_#F59E0B44]',
     },
     {

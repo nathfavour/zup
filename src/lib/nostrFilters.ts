@@ -45,7 +45,23 @@ const SPAM_SIGNATURES = [
   /recovery.*agent/i,
   /#stickerpals_broadcast/i,
   /#bot_broadcast/i,
+  // Game server telemetry & presence logs (e.g. GTA RP, FiveM bots, automated aimd logs)
+  /\[AIMD\]/i,
+  /Player Revived/i,
+  /Hospital Respawn/i,
+  /Pillbox Hill Medical Center/i,
+  /nlogpost:\d+:/i,
+  /#swarmmesh/i,
+  // Low-reputation broadcast duplicate templates
+  /Sveiki no E-me prototipa!/i,
+  /Stay vigilant with crypto security/i,
 ];
+
+// Content hash cache for deduplication (drops identical broadcast spam blasts)
+const SEEN_CONTENT_HASHES = new Set<string>();
+function getContentFingerprint(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 100);
+}
 
 // Regex for detecting hashtag and mention floods in text
 const HASHTAG_REGEX = /(?:^|\s)#([a-zA-Z0-9_\u4e00-\u9fa5]+)/g;
@@ -190,10 +206,26 @@ export function isGibberish(content: string): boolean {
   const cleanText = trimmed.replace(URI_REGEX, '').trim();
   const words = cleanText.split(/\s+/);
   for (const word of words) {
+    // Detect raw base64 data blobs (e.g. eyJ0eXBlIjoi...)
+    if (word.length >= 40 && /^[A-Za-z0-9+/=]{40,}$/.test(word)) {
+      return true;
+    }
     // Ignore code/hex/hashes/base64-like strings if they are formatted or isolated
     if (word.length >= 16 && !/[aeiouAEIOU]/.test(word) && /^[a-zA-Z0-9]+$/.test(word)) {
       return true;
     }
+  }
+
+  // 7. Duplicate broadcast spam detection across relays
+  const fingerprint = getContentFingerprint(trimmed);
+  if (fingerprint.length > 20) {
+    if (SEEN_CONTENT_HASHES.has(fingerprint)) {
+      return true; // Already processed this duplicate broadcast post
+    }
+    if (SEEN_CONTENT_HASHES.size > 2000) {
+      SEEN_CONTENT_HASHES.clear();
+    }
+    SEEN_CONTENT_HASHES.add(fingerprint);
   }
 
   return false;

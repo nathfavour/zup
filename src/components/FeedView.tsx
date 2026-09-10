@@ -352,18 +352,20 @@ export function FeedView({
                   </div>
                 )}
 
-                {/* Standard Action Bar (Clean Single-Row Twitter/X Style) */}
+                {/* Standard Action Bar (Clean Borderless Microblogging Style) */}
                 <div
-                  className="pt-2 border-t border-white/10 flex items-center justify-between max-w-md gap-2 text-white text-xs font-bold"
+                  className="pt-2.5 border-t border-white/10 flex items-center justify-between max-w-sm gap-2 text-white text-xs font-semibold"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Reply */}
                   <button
                     onClick={() => onReplyEvent(event)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 py-1 px-1.5 text-white/70 hover:text-[#6366F1] transition-colors cursor-pointer group"
                     title="Reply to Note"
                   >
-                    <MessageSquare size={14} />
+                    <div className="p-1.5 rounded-full group-hover:bg-[#6366F1]/15 transition-colors">
+                      <MessageSquare size={15} />
+                    </div>
                     <span className="font-mono text-[11px] font-bold">
                       {event.repliesCount || 0}
                     </span>
@@ -372,14 +374,14 @@ export function FeedView({
                   {/* Repost */}
                   <button
                     onClick={() => onRepostEvent(event.id)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] transition-all cursor-pointer ${
-                      isReposted
-                        ? 'bg-[#10B981]/20 border border-[#10B981] text-emerald-300 shadow-[0_0_10px_#10B98133]'
-                        : 'bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white'
+                    className={`flex items-center gap-1.5 py-1 px-1.5 transition-colors cursor-pointer group ${
+                      isReposted ? 'text-emerald-400' : 'text-white/70 hover:text-emerald-400'
                     }`}
                     title="Repost Note"
                   >
-                    <Repeat2 size={14} className={isReposted ? 'text-emerald-400' : 'text-white/80'} />
+                    <div className={`p-1.5 rounded-full transition-colors ${isReposted ? 'bg-emerald-500/20' : 'group-hover:bg-emerald-500/15'}`}>
+                      <Repeat2 size={16} className={isReposted ? 'text-emerald-400' : ''} />
+                    </div>
                     <span className="font-mono text-[11px] font-bold">
                       {event.repostsCount || 0}
                     </span>
@@ -388,17 +390,17 @@ export function FeedView({
                   {/* Like */}
                   <button
                     onClick={() => onLikeEvent(event.id)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] transition-all cursor-pointer ${
-                      isLiked
-                        ? 'bg-[#EC4899]/20 border border-[#EC4899] text-[#EC4899] shadow-[0_0_10px_#EC489933]'
-                        : 'bg-[#161412] border border-white/15 hover:border-white/40 text-white/80 hover:text-white'
+                    className={`flex items-center gap-1.5 py-1 px-1.5 transition-colors cursor-pointer group ${
+                      isLiked ? 'text-[#EC4899]' : 'text-white/70 hover:text-[#EC4899]'
                     }`}
                     title="Like note"
                   >
-                    <Heart
-                      size={14}
-                      className={isLiked ? 'fill-[#EC4899] text-[#EC4899]' : 'text-white/80'}
-                    />
+                    <div className={`p-1.5 rounded-full transition-colors ${isLiked ? 'bg-[#EC4899]/20' : 'group-hover:bg-[#EC4899]/15'}`}>
+                      <Heart
+                        size={15}
+                        className={isLiked ? 'fill-[#EC4899] text-[#EC4899]' : ''}
+                      />
+                    </div>
                     <span className="font-mono text-[11px] font-bold">
                       {event.likesCount || 0}
                     </span>
@@ -407,18 +409,18 @@ export function FeedView({
                   {/* Zap */}
                   <button
                     onClick={() => onOpenZap(event)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] transition-all cursor-pointer ${
-                      isZapped
-                        ? 'bg-[#F59E0B]/25 border border-[#F59E0B] text-amber-300 shadow-[0_0_12px_#F59E0B44]'
-                        : 'bg-[#161412] border border-white/15 hover:border-[#F59E0B] text-white'
+                    className={`flex items-center gap-1.5 py-1 px-1.5 transition-colors cursor-pointer group ${
+                      isZapped ? 'text-amber-400' : 'text-white/70 hover:text-amber-400'
                     }`}
                     title="Lightning Zap"
                   >
-                    <Zap
-                      size={14}
-                      className={isZapped ? 'fill-[#F59E0B] text-[#F59E0B]' : 'text-[#F59E0B]'}
-                    />
-                    <span className="font-mono text-[11px] font-extrabold text-[#F59E0B]">
+                    <div className={`p-1.5 rounded-full transition-colors ${isZapped ? 'bg-amber-500/20' : 'group-hover:bg-amber-500/15'}`}>
+                      <Zap
+                        size={15}
+                        className={isZapped ? 'fill-amber-400 text-amber-400' : 'text-amber-400/90'}
+                      />
+                    </div>
+                    <span className="font-mono text-[11px] font-extrabold text-amber-400">
                       {event.zapsCount ? `${event.zapsCount.toLocaleString()}` : 0}
                     </span>
                   </button>

@@ -191,6 +191,7 @@ export type ActiveTab =
   | 'feed' 
   | 'messages' 
   | 'notifications' 
+  | 'wallet'
   | 'profile' 
   | 'relays' 
   | 'vault' 

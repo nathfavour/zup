@@ -2,25 +2,58 @@
  * Nostr Waterfall Quality & Anti-Spam Filters
  *
  * "Nostr is an open waterfall; we decide what even makes it into the Zup ecosystem."
- * Filters out:
- * - URI-packed posts (excessive link dumps, affiliate link floods, URL-only spam)
- * - Space spams (vertical whitespace padding, excessive consecutive newlines, zero-width characters)
- * - Tag spam (mention bombing with dozens of p-tags)
- * - Repetitive bot gibberish and flood attacks
+ * Filters out before user algorithm takes effect:
+ * - URI-packed posts (excessive link dumps, URL shorteners, spam TLDs, messaging invite floods, affiliate dumps)
+ * - Space & formatting spams (vertical whitespace padding, excessive consecutive newlines, zero-width / invisible characters, emoji floods, character repetitions)
+ * - Tag spam (mention bombing with p-tags, excessive hashtags, or npub floods in content)
+ * - Repetitive bot gibberish, slop, keyboard mash, and scam/phishing signatures
  */
 
 // Regex for extracting web and nostr URIs
 const URI_REGEX = /(?:https?:\/\/|nostr:)[^\s<>"{}|\\^`[\]]+/gi;
 
-// Known bot spam phrases or crypto/phishing spam keywords
+// Suspicious URL shorteners and redirect services
+const SHORTENER_REGEX = /(?:https?:\/\/)?(?:bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|buff\.ly|ow\.ly|adf\.ly|bit\.do|tiny\.cc|cutt\.ly|shorturl\.at|rb\.gy)\/[a-zA-Z0-9_-]+/i;
+
+// Low-reputation / spam top-level domains commonly used in phishing & slop
+const SPAM_TLD_REGEX = /https?:\/\/[a-zA-Z0-9.-]+\.(?:xyz|top|click|link|club|work|monster|fit|online|site|icu|buzz|vip|fun|rest|cam|gdn|loan|win)\b/i;
+
+// Messaging group invite flood signatures (Telegram, WhatsApp, Discord)
+const INVITE_FLOOD_REGEX = /(?:t\.me|wa\.me|chat\.whatsapp\.com|discord\.gg|discord\.com\/invite)\/[a-zA-Z0-9_+-]+/i;
+
+// Known bot spam phrases, crypto scams, phishing, and slop signatures
 const SPAM_SIGNATURES = [
   /airdrop.*claim/i,
-  /free.*usdt/i,
-  /private.*key.*seed/i,
-  /whatsapp.*crypto/i,
-  /telegram.*join.*now/i,
+  /claim.*airdrop/i,
+  /free.*(?:usdt|btc|eth|crypto|tokens|sol)/i,
+  /private.*key/i,
+  /seed.*phrase/i,
+  /secret.*recovery/i,
+  /connect.*wallet/i,
+  /wallet.*connect/i,
+  /whatsapp.*(?:crypto|invest|group|number|help)/i,
+  /telegram.*(?:join|channel|group|signal)/i,
   /t\.me\/(?:joinchat|\+[a-zA-Z0-9_-]{10,})/i,
+  /guaranteed.*(?:return|profit|100x|1000x)/i,
+  /doubler.*(?:btc|eth|usdt)/i,
+  /deposit.*bonus/i,
+  /presale.*live/i,
+  /dm.*(?:for.*info|me.*fast|on.*whatsapp|to.*buy)/i,
+  /inbox.*me.*for/i,
+  /contact.*on.*whatsapp/i,
+  /passcode.*unlock/i,
+  /recovery.*agent/i,
 ];
+
+// Regex for detecting hashtag and mention floods in text
+const HASHTAG_REGEX = /(?:^|\s)#([a-zA-Z0-9_\u4e00-\u9fa5]+)/g;
+const MENTION_REGEX = /(?:@npub1[a-z0-9]{58}|nostr:npub1[a-z0-9]{58}|nostr:nprofile1[a-z0-9]+)/gi;
+
+// Regex for invisible Unicode characters and zero-width spaces
+const INVISIBLE_CHARS_REGEX = /[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0\u180E\u2000-\u200A\u202F\u205F\u3000]/g;
+
+// Regex for unicode emoji ranges to detect emoji floods
+const EMOJI_REGEX = /(?:[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F700}-\u{1F77F}]|[\u{1F780}-\u{1F7FF}]|[\u{1F800}-\u{1F8FF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}])/gu;
 
 export interface FilterResult {
   passes: boolean;
@@ -29,35 +62,48 @@ export interface FilterResult {
 }
 
 /**
- * Checks if a post is packed with excessive URIs / link dumps.
+ * Checks if a post is packed with excessive URIs, link dumps, suspicious shorteners, or invite floods.
  */
 export function isUriPacked(content: string): boolean {
   if (!content) return false;
   const matches = content.match(URI_REGEX);
+  const textLength = content.trim().length;
+
+  // 1. Check for URL shorteners or spam TLDs in suspicious contexts
+  if (SHORTENER_REGEX.test(content) && textLength < 250) return true;
+  if (SPAM_TLD_REGEX.test(content) && textLength < 200) return true;
+
+  // 2. Messaging invite link flood
+  const inviteMatches = content.match(new RegExp(INVITE_FLOOD_REGEX.source, 'gi'));
+  if (inviteMatches && inviteMatches.length >= 2) return true;
+
   if (!matches || matches.length === 0) return false;
 
   const urlCount = matches.length;
   const totalUrlLength = matches.reduce((acc, url) => acc + url.length, 0);
-  const textLength = content.trim().length;
 
-  // 1. More than 3 URLs in a short post is almost always spam
+  // 3. More than 3 URLs in a short post (<320 chars) is almost always spam
   if (urlCount >= 3 && textLength < 320) return true;
 
-  // 2. More than 4 URLs regardless of length (link farm)
+  // 4. More than 4 URLs regardless of length (link farm)
   if (urlCount >= 5) return true;
 
-  // 3. URLs consume more than 50% of the entire post body and there are multiple URLs
+  // 5. URLs consume more than 50% of the entire post body when multiple URLs exist
   if (urlCount >= 2 && totalUrlLength / textLength > 0.5) return true;
 
-  // 4. Post is purely URLs with less than 10 non-URL characters
+  // 6. Post is purely URLs with less than 10 non-URL characters
   const nonUrlLength = textLength - totalUrlLength;
   if (urlCount >= 2 && nonUrlLength < 10) return true;
+
+  // 7. Multiple affiliate/ref parameter link floods
+  const refLinks = matches.filter((url) => /(?:\?|&)(?:ref|aff|affiliate|utm_source)=/i.test(url));
+  if (refLinks.length >= 2) return true;
 
   return false;
 }
 
 /**
- * Checks if a post abuses whitespace (vertical line padding, character repetition, zero-width spaces).
+ * Checks if a post abuses whitespace, character repetition, zero-width characters, or emoji floods.
  */
 export function isSpaceSpam(content: string): boolean {
   if (!content) return false;
@@ -68,42 +114,72 @@ export function isSpaceSpam(content: string): boolean {
   // 2. Wide horizontal space padding (12 or more continuous spaces/tabs)
   if (/[ \t]{12,}/.test(content)) return true;
 
-  // 3. Zero-width character flood
-  const zeroWidthCount = (content.match(/[\u200B-\u200D\uFEFF]/g) || []).length;
-  if (zeroWidthCount > 5) return true;
+  // 3. Zero-width character and invisible Unicode character flood
+  const invisibleCount = (content.match(INVISIBLE_CHARS_REGEX) || []).length;
+  if (invisibleCount > 4) return true;
 
-  // 4. Excessive character repetitions (same character repeated >= 15 times like "aaaaaaaaaaa" or "..........")
-  if (/(.)\1{14,}/.test(content)) return true;
+  // 4. Excessive character repetitions (same character repeated >= 12 times like "aaaaaaaaaaaa" or "............")
+  if (/(.)\1{11,}/.test(content)) return true;
+
+  // 5. Emoji flood (12+ emojis in a short post or continuous streak of 8+ emojis)
+  const emojis = content.match(EMOJI_REGEX) || [];
+  if (emojis.length >= 12 && content.length < 200) return true;
+
+  const continuousEmojiRegex = new RegExp(`(?:${EMOJI_REGEX.source}){8,}`, 'u');
+  if (continuousEmojiRegex.test(content)) return true;
 
   return false;
 }
 
 /**
- * Checks if a post abuses tags (e.g. tagging 10+ pubkeys for mention spam).
+ * Checks if a post abuses tags or in-content mentions/hashtags.
  */
-export function isTagSpam(tags: string[][]): boolean {
-  if (!tags || !Array.isArray(tags)) return false;
+export function isTagSpam(tags: string[][], content: string = ''): boolean {
+  if (tags && Array.isArray(tags)) {
+    // Count mention 'p' tags
+    const pTags = tags.filter((t) => t[0] === 'p');
+    if (pTags.length > 8) return true;
 
-  // Count mention 'p' tags
-  const pTags = tags.filter((t) => t[0] === 'p');
-  if (pTags.length > 8) return true;
+    // Total tags count excessive (tag bombing)
+    if (tags.length > 18) return true;
+  }
 
-  // Total tags count excessive (tag bombing)
-  if (tags.length > 20) return true;
+  // In-content hashtag bombing (e.g. 8+ hashtags in body text)
+  if (content) {
+    const hashtags = content.match(HASHTAG_REGEX) || [];
+    if (hashtags.length >= 8) return true;
+
+    const mentions = content.match(MENTION_REGEX) || [];
+    if (mentions.length >= 6) return true;
+  }
 
   return false;
 }
 
 /**
- * Checks for gibberish or empty spam.
+ * Checks for gibberish, slop, keyboard mash, or scam signatures.
  */
 export function isGibberish(content: string): boolean {
   const trimmed = content.trim();
   if (trimmed.length < 2) return true;
 
-  // Check for signature spam patterns
+  // 1. Check for signature spam & scam patterns
   for (const sig of SPAM_SIGNATURES) {
     if (sig.test(trimmed)) return true;
+  }
+
+  // 2. Keyboard mash / string repetition slop (e.g. "asdfghjasdfghjasdfghjasdfghjasdfghj" or "123123123123123")
+  if (/(.{2,8})\1{4,}/i.test(trimmed)) return true;
+
+  // 3. Long continuous word without vowels or spaces (excluding URLs/hashes)
+  // Clean out URLs and nostr identifiers first
+  const cleanText = trimmed.replace(URI_REGEX, '').trim();
+  const words = cleanText.split(/\s+/);
+  for (const word of words) {
+    // Ignore code/hex/hashes/base64-like strings if they are formatted or isolated
+    if (word.length >= 16 && !/[aeiouAEIOU]/.test(word) && /^[a-zA-Z0-9]+$/.test(word)) {
+      return true;
+    }
   }
 
   return false;
@@ -136,7 +212,7 @@ export function evaluateZupQuality(event: {
     };
   }
 
-  if (isTagSpam(tags)) {
+  if (isTagSpam(tags, content)) {
     return {
       passes: false,
       reason: 'tag_spam',
@@ -148,7 +224,7 @@ export function evaluateZupQuality(event: {
     return {
       passes: false,
       reason: 'gibberish',
-      details: 'Filtered out: Low-entropy or signature spam detected.',
+      details: 'Filtered out: Low-entropy, slop, or signature spam detected.',
     };
   }
 

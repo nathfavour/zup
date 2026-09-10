@@ -37,6 +37,7 @@ import {
 import { syncEngine } from '../lib/syncEngine';
 import { kylrixOAuth } from '../lib/kylrixOAuth';
 import { formatTruncatedKey } from '../lib/nostr';
+import { isSudoActive } from '../lib/sudo';
 import { VaultCredentialsManager } from './VaultCredentialsManager';
 
 interface SettingsViewProps {
@@ -174,35 +175,35 @@ export function SettingsView({
   ];
 
   return (
-    <div className="flex flex-col gap-6 max-w-3xl mx-auto pb-24 md:pb-12 text-stone-200">
+    <div className="flex flex-col gap-4 max-w-3xl mx-auto pb-24 md:pb-12 text-white">
       {/* 1. Account Summary & Identity Keys Card */}
-      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#262421]">
+      <section className="bg-[#161412] border border-white/20 rounded-[24px] p-5 flex flex-col gap-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
           <div className="flex items-center gap-3.5 min-w-0">
             <img
               src={keypair.avatar}
               alt={keypair.name || 'Account Avatar'}
-              className="w-13 h-13 rounded-full object-cover border border-[#3A3631] bg-[#121110] shrink-0"
+              className="w-12 h-12 rounded-[16px] object-cover border border-white/20 bg-black shrink-0"
             />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-white text-base font-bold truncate">
+                <h2 className="text-white text-base font-black truncate m-0">
                   {keypair.displayName || keypair.name || 'Anonymous Peer'}
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
                   Sovereign
                 </span>
               </div>
-              <p className="text-stone-400 font-mono text-xs truncate mt-0.5">
+              <p className="text-white font-mono text-xs truncate mt-0.5 m-0 font-medium">
                 {keypair.npub ? formatTruncatedKey(keypair.npub, 12, 8) : 'No Public Key'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#201E1B] border border-[#302D29] text-xs font-mono text-stone-300">
-              <ShieldCheck size={14} className="text-emerald-400" />
-              <span>secp256k1 active</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#000000] border border-white/20 text-xs font-mono text-white font-bold">
+              <ShieldCheck size={14} className="text-[#10B981]" />
+              <span>secp256k1</span>
             </span>
           </div>
         </div>
@@ -210,11 +211,11 @@ export function SettingsView({
         {/* Cryptographic Keys Section (npub & nsec) */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <Key size={15} className="text-[#EC4899]" />
-              <span>Active Identity Keys (NIP-19)</span>
+            <span className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+              <Key size={14} className="text-[#EC4899]" />
+              <span>Active Identity Keys</span>
             </span>
-            {isLocked && vaultSecurity?.isInitialized && (
+            {isLocked && vaultSecurity?.isInitialized && !isSudoActive() && (
               <button
                 type="button"
                 onClick={onOpenUnlock}
@@ -228,37 +229,43 @@ export function SettingsView({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Public Key (npub) */}
-            <div className="p-3.5 rounded-xl bg-[#1D1B19] border border-[#2D2A26] flex flex-col justify-between gap-2">
+            <div className="p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col justify-between gap-2 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-stone-400 uppercase">Public Key (npub)</span>
+                <span className="text-[11px] font-black text-white uppercase tracking-wider">Public Key (npub)</span>
                 <button
                   type="button"
                   onClick={() => handleCopySettings(keypair.npub, 'npub')}
-                  className="text-stone-400 hover:text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                  className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                 >
                   {copiedKeySettings === 'npub' ? (
-                    <Check size={12} className="text-emerald-400" />
+                    <Check size={12} className="text-[#10B981]" />
                   ) : (
                     <Copy size={12} />
                   )}
                   <span>{copiedKeySettings === 'npub' ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
-              <p className="font-mono text-xs text-white break-all m-0 select-all">
+              <p className="font-mono text-xs text-white break-all m-0 select-all font-semibold">
                 {keypair.npub}
               </p>
             </div>
 
             {/* Private Key (nsec) */}
-            <div className="p-3.5 rounded-xl bg-[#1D1B19] border border-[#2D2A26] flex flex-col justify-between gap-2">
+            <div className="p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col justify-between gap-2 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-stone-400 uppercase">Private Key (nsec)</span>
+                <span className="text-[11px] font-black text-white uppercase tracking-wider">Private Key (nsec)</span>
                 {keypair.nsec && (
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowPrivKeySettings(!showPrivKeySettings)}
-                      className="text-stone-400 hover:text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                      onClick={() => {
+                        if (isLocked && vaultSecurity?.isInitialized && !isSudoActive()) {
+                          onOpenUnlock();
+                          return;
+                        }
+                        setShowPrivKeySettings(!showPrivKeySettings);
+                      }}
+                      className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                     >
                       {showPrivKeySettings ? <EyeOff size={12} /> : <Eye size={12} />}
                       <span>{showPrivKeySettings ? 'Hide' : 'Show'}</span>
@@ -266,10 +273,10 @@ export function SettingsView({
                     <button
                       type="button"
                       onClick={() => handleCopySettings(keypair.nsec!, 'nsec')}
-                      className="text-stone-400 hover:text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                      className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                     >
                       {copiedKeySettings === 'nsec' ? (
-                        <Check size={12} className="text-emerald-400" />
+                        <Check size={12} className="text-[#10B981]" />
                       ) : (
                         <Copy size={12} />
                       )}
@@ -278,7 +285,7 @@ export function SettingsView({
                   </div>
                 )}
               </div>
-              <p className="font-mono text-xs text-white break-all m-0 select-all">
+              <p className="font-mono text-xs text-white break-all m-0 select-all font-semibold">
                 {keypair.nsec ? (
                   showPrivKeySettings ? (
                     keypair.nsec
@@ -286,12 +293,12 @@ export function SettingsView({
                     '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••'
                   )
                 ) : isLocked ? (
-                  <span className="text-amber-400 text-xs flex items-center gap-1 font-sans">
+                  <span className="text-[#F59E0B] text-xs flex items-center gap-1 font-sans font-bold">
                     <Lock size={12} />
-                    Vault is locked. Unlock above to display nsec.
+                    Vault locked. Tap unlock above to reveal nsec.
                   </span>
                 ) : (
-                  <span className="text-stone-500 text-xs font-sans">
+                  <span className="text-white text-xs font-sans font-medium">
                     Watch-only identity (No private key loaded)
                   </span>
                 )}
@@ -301,28 +308,28 @@ export function SettingsView({
         </div>
       </section>
 
-      {/* 2. Cloud Sync & Device Reconciliation */}
-      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+      {/* 2. Cloud Sync & Identity Anchor */}
+      <section className="bg-[#161412] border border-white/20 rounded-[24px] p-5 flex flex-col gap-4 shadow-xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#EC4899]/10 border border-[#EC4899]/30 flex items-center justify-center text-[#EC4899]">
-              <Cloud size={17} />
+            <div className="w-8 h-8 rounded-[12px] bg-[#EC4899]/15 border border-[#EC4899]/30 flex items-center justify-center text-[#EC4899]">
+              <Cloud size={16} />
             </div>
             <div>
-              <h3 className="text-white text-sm font-bold">Cloud Sync & Mesh Reconciliation</h3>
-              <p className="text-stone-400 text-xs mt-0.5">
-                Zero-knowledge cross-device settings using NIP-78 identity records.
+              <h3 className="text-white text-sm font-black uppercase tracking-wide m-0">Sign in with Kylrix & Sync</h3>
+              <p className="text-white text-xs mt-0.5 m-0 font-medium">
+                End-to-end sync using OAuth 2.1 PKCE and NIP-78 identity records.
               </p>
             </div>
           </div>
 
           <span
-            className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold ${
+            className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-bold ${
               syncStatus === 'pending'
-                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                ? 'bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/40'
                 : syncStatus === 'offline'
-                ? 'bg-stone-800 text-stone-400 border border-stone-700'
-                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                ? 'bg-[#000000] text-white border border-white/20'
+                : 'bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40'
             }`}
           >
             {syncStatus === 'pending'
@@ -333,29 +340,29 @@ export function SettingsView({
           </span>
         </div>
 
-        <div className="bg-[#1D1B19] border border-[#2D2A26] rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5">
+        <div className="bg-[#000000] border border-white/20 rounded-[18px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
             {oauthSession.isConnected && oauthSession.profile ? (
               <img
                 src={oauthSession.profile.avatar}
                 alt={oauthSession.profile.name}
-                className="w-10 h-10 rounded-xl border border-[#3A3631] bg-[#121110] object-cover shrink-0"
+                className="w-10 h-10 rounded-[12px] border border-white/20 bg-black object-cover shrink-0"
               />
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-[#262421] border border-[#383530] flex items-center justify-center text-stone-400 shrink-0">
+              <div className="w-10 h-10 rounded-[12px] bg-[#161412] border border-white/20 flex items-center justify-center text-white shrink-0">
                 <Server size={18} />
               </div>
             )}
             <div className="min-w-0">
-              <span className="text-white font-semibold text-xs block truncate">
+              <span className="text-white font-extrabold text-xs block truncate">
                 {oauthSession.isConnected && oauthSession.profile
                   ? `${oauthSession.profile.name} (${oauthSession.profile.email || oauthSession.profile.userId})`
-                  : 'Local-First Sovereign Mode'}
+                  : 'Local-First Sovereign Client'}
               </span>
-              <span className="text-stone-400 text-xs block truncate mt-0.5">
+              <span className="text-white text-xs block truncate mt-0.5 font-medium">
                 {oauthSession.isConnected
-                  ? 'OAuth 2.1 PKCE Session active'
-                  : 'Local RxDB is your single source of truth.'}
+                  ? 'OAuth 2.1 PKCE active · NIP-78 linked'
+                  : 'Local RxDB is active. No external dependencies required.'}
               </span>
             </div>
           </div>
@@ -363,9 +370,9 @@ export function SettingsView({
           <button
             type="button"
             onClick={onOpenSync}
-            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#262320] hover:bg-[#302D29] border border-[#38342F] text-white text-xs font-semibold tracking-wide transition-colors cursor-pointer text-center shrink-0"
+            className="w-full sm:w-auto px-4 py-2 rounded-[14px] bg-white text-black hover:bg-white/90 text-xs font-black uppercase tracking-wider transition-all cursor-pointer text-center shrink-0"
           >
-            {oauthSession.isConnected ? 'Manage Sync' : 'Connect Cloud Sync'}
+            {oauthSession.isConnected ? 'Manage Sync' : 'Connect Account'}
           </button>
         </div>
       </section>
@@ -382,28 +389,28 @@ export function SettingsView({
       />
 
       {/* 4. Privacy & Network Controls */}
-      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+      <section className="bg-[#161412] border border-white/20 rounded-[24px] p-5 flex flex-col gap-4 shadow-xl">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-            <Shield size={17} />
+          <div className="w-8 h-8 rounded-[12px] bg-[#F59E0B]/15 border border-[#F59E0B]/30 flex items-center justify-center text-[#F59E0B]">
+            <Shield size={16} />
           </div>
           <div>
-            <h3 className="text-white text-sm font-bold">Network Privacy & Leak Guards</h3>
-            <p className="text-stone-400 text-xs mt-0.5">
-              Fine-grained controls to minimize fingerprinting and metadata exposure.
+            <h3 className="text-white text-sm font-black uppercase tracking-wide m-0">Network Privacy & Leak Guards</h3>
+            <p className="text-white text-xs mt-0.5 m-0 font-medium">
+              Controls to minimize fingerprinting and external metadata exposure.
             </p>
           </div>
         </div>
 
         <div className="flex flex-col gap-2.5">
           {/* Zero Metadata Leakage */}
-          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-[#1D1B19] border border-[#2D2A26] transition-colors">
+          <div className="flex items-center justify-between gap-4 p-4 rounded-[18px] bg-[#000000] border border-white/20 transition-colors shadow-sm">
             <div className="min-w-0 flex-1">
-              <span className="text-white text-xs font-semibold block">
+              <span className="text-white text-xs font-bold block">
                 Zero Metadata Leakage
               </span>
-              <p className="text-stone-400 text-xs mt-0.5 leading-relaxed">
-                Strips user-agent fingerprints and randomizes WebSocket reconnect jitter.
+              <p className="text-white text-xs mt-0.5 leading-relaxed font-medium m-0">
+                Strips user-agent fingerprints and randomizes WebSocket reconnect timing.
               </p>
             </div>
             <ToggleSwitch
@@ -415,12 +422,12 @@ export function SettingsView({
           </div>
 
           {/* WebRTC IP Protection */}
-          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-[#1D1B19] border border-[#2D2A26] transition-colors">
+          <div className="flex items-center justify-between gap-4 p-4 rounded-[18px] bg-[#000000] border border-white/20 transition-colors shadow-sm">
             <div className="min-w-0 flex-1">
-              <span className="text-white text-xs font-semibold block">
+              <span className="text-white text-xs font-bold block">
                 WebRTC Local IP Shield
               </span>
-              <p className="text-stone-400 text-xs mt-0.5 leading-relaxed">
+              <p className="text-white text-xs mt-0.5 leading-relaxed font-medium m-0">
                 Prevents browser WebRTC STUN queries from leaking your local LAN IP address.
               </p>
             </div>
@@ -433,13 +440,13 @@ export function SettingsView({
           </div>
 
           {/* NIP-07 Browser Extension Bridge */}
-          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-[#1D1B19] border border-[#2D2A26] transition-colors">
+          <div className="flex items-center justify-between gap-4 p-4 rounded-[18px] bg-[#000000] border border-white/20 transition-colors shadow-sm">
             <div className="min-w-0 flex-1">
-              <span className="text-white text-xs font-semibold block">
+              <span className="text-white text-xs font-bold block">
                 NIP-07 Extension Delegation (Alby, nos2x)
               </span>
-              <p className="text-stone-400 text-xs mt-0.5 leading-relaxed">
-                Allows external browser signer extensions to sign events without exposing secrets.
+              <p className="text-white text-xs mt-0.5 leading-relaxed font-medium m-0">
+                Allows external browser extensions to sign events without revealing your keys.
               </p>
             </div>
             <ToggleSwitch
@@ -453,22 +460,22 @@ export function SettingsView({
           {/* Tor Onion Routing Node */}
           <div
             onClick={onOpenPro}
-            className="flex items-center justify-between gap-4 p-4 rounded-xl bg-[#1D1B19] border border-[#38332F] hover:border-[#EC4899]/50 cursor-pointer transition-colors group"
+            className="flex items-center justify-between gap-4 p-4 rounded-[18px] bg-[#000000] border border-white/20 hover:border-[#EC4899]/60 cursor-pointer transition-colors group shadow-sm"
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-white text-xs font-semibold block">
+                <span className="text-white text-xs font-bold block">
                   Tor Onion Routing Circuits
                 </span>
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#EC4899]/15 text-[#EC4899] border border-[#EC4899]/30">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#EC4899]/20 text-[#EC4899] border border-[#EC4899]/40">
                   Pro Circuit
                 </span>
               </div>
-              <p className="text-stone-400 text-xs mt-0.5 leading-relaxed">
+              <p className="text-white text-xs mt-0.5 leading-relaxed font-medium m-0">
                 Routes all relay WebSocket traffic through multi-hop onion circuits (.onion relays).
               </p>
             </div>
-            <span className="text-xs font-semibold text-[#EC4899] group-hover:underline shrink-0">
+            <span className="text-xs font-bold text-[#EC4899] group-hover:underline shrink-0">
               Configure →
             </span>
           </div>
@@ -476,20 +483,20 @@ export function SettingsView({
       </section>
 
       {/* 5. Protocol Architecture & NIP Compliance */}
-      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+      <section className="bg-[#161412] border border-white/20 rounded-[24px] p-5 flex flex-col gap-4 shadow-xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-              <Terminal size={17} />
+            <div className="w-8 h-8 rounded-[12px] bg-[#6366F1]/15 border border-[#6366F1]/30 flex items-center justify-center text-[#6366F1]">
+              <Terminal size={16} />
             </div>
             <div>
-              <h3 className="text-white text-sm font-bold">Nostr Standards Compliance</h3>
-              <p className="text-stone-400 text-xs mt-0.5">
-                BIP-340 Schnorr signatures & standard Nostr Implementation Possibilities.
+              <h3 className="text-white text-sm font-black uppercase tracking-wide m-0">Nostr Standards Compliance</h3>
+              <p className="text-white text-xs mt-0.5 m-0 font-medium">
+                BIP-340 Schnorr signatures & active Nostr protocols.
               </p>
             </div>
           </div>
-          <span className="text-stone-400 text-xs font-mono font-medium hidden sm:inline">
+          <span className="text-white text-xs font-mono font-bold hidden sm:inline px-2 py-0.5 rounded bg-black border border-white/20">
             secp256k1
           </span>
         </div>
@@ -498,17 +505,17 @@ export function SettingsView({
           {implementedNIPs.map((n) => (
             <div
               key={n.nip}
-              className="p-3 rounded-xl bg-[#1D1B19] border border-[#2D2A26] flex items-center justify-between gap-3"
+              className="p-3 rounded-[16px] bg-[#000000] border border-white/20 flex items-center justify-between gap-3 shadow-sm"
             >
               <div className="min-w-0">
                 <span className="text-white font-mono font-bold text-xs block">
                   {n.nip}
                 </span>
-                <span className="text-stone-400 text-[11px] truncate block mt-0.5">
+                <span className="text-white text-[11px] font-medium truncate block mt-0.5">
                   {n.title}
                 </span>
               </div>
-              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shrink-0">
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40 shrink-0">
                 Active
               </span>
             </div>
@@ -516,39 +523,39 @@ export function SettingsView({
         </div>
 
         {/* Cryptographic Benchmark Runner */}
-        <div className="pt-3 border-t border-[#262421] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="pt-3 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <button
             type="button"
             onClick={handleRunBenchmark}
             disabled={benchmarking}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1D1B19] border border-[#332F2B] hover:border-[#423E38] text-stone-200 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-[14px] bg-[#000000] border border-white/20 hover:border-white/40 text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
           >
-            <Cpu size={14} className="text-indigo-400" />
+            <Cpu size={14} className="text-[#6366F1]" />
             <span>{benchmarking ? 'Benchmarking Engine...' : 'Run Crypto Benchmark'}</span>
           </button>
 
           {benchResult ? (
-            <span className="text-emerald-400 font-mono text-xs font-medium">
+            <span className="text-[#10B981] font-mono text-xs font-bold">
               {benchResult}
             </span>
           ) : (
-            <span className="text-stone-500 font-mono text-xs">
-              Runs client-side latency profiling
+            <span className="text-white font-mono text-xs font-medium">
+              Client-side verification latency
             </span>
           )}
         </div>
       </section>
 
-      {/* 6. Storage & Danger Zone */}
-      <section className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+      {/* 6. Storage & Reset */}
+      <section className="bg-[#161412] border border-white/20 rounded-[24px] p-5 flex flex-col gap-4 shadow-xl">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-            <Database size={17} />
+          <div className="w-8 h-8 rounded-[12px] bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+            <Database size={16} />
           </div>
           <div>
-            <h3 className="text-white text-sm font-bold">Local Storage & Cache Management</h3>
-            <p className="text-stone-400 text-xs mt-0.5">
-              Reset default relay pools or purge your client-side RxDB database.
+            <h3 className="text-white text-sm font-black uppercase tracking-wide m-0">Local Storage & Cache</h3>
+            <p className="text-white text-xs mt-0.5 m-0 font-medium">
+              Reset default relay pools or wipe local client-side RxDB database.
             </p>
           </div>
         </div>
@@ -557,16 +564,22 @@ export function SettingsView({
           <button
             type="button"
             onClick={handleResetRelays}
-            className="p-3.5 rounded-xl bg-[#1D1B19] border border-[#332F2B] hover:border-[#45403A] text-stone-200 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="p-3.5 rounded-[16px] bg-[#000000] border border-white/20 hover:border-white/40 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
           >
-            <RefreshCw size={14} className="text-stone-400" />
+            <RefreshCw size={14} className="text-white" />
             <span>Restore Default Relays</span>
           </button>
 
           <button
             type="button"
-            onClick={handleWipe}
-            className="p-3.5 rounded-xl bg-[#1D1B19] border border-rose-500/25 hover:border-rose-500/50 text-rose-300 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer hover:bg-rose-500/5"
+            onClick={() => {
+              if (isLocked && vaultSecurity?.isInitialized && !isSudoActive()) {
+                onOpenUnlock();
+                return;
+              }
+              handleWipe();
+            }}
+            className="p-3.5 rounded-[16px] bg-[#000000] border border-rose-500/40 hover:border-rose-500 text-rose-300 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
           >
             <Trash2 size={14} className="text-rose-400" />
             <span>Purge Local Data & Keys</span>
@@ -574,14 +587,14 @@ export function SettingsView({
         </div>
 
         {resetRelaysNotice && (
-          <p className="text-emerald-400 text-xs font-medium text-center m-0 flex items-center justify-center gap-1.5">
+          <p className="text-[#10B981] text-xs font-bold text-center m-0 flex items-center justify-center gap-1.5">
             <Check size={14} />
             <span>Relay configuration reset to default mesh.</span>
           </p>
         )}
 
         {wipeNotice && (
-          <p className="text-emerald-400 text-xs font-medium text-center m-0 flex items-center justify-center gap-1.5">
+          <p className="text-[#10B981] text-xs font-bold text-center m-0 flex items-center justify-center gap-1.5">
             <Check size={14} />
             <span>Local database and session state successfully cleared.</span>
           </p>

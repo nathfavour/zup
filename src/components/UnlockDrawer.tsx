@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { 
   Fingerprint, 
   KeyRound, 
@@ -15,6 +15,7 @@ import {
   decryptMEKWithPassword, 
   unlockMEKWithPasskey 
 } from '../lib/crypto';
+import { markSudoActive } from '../lib/sudo';
 import { VaultSecurityState, PasskeyRecord } from '../types';
 
 interface UnlockDrawerProps {
@@ -40,6 +41,16 @@ export function UnlockDrawer({
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Seamless Sudo/Unlock: Automatically prompt for biometric passkey when drawer opens if passkey exists
+  useEffect(() => {
+    if (isOpen && hasPasskeys && !isAuthenticating && !password) {
+      const timer = setTimeout(() => {
+        handlePasskeyUnlock();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
   if (!securityState) return null;
 
   const handlePasskeyUnlock = async (passkeyToUse?: PasskeyRecord) => {
@@ -57,12 +68,13 @@ export function UnlockDrawer({
       }
 
       const mek = await unlockMEKWithPasskey(targetPasskey);
+      markSudoActive();
       setIsAuthenticating(false);
       onUnlocked(mek);
       onClose();
     } catch (err: unknown) {
-      console.error('Passkey unlock failed:', err);
-      setError('Biometric authentication failed or was cancelled. Use your master password below.');
+      console.warn('Passkey auto-prompt dismissed or failed:', err);
+      setError('Biometric authentication cancelled or failed. Enter master password below.');
       setIsAuthenticating(false);
     }
   };
@@ -79,6 +91,7 @@ export function UnlockDrawer({
         securityState.passwordWrappedMEK,
         password
       );
+      markSudoActive();
       setIsAuthenticating(false);
       setPassword('');
       onUnlocked(result.mek);

@@ -396,46 +396,46 @@ export function VaultCredentialsManager({
 
   if (!vaultSecurity?.isInitialized) {
     return (
-      <div className="bg-[#161514] border border-[#2A2724] rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+      <div className="bg-[#161412] border border-white/20 rounded-[24px] p-5 flex flex-col gap-4 shadow-xl">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 shrink-0">
-              <Lock size={19} />
+            <div className="w-10 h-10 rounded-[12px] bg-[#F59E0B]/15 border border-[#F59E0B]/30 flex items-center justify-center text-[#F59E0B] shrink-0">
+              <Lock size={18} />
             </div>
             <div>
-              <h4 className="text-white text-sm font-bold m-0">Master Password & Vault Security</h4>
-              <p className="text-stone-400 text-xs m-0 mt-0.5">
-                Set up a master password right here in Settings to protect your private keys and credentials.
+              <h4 className="text-white text-sm font-black uppercase tracking-wide m-0">Master Password & Vault Security</h4>
+              <p className="text-white text-xs m-0 mt-0.5 font-medium">
+                Set up an Argon2id master password to encrypt your sovereign keys and credentials.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setShowInlineInit(!showInlineInit)}
-            className="px-4 py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-black text-xs font-bold transition-all cursor-pointer shadow-[0_0_10px_#10B98133] shrink-0"
+            className="px-4 py-2 rounded-[14px] bg-white text-black hover:bg-white/90 text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0"
           >
-            {showInlineInit ? 'Close Form' : 'Setup Master Password'}
+            {showInlineInit ? 'Close Form' : 'Setup Vault Password'}
           </button>
         </div>
 
         {showInlineInit && (
           <form
             onSubmit={handleInlineInit}
-            className="p-4 rounded-xl bg-[#1A1816] border border-[#2F2C28] flex flex-col gap-3.5 animate-fadeIn"
+            className="p-4 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col gap-3.5 animate-fadeIn"
           >
             <div className="flex items-center justify-between">
-              <span className="text-white text-xs font-bold flex items-center gap-1.5">
-                <KeyRound size={15} className="text-[#10B981]" />
+              <span className="text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                <KeyRound size={14} className="text-[#10B981]" />
                 Create Master Password
               </span>
-              <span className="text-stone-400 text-[11px] font-mono">
-                Argon2id (64MB Memory Hard)
+              <span className="text-white text-[10px] font-mono font-bold">
+                Argon2id (64MB)
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-stone-300 text-xs font-medium">
+                <label className="text-white text-xs font-bold">
                   Master Password <span className="text-rose-400">*</span>
                 </label>
                 <input
@@ -445,13 +445,13 @@ export function VaultCredentialsManager({
                   placeholder="Minimum 8 characters..."
                   required
                   autoFocus
-                  className="w-full bg-[#121110] border border-[#35322D] focus:border-[#10B981] focus:outline-none rounded-xl px-3.5 py-2 text-white text-xs"
+                  className="w-full bg-[#161412] border border-white/20 focus:border-[#10B981] focus:outline-none rounded-[14px] px-3.5 py-2 text-white text-xs placeholder:text-white/40"
                 />
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-stone-300 text-xs font-medium">
-                  Confirm Master Password <span className="text-rose-400">*</span>
+                <label className="text-white text-xs font-bold">
+                  Confirm Password <span className="text-rose-400">*</span>
                 </label>
                 <input
                   type={showPasswordText ? 'text' : 'password'}
@@ -459,7 +459,7 @@ export function VaultCredentialsManager({
                   onChange={(e) => setConfirmInitPassword(e.target.value)}
                   placeholder="Re-enter password..."
                   required
-                  className="w-full bg-[#121110] border border-[#35322D] focus:border-[#10B981] focus:outline-none rounded-xl px-3.5 py-2 text-white text-xs"
+                  className="w-full bg-[#161412] border border-white/20 focus:border-[#10B981] focus:outline-none rounded-[14px] px-3.5 py-2 text-white text-xs placeholder:text-white/40"
                 />
               </div>
             </div>
@@ -468,39 +468,23 @@ export function VaultCredentialsManager({
               <button
                 type="button"
                 onClick={() => setShowPasswordText(!showPasswordText)}
-                className="text-xs text-stone-400 hover:text-stone-200 flex items-center gap-1.5 cursor-pointer"
+                className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
-                {showPasswordText ? <EyeOff size={14} /> : <Eye size={14} />}
-                <span>{showPasswordText ? 'Hide password' : 'Show password'}</span>
+                {showPasswordText ? <EyeOff size={13} /> : <Eye size={13} />}
+                <span>{showPasswordText ? 'Hide' : 'Show'} Password</span>
               </button>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowInlineInit(false)}
-                  className="px-3.5 py-1.5 rounded-xl bg-[#24221F] border border-[#35322D] text-stone-300 text-xs font-semibold cursor-pointer hover:bg-[#2F2C28]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isInitializing || !initPassword || !confirmInitPassword}
-                  className="px-4 py-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-black text-xs font-bold cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {isInitializing ? (
-                    <>
-                      <RefreshCw size={13} className="animate-spin" />
-                      <span>Deriving Argon2id...</span>
-                    </>
-                  ) : (
-                    <span>Save Master Password</span>
-                  )}
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={isInitializing || !initPassword || !confirmInitPassword}
+                className="px-5 py-2 rounded-[14px] bg-[#10B981] hover:bg-[#059669] disabled:opacity-40 text-black text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+              >
+                {isInitializing ? 'Securing MEK...' : 'Save & Encrypt'}
+              </button>
             </div>
 
             {initError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center gap-2">
+              <div className="p-3 rounded-[12px] bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2">
                 <AlertCircle size={15} className="shrink-0" />
                 <span>{initError}</span>
               </div>
@@ -514,22 +498,22 @@ export function VaultCredentialsManager({
   return (
     <div className="flex flex-col gap-4">
       {/* Overview Card: Lock Status, Master Password & Passkey Count */}
-      <div className="bg-[#161514] border border-[#2A2724] rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
+      <div className="bg-[#161412] border border-white/20 rounded-[24px] p-5 flex flex-col gap-4 shadow-xl">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
-              <ShieldCheck size={20} />
+            <div className="w-10 h-10 rounded-[12px] bg-[#10B981]/15 border border-[#10B981]/30 flex items-center justify-center text-[#10B981] shrink-0">
+              <ShieldCheck size={18} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-white text-sm font-bold m-0">
-                  Vault Security Credentials
+                <h3 className="text-white text-sm font-black uppercase tracking-wide m-0">
+                  Vault Credentials & Passkeys
                 </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30 font-bold">
                   Argon2id (64MB)
                 </span>
               </div>
-              <p className="text-stone-400 text-xs m-0 mt-0.5">
+              <p className="text-white text-xs m-0 mt-0.5 font-medium">
                 Master password + {vaultSecurity.passkeys.length} registered passkey{vaultSecurity.passkeys.length === 1 ? '' : 's'}
               </p>
             </div>
@@ -540,7 +524,7 @@ export function VaultCredentialsManager({
               <button
                 type="button"
                 onClick={onOpenUnlock}
-                className="px-3.5 py-1.5 rounded-xl bg-[#EC4899] hover:bg-[#db2777] text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                className="px-4 py-2 rounded-[14px] bg-[#EC4899] hover:bg-[#db2777] text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
               >
                 <Unlock size={14} />
                 <span>Unlock Vault</span>
@@ -549,9 +533,9 @@ export function VaultCredentialsManager({
               <button
                 type="button"
                 onClick={onLockVault}
-                className="px-3.5 py-1.5 rounded-xl bg-[#221F1C] hover:bg-[#2C2925] border border-[#35322D] text-stone-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-4 py-2 rounded-[14px] bg-[#000000] hover:bg-black/80 border border-white/20 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
               >
-                <Lock size={14} className="text-emerald-400" />
+                <Lock size={14} className="text-[#10B981]" />
                 <span>Lock Vault</span>
               </button>
             )}
@@ -559,7 +543,7 @@ export function VaultCredentialsManager({
         </div>
 
         {/* Action Buttons Row: Change Master Password & Add Passkey */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#262421]">
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/10">
           <button
             type="button"
             onClick={() => {
@@ -567,10 +551,10 @@ export function VaultCredentialsManager({
               setPasswordError(null);
               setPasswordSuccess(null);
             }}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer border ${
+            className={`px-3.5 py-2 rounded-[14px] text-xs font-bold flex items-center gap-2 transition-all cursor-pointer border ${
               showPasswordSection
-                ? 'bg-[#2A2724] border-[#EC4899] text-white'
-                : 'bg-[#1D1B19] border-[#2E2B27] text-stone-300 hover:text-white hover:border-[#3D3A35]'
+                ? 'bg-[#000000] border-[#EC4899] text-white'
+                : 'bg-[#000000] border-white/20 text-white hover:border-white/40'
             }`}
           >
             <KeyRound size={14} className="text-[#EC4899]" />
@@ -585,13 +569,13 @@ export function VaultCredentialsManager({
               setPasskeyError(null);
               setPasskeySuccess(null);
             }}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer border ${
+            className={`px-3.5 py-2 rounded-[14px] text-xs font-bold flex items-center gap-2 transition-all cursor-pointer border ${
               showAddPasskey
-                ? 'bg-[#2A2724] border-emerald-400 text-white'
-                : 'bg-[#1D1B19] border-[#2E2B27] text-stone-300 hover:text-white hover:border-[#3D3A35]'
+                ? 'bg-[#000000] border-[#10B981] text-white'
+                : 'bg-[#000000] border-white/20 text-white hover:border-white/40'
             }`}
           >
-            <Plus size={14} className="text-emerald-400" />
+            <Plus size={14} className="text-[#10B981]" />
             <span>Add Passkey ({vaultSecurity.passkeys.length})</span>
             {showAddPasskey ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </button>

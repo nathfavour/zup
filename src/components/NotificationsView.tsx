@@ -103,14 +103,14 @@ export function NotificationsView({
       {/* Notifications List */}
       <div className="flex flex-col gap-2.5">
         {filteredNotifications.length === 0 ? (
-          <div className="p-8 rounded-[22px] bg-[#000000] border border-white/20 text-center flex flex-col items-center justify-center gap-2 shadow-xl">
-            <div className="w-12 h-12 rounded-[16px] bg-white/5 border border-white/10 flex items-center justify-center text-white/40">
+          <div className="p-8 rounded-[24px] bg-[#000000] border border-white/20 text-center flex flex-col items-center justify-center gap-2 shadow-xl">
+            <div className="w-12 h-12 rounded-[16px] bg-[#161412] border border-white/20 flex items-center justify-center text-white">
               <Bell size={24} />
             </div>
             <h4 className="text-white font-black text-sm uppercase tracking-wider m-0">
               No Notifications Yet
             </h4>
-            <p className="text-white/60 text-xs font-medium max-w-sm m-0">
+            <p className="text-white text-xs font-medium max-w-sm m-0">
               When peers on the relay mesh zap, like, reply to, or repost your Zups, alerts will stream in real-time here.
             </p>
           </div>
@@ -126,8 +126,8 @@ export function NotificationsView({
             return (
               <div
                 key={notif.id}
-                className={`p-4 rounded-[20px] bg-[#000000] border transition-all flex items-start gap-3.5 shadow-md ${
-                  notif.read ? 'border-white/15' : 'border-[#EC4899]/50 bg-[#EC4899]/5 shadow-[0_0_12px_#EC48991a]'
+                className={`p-4 rounded-[22px] bg-[#000000] border transition-all flex items-start gap-3.5 shadow-md ${
+                  notif.read ? 'border-white/20' : 'border-[#EC4899] shadow-[0_0_12px_#EC489922]'
                 }`}
               >
                 {/* Icon Badge */}
@@ -161,7 +161,7 @@ export function NotificationsView({
                       <span className="text-white font-black text-xs">
                         {notif.sourceName}
                       </span>
-                      <span className="text-white/60 text-xs">
+                      <span className="text-white text-xs font-semibold">
                         {notif.type === 'zap' && `zapped you ${notif.amountSats || 21} sats ⚡`}
                         {notif.type === 'like' && 'liked your Zup'}
                         {notif.type === 'repost' && 'reposted your Zup'}
@@ -169,19 +169,19 @@ export function NotificationsView({
                         {notif.type === 'mention' && 'mentioned you in a note'}
                       </span>
                     </div>
-                    <span className="text-white/40 text-[10px] font-mono shrink-0">
+                    <span className="text-white text-[10px] font-mono shrink-0 font-medium">
                       {dateStr}
                     </span>
                   </div>
 
                   {notif.comment && (
-                    <p className="text-[#F59E0B] font-mono text-xs font-semibold m-0">
+                    <p className="text-[#F59E0B] font-mono text-xs font-bold m-0">
                       &ldquo;{notif.comment}&rdquo;
                     </p>
                   )}
 
                   {notif.targetEventContent && (
-                    <div className="p-2.5 rounded-[12px] bg-[#161412] border border-white/10 text-white/70 text-xs line-clamp-2">
+                    <div className="p-2.5 rounded-[12px] bg-[#161412] border border-white/20 text-white text-xs font-medium line-clamp-2">
                       {notif.targetEventContent}
                     </div>
                   )}

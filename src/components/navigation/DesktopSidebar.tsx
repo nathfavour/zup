@@ -27,11 +27,11 @@ export function DesktopSidebar({
     <aside
       id="desktop-sidebar"
       aria-label="Desktop Navigation Sidebar"
-      className="hidden md:flex flex-col w-64 lg:w-72 shrink-0 h-[calc(100vh-96px)] sticky top-[80px] bg-[#121110] border border-[#282522] rounded-[24px] p-4 justify-between overflow-y-auto shadow-2xl transition-all"
+      className="hidden md:flex flex-col w-64 lg:w-72 shrink-0 h-[calc(100vh-96px)] sticky top-[80px] bg-[#161412] border border-white/20 rounded-[24px] p-4 justify-between overflow-y-auto shadow-2xl transition-all"
     >
       <div className="flex flex-col gap-3">
         <div className="px-3 py-1 flex items-center justify-between">
-          <span className="text-[#99948D] text-[11px] font-black uppercase tracking-widest">
+          <span className="text-white text-[11px] font-black uppercase tracking-widest">
             Sovereign Mesh
           </span>
           <span className="text-[10px] font-mono text-[#EC4899] font-bold">
@@ -39,7 +39,7 @@ export function DesktopSidebar({
           </span>
         </div>
 
-        {/* Primary Desktop Nav Tabs: Standalone Clean Icons and Text (No Box Enclosures) */}
+        {/* Primary Desktop Nav Tabs: Standalone Clean Icons and Text */}
         <nav className="flex flex-col gap-1.5">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -50,24 +50,24 @@ export function DesktopSidebar({
                 key={tab.id}
                 id={`desktop-nav-tab-${tab.id}`}
                 onClick={() => onSelectTab(tab.id)}
-                className={`w-full text-left px-3.5 py-3 rounded-[16px] transition-all flex items-center gap-3.5 group cursor-pointer ${
+                className={`w-full text-left px-3.5 py-2.5 rounded-[16px] transition-all flex items-center gap-3.5 group cursor-pointer ${
                   isActive
-                    ? 'bg-[#1D1B18] border border-[#3E3A34] text-white'
-                    : 'bg-transparent border border-transparent hover:bg-[#1A1816] hover:border-[#2C2925] text-[#99948D] hover:text-white'
+                    ? 'bg-[#000000] border-2 border-white/40 text-white shadow-md'
+                    : 'bg-transparent border border-transparent hover:bg-[#000000] hover:border-white/20 text-white'
                 }`}
               >
-                {/* Standalone clean single icon without individual box enclosure */}
+                {/* Standalone clean single icon */}
                 <Icon
-                  size={20}
+                  size={18}
                   style={{
-                    color: isActive ? tab.accent : '#8A857E',
+                    color: isActive ? tab.accent : '#FFFFFF',
                   }}
                   className="shrink-0 transition-colors"
                 />
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-1">
-                    <span className={`font-extrabold text-sm tracking-wide truncate ${isActive ? 'text-white' : 'text-[#D6D2CC] group-hover:text-white'}`}>
+                    <span className="font-extrabold text-xs tracking-wide truncate text-white">
                       {tab.label}
                     </span>
                     {tab.badge && (
@@ -76,7 +76,7 @@ export function DesktopSidebar({
                       </span>
                     )}
                   </div>
-                  <span className="text-[#807B74] text-[11px] font-medium tracking-tight truncate block mt-0.5">
+                  <span className="text-white text-[10px] font-medium tracking-tight truncate block mt-0.5">
                     {tab.sublabel}
                   </span>
                 </div>
@@ -97,54 +97,19 @@ export function DesktopSidebar({
         </button>
       </div>
 
-      {/* Sidebar Bottom Security Status & Pro Trigger */}
-      <div className="flex flex-col gap-2.5 pt-3 border-t border-[#262320] mt-auto">
-        {keypair.isEphemeral ? (
-          <div className="p-3 rounded-[16px] bg-[#1A1815] border border-[#F59E0B]/50 flex items-center gap-2.5">
-            <Flame size={18} className="text-[#F59E0B] shrink-0" />
-            <div className="min-w-0 flex-1">
-              <span className="text-white font-bold text-xs block truncate">
-                Burner Mode Active
-              </span>
-              <span className="text-[#8F8A83] text-[10px] font-medium block truncate">
-                Zero key persistence
-              </span>
-            </div>
+      {/* Sidebar Bottom: Compact Identity Status */}
+      <div className="flex flex-col gap-2 pt-3 border-t border-white/10 mt-auto">
+        <div className="px-3 py-2 rounded-[14px] bg-[#000000] border border-white/20 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <Shield size={14} className={keypair.isEphemeral ? 'text-[#F59E0B]' : 'text-[#10B981]'} />
+            <span className="text-white text-[11px] font-bold truncate">
+              {keypair.isEphemeral ? 'Burner Identity' : 'Sovereign Node'}
+            </span>
           </div>
-        ) : (
-          <div className="p-3 rounded-[16px] bg-[#1A1815] border border-[#2B2824] flex items-center gap-2.5">
-            <Shield size={18} className="text-[#10B981] shrink-0" />
-            <div className="min-w-0 flex-1">
-              <span className="text-white font-bold text-xs block truncate">
-                Local Cryptography
-              </span>
-              <span className="text-[#8F8A83] text-[10px] font-medium block truncate">
-                Secp256k1 client-signed
-              </span>
-            </div>
-          </div>
-        )}
-
-        <button
-          id="sidebar-pro-banner"
-          onClick={onOpenPro}
-          className="w-full p-2.5 rounded-[16px] bg-[#1A1815] border border-[#35322E] hover:border-[#A855F7] transition-all flex items-center justify-between text-left group cursor-pointer"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Sparkles size={16} className="text-[#A855F7] shrink-0" />
-            <div className="min-w-0">
-              <span className="text-white font-black text-xs uppercase tracking-wider block truncate">
-                Pro Mesh Relay
-              </span>
-              <span className="text-[#8F8A83] text-[10px] font-medium block truncate">
-                Tor & NIP-05 Verified
-              </span>
-            </div>
-          </div>
-          <span className="text-[10px] font-mono font-bold text-[#A855F7] px-2 py-0.5 rounded bg-[#A855F7]/15 border border-[#A855F7]/30">
-            UNLOCK
+          <span className="text-[10px] font-mono font-bold text-white px-1.5 py-0.5 rounded bg-white/10">
+            P2P
           </span>
-        </button>
+        </div>
       </div>
     </aside>
   );

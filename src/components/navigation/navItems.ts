@@ -3,6 +3,7 @@ import {
   Globe2,
   Bell,
   User,
+  Settings,
   Plus
 } from 'lucide-react';
 import { ActiveTab, NostrKeypair } from '../../types';
@@ -56,6 +57,14 @@ export function getNavTabs(
       icon: User,
       accent: '#10B981', // Emerald
       glow: 'shadow-[0_0_14px_#10B98144]',
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      sublabel: 'Vault, Relays & Sync',
+      icon: Settings,
+      accent: '#A855F7', // Purple
+      glow: 'shadow-[0_0_14px_#A855F744]',
     },
   ];
 }

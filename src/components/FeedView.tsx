@@ -74,8 +74,8 @@ export function FeedView({
       pool = pool.filter((e) => isTechRelated(e.content, e.tags));
     } else if (activeFilter === 'media') {
       pool = pool.filter((e) => {
-        const media = extractPostMedia(e.content);
-        return media.images.length > 0 || media.videos.length > 0;
+        const media = extractPostMedia(e.content, e.tags);
+        return media.images.length > 0;
       });
     } else if (activeFilter === 'zapped') {
       pool = pool.filter((e) => (e.zapsCount || 0) > 0 || e.isZapped);
@@ -245,6 +245,26 @@ export function FeedView({
                 <p className="text-white/70 text-xs font-medium max-w-sm m-0">
                   No clean notes matching &ldquo;{searchQuery}&rdquo;
                 </p>
+              </>
+            ) : events.length > 0 && activeFilter !== 'all' ? (
+              <>
+                <h4 className="text-white font-black text-sm uppercase tracking-wider m-0">
+                  No {activeFilter === 'media' ? 'Media' : activeFilter === 'tech' ? 'Tech & Code' : 'Zapped'} Notes Found
+                </h4>
+                <p className="text-white/70 text-xs font-medium max-w-sm m-0">
+                  {activeFilter === 'media'
+                    ? 'No image or photo notes in the current relay stream.'
+                    : activeFilter === 'tech'
+                    ? 'No engineering or developer notes found in the current stream.'
+                    : 'No zapped notes currently loaded in the feed.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveFilter('all')}
+                  className="mt-2 px-4 py-1.5 rounded-[12px] bg-[#161412] hover:bg-[#25221f] border border-white/20 text-white font-bold text-xs transition-all cursor-pointer"
+                >
+                  View All Clean Notes
+                </button>
               </>
             ) : (
               <>
@@ -518,21 +538,13 @@ export function FeedView({
         )}
 
         {/* Infinite Scroll Sentinel & Loader */}
-        <div ref={sentinelRef} className="py-6 flex flex-col items-center justify-center gap-2">
-          {isOlderLoading ? (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#161412] border border-white/20 text-white/70 text-xs font-mono">
-              <Loader2 size={14} className="animate-spin text-[#EC4899]" />
-              <span>Paging older Zups from relay mesh...</span>
+        <div ref={sentinelRef} className="py-4 flex flex-col items-center justify-center min-h-[40px]">
+          {isOlderLoading && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#161412] border border-white/20 text-white/70 text-xs font-mono">
+              <Loader2 size={13} className="animate-spin text-[#EC4899]" />
+              <span>Loading more...</span>
             </div>
-          ) : visibleEvents.length > 0 && visibleEvents.length < filteredEvents.length ? (
-            <div className="text-white/40 text-xs font-mono">
-              Scroll down to reveal more Zups...
-            </div>
-          ) : visibleEvents.length > 0 ? (
-            <div className="text-white/40 text-xs font-mono flex items-center gap-1.5">
-              <span>All caught up with latest relay stream</span>
-            </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

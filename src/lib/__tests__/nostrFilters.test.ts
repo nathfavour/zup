@@ -202,6 +202,17 @@ describe('Nostr Anti-Spam & Waterfall Quality Filters', () => {
       expect(evaluateZupQuality({ content: 'Great advice' }).passes).toBe(false);
       expect(evaluateZupQuality({ content: 'thebaby still here. 👋' }).passes).toBe(false);
     });
+
+    test('rejects Moscow Time bot telemetry and block height tickers', () => {
+      expect(evaluateZupQuality({ content: '12:83 @ 966,330\n#bitcoin\n#moscowtime\n#nostr' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: '12:81 @ 966,329\n#bitcoin\n#moscowtime\n#nostr' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: '12:75 @ 966,256\n#bitcoin\n#moscowtime\n#nostr' }).passes).toBe(false);
+    });
+
+    test('rejects low-signal BIP39 seed word lists and dictionary dumps', () => {
+      expect(evaluateZupQuality({ content: 'stomach\n#bitcoin\n#seed\n#bip39' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'observe\n#bitcoin\n#seed\n#bip39' }).passes).toBe(false);
+    });
   });
 
   describe('isTechRelated', () => {

@@ -52,6 +52,11 @@ const SPAM_SIGNATURES = [
   /Pillbox Hill Medical Center/i,
   /nlogpost:\d+:/i,
   /#swarmmesh/i,
+  // Automated Bitcoin block height & Moscow Time bot telemetry (e.g. "12:83 @ 966,330 #bitcoin #moscowtime")
+  /\b\d{1,2}:\d{2}\s*@\s*\d{3,}(?:,\d{3})*\b/i,
+  /#moscowtime\b/i,
+  // Low-signal BIP39 seed dumps / solitary dictionary word lists (e.g. "stomach #bitcoin #seed #bip39")
+  /^(?:[a-z]{3,12}\s*)+(?:#(?:bitcoin|seed|bip39)\s*){2,}$/i,
   // Low-reputation broadcast duplicate templates
   /Sveiki no E-me prototipa!/i,
   /Stay vigilant with crypto security/i,
@@ -333,7 +338,10 @@ const TECH_KEYWORD_REGEX = new RegExp(
 export function isTechRelated(content: string, tags: string[][] = []): boolean {
   if (!content) return false;
 
-  // 1. Check technical tags
+  // Strip tags and whitespace to measure actual substance
+  const proseWithoutTags = content.replace(/#[a-z0-9_]+/gi, '').replace(URI_REGEX, '').trim();
+
+  // 1. Check technical tags (requires either substantive text or code/link)
   const techTags = new Set([
     'tech', 'technology', 'bitcoin', 'btc', 'lightning', 'nostr', 'dev', 'coding',
     'programming', 'software', 'engineering', 'rust', 'typescript', 'python', 'ai',
@@ -341,25 +349,30 @@ export function isTechRelated(content: string, tags: string[][] = []): boolean {
     'openbricks', 'stem', 'math', 'physics', 'web3', 'p2p', 'open-source', 'foss',
   ]);
 
-  for (const tag of tags) {
-    if (tag[0] === 't' && tag[1] && techTags.has(tag[1].toLowerCase())) {
-      return true;
-    }
-  }
+  const hasTechTag = tags.some((tag) => tag[0] === 't' && tag[1] && techTags.has(tag[1].toLowerCase()));
 
-  // 2. Check content for technical keywords
-  if (TECH_KEYWORD_REGEX.test(content)) {
-    return true;
-  }
-
-  // 3. Code blocks (e.g. ```typescript or inline `code`)
+  // 2. Code blocks (e.g. ```typescript or inline `code`)
   if (content.includes('```') || /`[^`]{3,}`/.test(content)) {
     return true;
   }
 
-  // 4. GitHub / GitLab / ArXiv / Tech domain URLs
+  // 3. GitHub / GitLab / ArXiv / Tech domain URLs
   if (/(?:github\.com|gitlab\.com|arxiv\.org|crates\.io|npmjs\.com|pypi\.org|huggingface\.co)/i.test(content)) {
     return true;
+  }
+
+  // If a tag matched, ensure it is not just a solitary word or bot telemetry
+  if (hasTechTag) {
+    if (proseWithoutTags.length >= 15 || proseWithoutTags.split(/\s+/).length >= 3) {
+      return true;
+    }
+  }
+
+  // 4. Check content for technical keywords
+  if (TECH_KEYWORD_REGEX.test(content)) {
+    if (proseWithoutTags.length >= 10) {
+      return true;
+    }
   }
 
   return false;

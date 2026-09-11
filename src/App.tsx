@@ -238,6 +238,11 @@ export default function App() {
             avatar: active.avatar,
             lud16: active.lud16,
             nip05: active.nip05,
+            followingCount: active.followingCount,
+            followersCount: active.followersCount,
+            broadcastsCount: active.broadcastsCount,
+            reactionsCount: active.reactionsCount,
+            zapsCount: active.zapsCount,
             isEphemeral: false,
             isWatchOnly: active.isWatchOnly,
           });
@@ -815,6 +820,11 @@ export default function App() {
       avatar: identity.avatar,
       lud16: identity.lud16,
       nip05: identity.nip05,
+      followingCount: identity.followingCount,
+      followersCount: identity.followersCount,
+      broadcastsCount: identity.broadcastsCount,
+      reactionsCount: identity.reactionsCount,
+      zapsCount: identity.zapsCount,
       isEphemeral: false,
       isWatchOnly: identity.isWatchOnly,
     };
@@ -1245,6 +1255,11 @@ export default function App() {
             avatar: updated.avatar || '',
             nip05: updated.nip05 || '',
             lud16: updated.lud16 || '',
+            followingCount: updated.followingCount !== undefined ? updated.followingCount : existing.followingCount,
+            followersCount: updated.followersCount !== undefined ? updated.followersCount : existing.followersCount,
+            broadcastsCount: updated.broadcastsCount !== undefined ? updated.broadcastsCount : existing.broadcastsCount,
+            reactionsCount: updated.reactionsCount !== undefined ? updated.reactionsCount : existing.reactionsCount,
+            zapsCount: updated.zapsCount !== undefined ? updated.zapsCount : existing.zapsCount,
           },
         });
       }

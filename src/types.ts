@@ -12,6 +12,11 @@ export interface NostrKeypair {
   avatar?: string;
   nip05?: string;
   lud16?: string;
+  followingCount?: number;
+  followersCount?: number;
+  broadcastsCount?: number;
+  reactionsCount?: number;
+  zapsCount?: number;
 }
 
 export interface EncryptedPayload {
@@ -117,6 +122,11 @@ export interface StoredIdentity {
   avatar?: string;
   nip05?: string;
   lud16?: string;
+  followingCount?: number;
+  followersCount?: number;
+  broadcastsCount?: number;
+  reactionsCount?: number;
+  zapsCount?: number;
   isEphemeral: boolean;
   isWatchOnly: boolean;
   label?: string;

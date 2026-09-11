@@ -33,6 +33,7 @@ import {
   fetchUserNotesFromRelays,
   fetchUserRepliesFromRelays,
   fetchUserReactionsFromRelays,
+  fetchUserContactsFromRelays,
   broadcastEventToRelays,
   signProfileMetadata
 } from '../lib/nostr';
@@ -114,6 +115,18 @@ export function ProfileView({
   const [relayZups, setRelayZups] = useState<NostrEvent[]>([]);
   const [relayReplies, setRelayReplies] = useState<NostrEvent[]>([]);
   const [relayReactions, setRelayReactions] = useState<NostrEvent[]>([]);
+  const [followingCount, setFollowingCount] = useState<number>(keypair.followingCount || 0);
+  const [followersCount, setFollowersCount] = useState<number>(keypair.followersCount || 0);
+
+  // Sync followingCount from keypair if it updates
+  useEffect(() => {
+    if (keypair.followingCount !== undefined) {
+      setFollowingCount(keypair.followingCount);
+    }
+    if (keypair.followersCount !== undefined) {
+      setFollowersCount(keypair.followersCount);
+    }
+  }, [keypair.followingCount, keypair.followersCount]);
 
   // Edit Profile Form State
   const [editDisplayName, setEditDisplayName] = useState(keypair.displayName || '');
@@ -158,7 +171,7 @@ export function ProfileView({
     return () => { isMounted = false; };
   }, [keypair.pubkeyHex, relays]);
 
-  // Fetch user notes and replies directly from relays
+  // Fetch user notes, replies, reactions, and contacts (Kind 3) directly from relays
   useEffect(() => {
     let isMounted = true;
     async function loadRelayActivity() {
@@ -168,10 +181,11 @@ export function ProfileView({
       const queryRelayUrls = writeRelays.length > 0 ? writeRelays : relays.map((r) => r.url);
 
       try {
-        const [notes, replies, reactions] = await Promise.all([
+        const [notes, replies, reactions, contacts] = await Promise.all([
           fetchUserNotesFromRelays(keypair.pubkeyHex, queryRelayUrls),
           fetchUserRepliesFromRelays(keypair.pubkeyHex, queryRelayUrls),
           fetchUserReactionsFromRelays(keypair.pubkeyHex, queryRelayUrls),
+          fetchUserContactsFromRelays(keypair.pubkeyHex, queryRelayUrls),
         ]);
 
         if (isMounted) {
@@ -196,9 +210,26 @@ export function ProfileView({
             repliesCount: 0,
           });
 
-          setRelayZups(notes.map(formatToEvent));
-          setRelayReplies(replies.map(formatToEvent));
-          setRelayReactions(reactions.map(formatToEvent));
+          const formattedNotes = notes.map(formatToEvent);
+          const formattedReplies = replies.map(formatToEvent);
+          const formattedReactions = reactions.map(formatToEvent);
+
+          setRelayZups(formattedNotes);
+          setRelayReplies(formattedReplies);
+          setRelayReactions(formattedReactions);
+          setFollowingCount(contacts.followingCount);
+
+          // Calculate total broadcasts and reactions to persist into local engine
+          const totalBroadcasts = formattedNotes.length;
+          const totalReactions = formattedReactions.length;
+
+          // Immediately persist fresh counts back to RxDB via onUpdateKeypair so next load is instant
+          onUpdateKeypair({
+            ...keypair,
+            followingCount: contacts.followingCount,
+            broadcastsCount: totalBroadcasts,
+            reactionsCount: totalReactions,
+          });
         }
       } catch (err) {
         console.warn('Could not load user activity from relays:', err);
@@ -457,18 +488,32 @@ export function ProfileView({
               </div>
             </div>
 
-            {/* Real Network Counts (No fake followers) */}
-            <div className="flex items-center gap-5 pt-2 text-xs">
+            {/* Real Network Counts (Local Engine cached + Relay refreshed) */}
+            <div className="flex items-center gap-4 sm:gap-5 pt-2 text-xs flex-wrap">
               <div className="flex items-center gap-1">
-                <span className="text-white font-black font-mono">{userZups.length}</span>
+                <span className="text-white font-black font-mono">{followingCount}</span>
+                <span className="text-white/60 font-medium">Following</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-white font-black font-mono">{followersCount}</span>
+                <span className="text-white/60 font-medium">Followers</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-white font-black font-mono">
+                  {userZups.length || keypair.broadcastsCount || 0}
+                </span>
                 <span className="text-white/60 font-medium">Broadcasts</span>
               </div>
               <div className="flex items-center gap-1">
-                <span className="text-white font-black font-mono">{userLikes.length}</span>
+                <span className="text-white font-black font-mono">
+                  {userLikes.length || keypair.reactionsCount || 0}
+                </span>
                 <span className="text-white/60 font-medium">Reactions</span>
               </div>
               <div className="flex items-center gap-1">
-                <span className="text-white font-black font-mono">{userZaps.length}</span>
+                <span className="text-white font-black font-mono">
+                  {userZaps.length || keypair.zapsCount || 0}
+                </span>
                 <span className="text-white/60 font-medium">Zaps Sent</span>
               </div>
             </div>

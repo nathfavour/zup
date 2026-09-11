@@ -496,6 +496,27 @@ export async function fetchUserReactionsFromRelays(pubkeyHex: string, relays: st
 }
 
 /**
+ * Fetch user contact list (Kind 3) for a pubkey to determine follows/following
+ */
+export async function fetchUserContactsFromRelays(pubkeyHex: string, relays: string[]): Promise<{
+  followingPubkeys: string[];
+  followingCount: number;
+}> {
+  const events = await queryRelays(relays, [{ kinds: [3], authors: [pubkeyHex], limit: 1 }], 4000);
+  if (!events.length) {
+    return { followingPubkeys: [], followingCount: 0 };
+  }
+  events.sort((a, b) => b.created_at - a.created_at);
+  const latest = events[0];
+  const pTags = (latest.tags || []).filter((t: string[]) => t[0] === 'p' && t[1]);
+  const followingPubkeys = pTags.map((t: string[]) => t[1]);
+  return {
+    followingPubkeys,
+    followingCount: followingPubkeys.length,
+  };
+}
+
+/**
  * Publish signed event to an array of relay WebSocket URLs
  */
 export async function broadcastEventToRelays(event: any, relayUrls: string[]): Promise<number> {

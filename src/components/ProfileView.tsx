@@ -128,8 +128,9 @@ export function ProfileView({
     let isMounted = true;
     async function loadOnChainProfile() {
       if (!keypair.pubkeyHex) return;
+      const relayUrls = relays.map((r) => r.url);
       try {
-        const onChain = await fetchNostrProfile(keypair.pubkeyHex);
+        const onChain = await fetchNostrProfile(keypair.pubkeyHex, relayUrls);
         if (onChain && isMounted) {
           const updated: NostrKeypair = {
             ...keypair,
@@ -155,7 +156,7 @@ export function ProfileView({
 
     loadOnChainProfile();
     return () => { isMounted = false; };
-  }, [keypair.pubkeyHex]);
+  }, [keypair.pubkeyHex, relays]);
 
   // Fetch user notes and replies directly from relays
   useEffect(() => {

@@ -251,11 +251,24 @@ export function SettingsView({
             </div>
 
             {/* Private Key (nsec) */}
-            <div className="p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col justify-between gap-2 shadow-sm">
+            <div 
+              className={`p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col justify-between gap-2 shadow-sm ${
+                isLocked || !keypair.nsec ? 'cursor-pointer hover:border-[#EC4899]/60 transition-colors' : ''
+              }`}
+              onClick={() => {
+                if (isLocked) {
+                  if (vaultSecurity?.isInitialized) {
+                    onOpenUnlock();
+                  } else {
+                    onOpenSetupEncryption();
+                  }
+                }
+              }}
+            >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-black text-white uppercase tracking-wider">Private Key (nsec)</span>
-                {keypair.nsec && (
-                  <div className="flex items-center gap-2">
+                {keypair.nsec ? (
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => {
@@ -283,7 +296,23 @@ export function SettingsView({
                       <span>{copiedKeySettings === 'nsec' ? 'Copied' : 'Copy nsec'}</span>
                     </button>
                   </div>
-                )}
+                ) : isLocked ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (vaultSecurity?.isInitialized) {
+                        onOpenUnlock();
+                      } else {
+                        onOpenSetupEncryption();
+                      }
+                    }}
+                    className="text-xs font-bold text-[#EC4899] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Unlock size={12} />
+                    <span>Unlock</span>
+                  </button>
+                ) : null}
               </div>
               <p className="font-mono text-xs text-white break-all m-0 select-all font-semibold">
                 {keypair.nsec ? (
@@ -295,7 +324,7 @@ export function SettingsView({
                 ) : isLocked ? (
                   <span className="text-[#F59E0B] text-xs flex items-center gap-1 font-sans font-bold">
                     <Lock size={12} />
-                    Vault locked. Tap unlock above to reveal nsec.
+                    Vault locked. Tap here to unlock and reveal nsec.
                   </span>
                 ) : (
                   <span className="text-white text-xs font-sans font-medium">

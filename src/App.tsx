@@ -242,10 +242,10 @@ export default function App() {
             isWatchOnly: active.isWatchOnly,
           });
 
-          // If identity has generic or placeholder name, immediately query directory relays in background
-          if (active.pubkeyHex && (!active.displayName || active.displayName.includes('Peer') || active.displayName.includes('Anon') || active.displayName.includes('Nostr ('))) {
-            fetchNostrProfile(active.pubkeyHex).then(async (onChain) => {
-              if (onChain && (onChain.displayName || onChain.name)) {
+          // Query directory relays in background to keep Nostr profile metadata up-to-date
+          if (active.pubkeyHex) {
+            fetchNostrProfile(active.pubkeyHex, DEFAULT_RELAYS.map((r) => r.url)).then(async (onChain) => {
+              if (onChain && (onChain.displayName || onChain.name || onChain.avatar)) {
                 const updatedFields = {
                   displayName: onChain.displayName || active.displayName,
                   name: onChain.name || active.name,
@@ -1500,6 +1500,7 @@ export default function App() {
         onClose={() => setIsUnlockOpen(false)}
         securityState={vaultSecurity}
         onUnlocked={handleUnlocked}
+        onSetupEncryption={() => setIsSetupEncryptionOpen(true)}
       />
 
       {/* Import Identity Drawer (nsec, hex, npub, watch-only) */}

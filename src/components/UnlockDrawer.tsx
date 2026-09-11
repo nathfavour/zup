@@ -20,6 +20,7 @@ interface UnlockDrawerProps {
   onClose: () => void;
   securityState: VaultSecurityState | null;
   onUnlocked: (mek: Uint8Array) => void;
+  onSetupEncryption?: () => void;
 }
 
 export function UnlockDrawer({
@@ -27,6 +28,7 @@ export function UnlockDrawer({
   onClose,
   securityState,
   onUnlocked,
+  onSetupEncryption,
 }: UnlockDrawerProps) {
   const hasPasskeys = (securityState?.passkeys?.length || 0) > 0;
   const [selectedPasskeyId, setSelectedPasskeyId] = useState<string>(
@@ -53,7 +55,57 @@ export function UnlockDrawer({
     }
   }, [isOpen, hasPasskeys, preferPassword]);
 
-  if (!securityState) return null;
+  if (!isOpen) return null;
+
+  // If vault encryption hasn't been configured yet, render prompt to initialize master password
+  if (!securityState) {
+    return (
+      <TactileDrawer
+        id="unlock-vault-drawer"
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Sovereign Vault Gate"
+        subtitle="Zero-knowledge Argon2id master key security"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="p-4 rounded-[18px] bg-[#000000] border border-white/20 flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-[14px] bg-[#F59E0B]/15 text-[#F59E0B] flex items-center justify-center border border-[#F59E0B]/40">
+                <Lock size={18} />
+              </div>
+              <div>
+                <h4 className="text-white font-black text-xs uppercase tracking-wider m-0">
+                  Vault Not Encrypted
+                </h4>
+                <p className="text-white/60 text-[11px] font-mono mt-0.5 m-0 font-medium">
+                  Initialize master password to seal keys
+                </p>
+              </div>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30 text-[9px] font-mono font-black">
+              UNINITIALIZED
+            </span>
+          </div>
+
+          <p className="text-white/70 text-xs leading-relaxed m-0 font-medium">
+            Your cryptographic keys are currently unencrypted in memory. Set up a master password and optional biometric passkeys to seal your credentials with Argon2id + AES-256-GCM encryption.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              if (onSetupEncryption) onSetupEncryption();
+            }}
+            className="w-full py-3.5 rounded-[16px] bg-[#EC4899] hover:bg-[#db2777] text-white font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_14px_#EC489944]"
+          >
+            <KeyRound size={15} strokeWidth={2.5} />
+            <span>Setup Master Password & Passkeys</span>
+          </button>
+        </div>
+      </TactileDrawer>
+    );
+  }
 
   const handlePasskeyUnlock = async (passkeyToUse?: PasskeyRecord) => {
     setError(null);

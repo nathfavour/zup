@@ -42,26 +42,26 @@ export function TactileDrawer({
     ? 'h-[100dvh]'
     : isExpanded
     ? 'h-[100dvh]'
-    : 'h-[60dvh] max-h-[60dvh]';
+    : 'h-[85dvh] max-h-[90dvh]';
 
   return (
     <>
       {/* Mobile Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/80 md:hidden backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 z-[60] bg-black/80 md:hidden backdrop-blur-sm transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Surface: Fixed 60dvh max / 100dvh on mobile, Native Right Sidebar on Desktop */}
+      {/* Surface: Native Mobile Bottom Sheet / Native Right Sidebar on Desktop */}
       <div
         id={id}
-        className={`fixed z-50 transition-all duration-200 bg-[#161412] flex flex-col border-white/20
-          /* Mobile: Bottom drawer with max/ideal height 60dvh or 100dvh for fullscreen */
-          bottom-0 left-0 right-0 max-w-full overflow-hidden border-t md:border-t-0
+        className={`fixed z-[70] transition-all duration-300 bg-[#161412] flex flex-col border-white/20
+          /* Mobile: Bottom drawer with responsive height, rounded-t */
+          bottom-0 left-0 right-0 max-w-full overflow-hidden border-t rounded-t-[28px] md:rounded-t-none md:rounded-l-[28px] md:border-t-0
           ${mobileHeight}
-          /* Desktop: Native right sidebar */
-          md:top-0 md:bottom-0 md:right-0 md:left-auto md:w-[440px] md:h-full md:border-l md:shadow-2xl
+          /* Desktop: Native right sidebar beneath topbar */
+          md:top-[72px] md:bottom-0 md:right-0 md:left-auto md:w-[440px] md:h-[calc(100vh-72px)] md:border-l md:shadow-2xl
         `}
       >
         {/* Top Minimalist Header Layer with Standardized 3-Slot Actions + Leading Back */}

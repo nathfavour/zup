@@ -335,7 +335,7 @@ export function signProfileMetadata(
 export async function queryRelays(
   relays: string[],
   filters: Record<string, unknown>[],
-  timeoutMs = 4000
+  timeoutMs = 5000
 ): Promise<any[]> {
   if (typeof WebSocket === 'undefined' || relays.length === 0) return [];
 
@@ -343,9 +343,12 @@ export async function queryRelays(
   const sockets: WebSocket[] = [];
 
   const queryPromise = new Promise<any[]>((resolve) => {
-    let pendingCount = relays.length;
+    let respondedRelays = 0;
+    let isDone = false;
 
     const finish = () => {
+      if (isDone) return;
+      isDone = true;
       sockets.forEach((ws) => {
         try { ws.close(); } catch { /* ignore */ }
       });
@@ -373,8 +376,8 @@ export async function queryRelays(
             if (data[0] === 'EVENT' && data[2]?.id) {
               byId.set(data[2].id, data[2]);
             } else if (data[0] === 'EOSE') {
-              pendingCount--;
-              if (pendingCount <= 0) {
+              respondedRelays++;
+              if (respondedRelays >= relays.length) {
                 clearTimeout(timer);
                 finish();
               }
@@ -385,23 +388,23 @@ export async function queryRelays(
         };
 
         ws.onerror = () => {
-          pendingCount--;
-          if (pendingCount <= 0) {
+          respondedRelays++;
+          if (respondedRelays >= relays.length) {
             clearTimeout(timer);
             finish();
           }
         };
 
         ws.onclose = () => {
-          pendingCount--;
-          if (pendingCount <= 0) {
+          respondedRelays++;
+          if (respondedRelays >= relays.length) {
             clearTimeout(timer);
             finish();
           }
         };
       } catch {
-        pendingCount--;
-        if (pendingCount <= 0) {
+        respondedRelays++;
+        if (respondedRelays >= relays.length) {
           clearTimeout(timer);
           finish();
         }
@@ -423,6 +426,8 @@ export async function fetchNostrProfile(pubkeyHex: string, extraRelays: string[]
   nip05?: string;
   lud16?: string;
 } | null> {
+  if (!pubkeyHex) return null;
+
   const directoryRelays = Array.from(new Set([
     'wss://purplepag.es',
     'wss://user.kindpag.es',
@@ -430,29 +435,36 @@ export async function fetchNostrProfile(pubkeyHex: string, extraRelays: string[]
     'wss://nos.lol',
     'wss://relay.primal.net',
     'wss://relay.nostr.band',
+    'wss://relay.snort.social',
     ...extraRelays,
   ]));
 
-  const events = await queryRelays(directoryRelays, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }], 3000);
+  const events = await queryRelays(directoryRelays, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }], 4000);
   if (!events.length) return null;
 
   // Pick the newest event
   events.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
-  const latest = events[0];
-  try {
-    const meta = JSON.parse(latest.content);
-    const resolvedAvatar = meta.picture || meta.image || meta.avatar || undefined;
-    return {
-      name: meta.name || meta.username,
-      displayName: meta.display_name || meta.displayName || meta.name,
-      about: meta.about || meta.bio,
-      avatar: resolvedAvatar,
-      nip05: meta.nip05,
-      lud16: meta.lud16 || meta.lud06,
-    };
-  } catch {
-    return null;
+  for (const ev of events) {
+    try {
+      const meta = JSON.parse(ev.content);
+      const resolvedAvatar = meta.picture || meta.image || meta.avatar || undefined;
+      const resolvedName = meta.name || meta.username || undefined;
+      const resolvedDisplay = meta.display_name || meta.displayName || resolvedName;
+      if (resolvedName || resolvedDisplay || resolvedAvatar || meta.about) {
+        return {
+          name: resolvedName,
+          displayName: resolvedDisplay,
+          about: meta.about || meta.bio || undefined,
+          avatar: resolvedAvatar,
+          nip05: meta.nip05 || undefined,
+          lud16: meta.lud16 || meta.lud06 || undefined,
+        };
+      }
+    } catch {
+      // try next
+    }
   }
+  return null;
 }
 
 /**

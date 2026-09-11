@@ -325,6 +325,13 @@ const TECH_KEYWORDS = [
   'openbricks', 'tailwind', 'frontend', 'backend', 'fullstack', 'compiler', 'git', 'github',
   'commit', 'deploy', 'production', 'architecture', 'distributed', 'p2p', 'webrtc',
   'stem', 'physics', 'math', 'quantum', 'algorithm', 'data structure', 'latency', 'benchmark',
+  'web', 'web3', 'app', 'apps', 'build', 'building', 'builder', 'builders', 'stack',
+  'ui', 'ux', 'data', 'server', 'servers', 'cloud', 'npm', 'bun', 'vite', 'react',
+  'node', 'nodejs', 'model', 'prompt', 'privacy', 'open-source', 'opensource', 'foss',
+  'framework', 'library', 'terminal', 'bash', 'ssh', 'network', 'dns', 'ip', 'vpn',
+  'tor', 'onion', 'security', 'cyber', 'protocol', 'cyberpunk', 'cypherpunk', 'key',
+  'keys', 'nodes', 'sat', 'pay', 'zaps', 'zap', 'sql', 'db', 'tech', 'technology',
+  'computer', 'computers', 'computing', 'sysadmin', 'devops', 'ci', 'cd', 'pipeline',
 ];
 
 const TECH_KEYWORD_REGEX = new RegExp(
@@ -338,18 +345,19 @@ const TECH_KEYWORD_REGEX = new RegExp(
 export function isTechRelated(content: string, tags: string[][] = []): boolean {
   if (!content) return false;
 
-  // Strip tags and whitespace to measure actual substance
-  const proseWithoutTags = content.replace(/#[a-z0-9_]+/gi, '').replace(URI_REGEX, '').trim();
-
-  // 1. Check technical tags (requires either substantive text or code/link)
+  // 1. Check technical tags
   const techTags = new Set([
     'tech', 'technology', 'bitcoin', 'btc', 'lightning', 'nostr', 'dev', 'coding',
     'programming', 'software', 'engineering', 'rust', 'typescript', 'python', 'ai',
     'ml', 'llm', 'crypto', 'cryptography', 'security', 'hardware', 'linux', 'kernel',
     'openbricks', 'stem', 'math', 'physics', 'web3', 'p2p', 'open-source', 'foss',
+    'build', 'builder', 'cyberpunk', 'cypherpunk', 'privacy', 'zup', 'zap', 'zaps',
   ]);
 
   const hasTechTag = tags.some((tag) => tag[0] === 't' && tag[1] && techTags.has(tag[1].toLowerCase()));
+  if (hasTechTag) {
+    return true;
+  }
 
   // 2. Code blocks (e.g. ```typescript or inline `code`)
   if (content.includes('```') || /`[^`]{3,}`/.test(content)) {
@@ -357,22 +365,13 @@ export function isTechRelated(content: string, tags: string[][] = []): boolean {
   }
 
   // 3. GitHub / GitLab / ArXiv / Tech domain URLs
-  if (/(?:github\.com|gitlab\.com|arxiv\.org|crates\.io|npmjs\.com|pypi\.org|huggingface\.co)/i.test(content)) {
+  if (/(?:github\.com|gitlab\.com|arxiv\.org|crates\.io|npmjs\.com|pypi\.org|huggingface\.co|replit\.com|stackoverflow\.com)/i.test(content)) {
     return true;
-  }
-
-  // If a tag matched, ensure it is not just a solitary word or bot telemetry
-  if (hasTechTag) {
-    if (proseWithoutTags.length >= 15 || proseWithoutTags.split(/\s+/).length >= 3) {
-      return true;
-    }
   }
 
   // 4. Check content for technical keywords
   if (TECH_KEYWORD_REGEX.test(content)) {
-    if (proseWithoutTags.length >= 10) {
-      return true;
-    }
+    return true;
   }
 
   return false;

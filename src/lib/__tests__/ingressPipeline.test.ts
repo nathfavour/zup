@@ -149,7 +149,7 @@ describe('Tier 1 Ingress Pipeline', () => {
       expect(decision.score).toBeGreaterThanOrEqual(80);
     });
 
-    it('purges root note from hop 3 stranger with zero economic staking and no NIP-05', () => {
+    it('buffers root note from hop 3 stranger with zero economic staking and no NIP-05 for quality evaluation', () => {
       const event = {
         id: 'ev2',
         pubkey: 'stranger999999999999999999999999999999999999999999999999999999999999',
@@ -159,7 +159,7 @@ describe('Tier 1 Ingress Pipeline', () => {
         content: 'I am a completely unknown root poster with zero zaps and no verification.',
       };
       const decision = processIngressFunnel(event, mockWot, { lifetimeZapsSats: 0, hasNip05: false });
-      expect(decision.action).toBe('purge');
+      expect(decision.action).toBe('buffer');
     });
 
     it('admits root note from hop 3 stranger if verified by NIP-05 or >= 1000 sats zaps', () => {

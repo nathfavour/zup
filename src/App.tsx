@@ -31,7 +31,8 @@ import { getDatabase, ZupDatabase } from './lib/db';
 import { 
   encryptSecret, 
   decryptSecret,
-  masterPassCrypto 
+  masterPassCrypto,
+  generateMEK
 } from './lib/crypto';
 import { syncEngine } from './lib/syncEngine';
 import { kylrixOAuth } from './lib/kylrixOAuth';
@@ -128,11 +129,16 @@ export default function App() {
       let resolvedPrivHex: string | undefined;
       let resolvedNsec: string | undefined;
 
-      if (mek && active?.encryptedPrivkeyHex) {
+      let activeMek = mek;
+      if (!activeMek) {
+        activeMek = masterPassCrypto.getMEK();
+      }
+
+      if (activeMek && active?.encryptedPrivkeyHex) {
         try {
-          resolvedPrivHex = await decryptSecret(active.encryptedPrivkeyHex, mek);
+          resolvedPrivHex = await decryptSecret(active.encryptedPrivkeyHex, activeMek);
           if (active.encryptedNsec) {
-            resolvedNsec = await decryptSecret(active.encryptedNsec, mek);
+            resolvedNsec = await decryptSecret(active.encryptedNsec, activeMek);
           }
         } catch (err) {
           console.warn('Could not decrypt stored private key:', err);
@@ -140,8 +146,12 @@ export default function App() {
       }
 
       setKeypair((prev) => {
-        const nextPriv = resolvedPrivHex || prev.privkeyHex;
-        let nextNsec = resolvedNsec || prev.nsec;
+        let nextPriv: string | undefined = resolvedPrivHex;
+        if (!nextPriv && prev.pubkeyHex === active.pubkeyHex && prev.privkeyHex) {
+          nextPriv = prev.privkeyHex;
+        }
+
+        let nextNsec: string | undefined = resolvedNsec;
         if (!nextNsec && nextPriv) {
           try {
             nextNsec = nip19.nsecEncode(hexToBytes(nextPriv));
@@ -150,11 +160,24 @@ export default function App() {
           }
         }
 
-        if (nextPriv === prev.privkeyHex && nextNsec === prev.nsec) return prev;
         return {
-          ...prev,
+          id: active.id,
+          pubkeyHex: active.pubkeyHex,
+          npub: active.npub,
           privkeyHex: nextPriv,
           nsec: nextNsec,
+          name: active.name,
+          displayName: active.displayName,
+          about: active.about,
+          avatar: active.avatar,
+          nip05: active.nip05,
+          lud16: active.lud16,
+          followingCount: active.followingCount,
+          followersCount: active.followersCount,
+          broadcastsCount: active.broadcastsCount,
+          reactionsCount: active.reactionsCount,
+          zapsCount: active.zapsCount,
+          isEphemeral: false,
           isWatchOnly: active.isWatchOnly,
         };
       });
@@ -188,15 +211,41 @@ export default function App() {
 
         // A. Check Vault Security State
         const secDoc = await database.vault_security.findOne('primary_vault_security').exec();
+        let isSecInitialized = false;
         if (secDoc) {
           const sec = secDoc.toJSON() as VaultSecurityState;
           setVaultSecurity(sec);
+          isSecInitialized = Boolean(sec.isInitialized);
           if (masterPassCrypto.hasMEK()) {
             setMek(masterPassCrypto.getMEK());
             setIsVaultLocked(false);
           } else {
             setIsVaultLocked(true);
           }
+        }
+
+        // If vault security is not initialized yet, retrieve or create session MEK
+        if (!isSecInitialized && !masterPassCrypto.hasMEK()) {
+          let sessionHex: string | null = null;
+          try {
+            sessionHex = sessionStorage.getItem('zup_session_mek');
+          } catch {
+            // ignore
+          }
+          let sessionMek: Uint8Array;
+          if (sessionHex) {
+            sessionMek = hexToBytes(sessionHex);
+          } else {
+            sessionMek = generateMEK();
+            try {
+              sessionStorage.setItem('zup_session_mek', bytesToHex(sessionMek));
+            } catch {
+              // ignore
+            }
+          }
+          masterPassCrypto.setMEK(sessionMek);
+          setMek(sessionMek);
+          setIsVaultLocked(false);
         }
 
         // Keep tabs in sync with MasterPassCrypto volatile MEK
@@ -269,7 +318,32 @@ export default function App() {
           }
         } else {
           // Seed initial default identity
+          let activeMek = masterPassCrypto.getMEK();
+          if (!activeMek) {
+            activeMek = generateMEK();
+            masterPassCrypto.setMEK(activeMek);
+            setMek(activeMek);
+            try {
+              sessionStorage.setItem('zup_session_mek', bytesToHex(activeMek));
+            } catch {
+              // ignore
+            }
+          }
+
           const fresh = createNewKeypair(false);
+          let encPriv: string | undefined;
+          let encNsec: string | undefined;
+          if (fresh.privkeyHex && activeMek) {
+            try {
+              encPriv = await encryptSecret(fresh.privkeyHex, activeMek);
+              if (fresh.nsec) {
+                encNsec = await encryptSecret(fresh.nsec, activeMek);
+              }
+            } catch (err) {
+              console.warn('Initial identity encryption warning:', err);
+            }
+          }
+
           const initialStored: StoredIdentity = {
             id: `id_${fresh.pubkeyHex.slice(0, 10)}_${Date.now()}`,
             pubkeyHex: fresh.pubkeyHex,
@@ -279,6 +353,8 @@ export default function App() {
             avatar: fresh.avatar,
             isEphemeral: false,
             isWatchOnly: false,
+            encryptedPrivkeyHex: encPriv,
+            encryptedNsec: encNsec,
             createdAt: Date.now(),
             lastActiveAt: Date.now(),
           };
@@ -290,7 +366,10 @@ export default function App() {
           } catch {
             // ignore
           }
-          setKeypair(fresh);
+          setKeypair({
+            ...fresh,
+            id: initialStored.id,
+          });
         }
 
         // C. Initial Notes Snapshot from RxDB (prevents feed from jumping on background writes)
@@ -711,19 +790,43 @@ export default function App() {
     if (db) {
       await db.vault_security.upsert(securityState);
 
-      // Encrypt existing stored identities that have privkey
-      if (keypair.privkeyHex) {
-        const encPriv = await encryptSecret(keypair.privkeyHex, unlockedMEK);
-        const encNsec = keypair.nsec ? await encryptSecret(keypair.nsec, unlockedMEK) : undefined;
-        
-        const activeStored = storedIdentities.find((i) => i.id === activeIdentityId);
-        if (activeStored) {
-          await db.identities.upsert({
-            ...activeStored,
-            encryptedPrivkeyHex: encPriv,
-            encryptedNsec: encNsec,
+      // Re-encrypt all stored identities with the new Master Password MEK
+      const allIdentities = await db.identities.find().exec();
+      for (const idDoc of allIdentities) {
+        const item = idDoc.toJSON() as StoredIdentity;
+        let privHexToEncrypt: string | undefined;
+        let nsecToEncrypt: string | undefined;
+
+        if (item.encryptedPrivkeyHex && mek) {
+          try {
+            privHexToEncrypt = await decryptSecret(item.encryptedPrivkeyHex, mek);
+            if (item.encryptedNsec) {
+              nsecToEncrypt = await decryptSecret(item.encryptedNsec, mek);
+            }
+          } catch {
+            // ignore
+          }
+        }
+        if (!privHexToEncrypt && item.pubkeyHex === keypair.pubkeyHex && keypair.privkeyHex) {
+          privHexToEncrypt = keypair.privkeyHex;
+          nsecToEncrypt = keypair.nsec;
+        }
+
+        if (privHexToEncrypt) {
+          const newEncPriv = await encryptSecret(privHexToEncrypt, unlockedMEK);
+          const newEncNsec = nsecToEncrypt ? await encryptSecret(nsecToEncrypt, unlockedMEK) : undefined;
+          await idDoc.update({
+            $set: {
+              encryptedPrivkeyHex: newEncPriv,
+              encryptedNsec: newEncNsec,
+            },
           });
         }
+      }
+      try {
+        sessionStorage.removeItem('zup_session_mek');
+      } catch {
+        // ignore
       }
     }
 
@@ -1243,26 +1346,86 @@ export default function App() {
   };
 
   const handleUpdateKeypair = async (updated: NostrKeypair) => {
-    setKeypair(updated);
-    if (db && activeIdentityId) {
-      const existing = await db.identities.findOne(activeIdentityId).exec();
-      if (existing) {
-        await existing.update({
-          $set: {
-            displayName: updated.displayName || '',
-            name: updated.name || '',
-            about: updated.about || '',
-            avatar: updated.avatar || '',
-            nip05: updated.nip05 || '',
-            lud16: updated.lud16 || '',
-            followingCount: updated.followingCount !== undefined ? updated.followingCount : existing.followingCount,
-            followersCount: updated.followersCount !== undefined ? updated.followersCount : existing.followersCount,
-            broadcastsCount: updated.broadcastsCount !== undefined ? updated.broadcastsCount : existing.broadcastsCount,
-            reactionsCount: updated.reactionsCount !== undefined ? updated.reactionsCount : existing.reactionsCount,
-            zapsCount: updated.zapsCount !== undefined ? updated.zapsCount : existing.zapsCount,
-          },
-        });
+    let currentMek = mek;
+    if (!currentMek) {
+      currentMek = masterPassCrypto.getMEK();
+    }
+
+    const existing = storedIdentities.find(
+      (i) => i.pubkeyHex === updated.pubkeyHex || i.id === activeIdentityId
+    );
+
+    let encPriv: string | undefined;
+    let encNsec: string | undefined;
+
+    if (updated.privkeyHex && currentMek) {
+      try {
+        encPriv = await encryptSecret(updated.privkeyHex, currentMek);
+        if (updated.nsec) {
+          encNsec = await encryptSecret(updated.nsec, currentMek);
+        }
+      } catch (err) {
+        console.warn('Could not encrypt private key for updated keypair:', err);
       }
+    }
+
+    if (existing && existing.pubkeyHex === updated.pubkeyHex) {
+      // Update existing identity metadata & keys
+      const updatedStored: StoredIdentity = {
+        ...existing,
+        name: updated.name || existing.name,
+        displayName: updated.displayName || existing.displayName,
+        about: updated.about !== undefined ? updated.about : existing.about,
+        avatar: updated.avatar !== undefined ? updated.avatar : existing.avatar,
+        nip05: updated.nip05 !== undefined ? updated.nip05 : existing.nip05,
+        lud16: updated.lud16 !== undefined ? updated.lud16 : existing.lud16,
+        encryptedPrivkeyHex: encPriv || existing.encryptedPrivkeyHex,
+        encryptedNsec: encNsec || existing.encryptedNsec,
+        lastActiveAt: Date.now(),
+      };
+
+      if (db) {
+        await db.identities.upsert(updatedStored);
+      }
+      setStoredIdentities((prev) =>
+        prev.map((i) => (i.id === existing.id ? updatedStored : i))
+      );
+      setKeypair({
+        ...updated,
+        id: existing.id,
+      });
+    } else {
+      // Create a brand new StoredIdentity for the new keypair
+      const newStored: StoredIdentity = {
+        id: `id_${updated.pubkeyHex.slice(0, 10)}_${Date.now()}`,
+        pubkeyHex: updated.pubkeyHex,
+        npub: updated.npub,
+        name: updated.name || `Anon_${updated.pubkeyHex.slice(0, 5)}`,
+        displayName: updated.displayName || 'Sovereign Peer',
+        about: updated.about,
+        avatar: updated.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${updated.pubkeyHex}`,
+        isEphemeral: Boolean(updated.isEphemeral),
+        isWatchOnly: Boolean(updated.isWatchOnly),
+        encryptedPrivkeyHex: encPriv,
+        encryptedNsec: encNsec,
+        createdAt: Date.now(),
+        lastActiveAt: Date.now(),
+      };
+
+      if (db) {
+        await db.identities.upsert(newStored);
+      }
+      setStoredIdentities((prev) => [newStored, ...prev.filter((i) => i.id !== newStored.id)]);
+      setActiveIdentityId(newStored.id);
+      try {
+        localStorage.setItem('zup_active_identity_id', newStored.id);
+      } catch {
+        // ignore
+      }
+      setKeypair({
+        ...updated,
+        id: newStored.id,
+      });
     }
   };
 
@@ -1417,7 +1580,7 @@ export default function App() {
           {activeTab === 'vault' && (
             <VaultView
               keypair={keypair}
-              onUpdateKeypair={setKeypair}
+              onUpdateKeypair={handleUpdateKeypair}
               onOpenPro={() => {
                 setProFeatureName('Hardware Signer Amber Bridge');
                 setIsProOpen(true);

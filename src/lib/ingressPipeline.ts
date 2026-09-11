@@ -42,12 +42,18 @@ export function evaluateWireLayer(event: {
     return { drop: true, reason: 'clock_drift_too_old' };
   }
 
-  // 2. Kind 1 Payload Density Constraints:
+  // 2. Kind 1 Payload Density & Script Constraints:
   if (kind === 1) {
     const trimmedLen = content.trim().length;
     const hasMediaTag = tags.some((t) => t[0] === 'imeta' || t[0] === 'url');
     if (trimmedLen === 0 && !hasMediaTag) {
       return { drop: true, reason: 'empty_payload_no_media' };
+    }
+
+    // Drop non-Latin / CJK script blasts at wire level (English-only client policy)
+    const cjkMatches = content.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\u0400-\u04ff]/g);
+    if (cjkMatches && cjkMatches.length >= 4) {
+      return { drop: true, reason: 'non_english_script' };
     }
   }
 

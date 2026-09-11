@@ -237,6 +237,36 @@ export function isGibberish(content: string): boolean {
   return false;
 }
 
+// CJK Unified Ideographs, Hiragana, Katakana, Hangul, Cyrillic, Arabic
+const NON_LATIN_SCRIPT_REGEX = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f\uac00-\ud7af\u0400-\u04ff\u0600-\u06ff]/g;
+
+/**
+ * Validates that content is predominantly English / Latin-script text.
+ * Drops posts dominated by CJK (Chinese, Japanese, Korean), Cyrillic, or non-English scripts.
+ */
+export function isNonEnglish(content: string): boolean {
+  if (!content) return false;
+  // Strip URLs and nostr links before evaluating characters
+  const clean = content.replace(URI_REGEX, '').trim();
+  if (clean.length < 4) return false;
+
+  const nonLatinMatches = clean.match(NON_LATIN_SCRIPT_REGEX) || [];
+  const nonLatinCount = nonLatinMatches.length;
+
+  // If there are more than 3 non-Latin/CJK characters and they make up > 15% of non-whitespace text
+  const nonSpaceLength = clean.replace(/\s+/g, '').length;
+  if (nonSpaceLength > 0 && nonLatinCount >= 3 && (nonLatinCount / nonSpaceLength) > 0.15) {
+    return true;
+  }
+
+  // Also drop if post has any significant CJK text (>= 6 characters)
+  if (nonLatinCount >= 6) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Comprehensive Zup Quality Validator.
  */
@@ -247,6 +277,14 @@ export function evaluateZupQuality(event: {
 }): FilterResult {
   const content = event.content || '';
   const tags = event.tags || [];
+
+  if (isNonEnglish(content)) {
+    return {
+      passes: false,
+      reason: 'gibberish',
+      details: 'Filtered out: Non-English script detected (English-only client policy).',
+    };
+  }
 
   if (isUriPacked(content)) {
     return {

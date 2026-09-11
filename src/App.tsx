@@ -291,7 +291,9 @@ export default function App() {
         // C. Initial Notes Snapshot from RxDB (prevents feed from jumping on background writes)
         const initialNotes = await database.notes.find().exec();
         if (initialNotes && initialNotes.length > 0) {
-          const mapped = initialNotes.map((d) => d.toJSON() as NostrEvent);
+          const mapped = initialNotes
+            .map((d) => d.toJSON() as NostrEvent)
+            .filter((e) => evaluateZupQuality(e).passes);
           mapped.sort((a, b) => b.created_at - a.created_at);
           setEvents(mapped);
           visibleEventsCountRef.current = mapped.length;

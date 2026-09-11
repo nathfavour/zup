@@ -163,20 +163,24 @@ describe('Nostr Anti-Spam & Waterfall Quality Filters', () => {
       expect(result.passes).toBe(true);
     });
 
-    test('rejects simulated seed spam events', () => {
-      const spamEvent1 = {
-        content:
-          '🚨 URGENT FREE 10,000 TOKEN AIRDROP! Connect your seed phrase now at free-tokens-claim.xyz to verify your wallet!! 💸🚀',
-        tags: [['t', 'airdrop']],
+    test('rejects non-English / CJK posts (English-only client policy)', () => {
+      const cjkSpam1 = {
+        content: 'わりと可愛くて笑う',
+        tags: [],
       };
-      expect(evaluateZupQuality(spamEvent1).passes).toBe(false);
+      expect(evaluateZupQuality(cjkSpam1).passes).toBe(false);
 
-      const spamEvent2 = {
-        content:
-          'Join our VIP signal group on t.me/pump100x_signals for guaranteed 500% daily returns on leverage trading!! Click fast!',
-        tags: [['t', 'crypto']],
+      const cjkSpam2 = {
+        content: '高市早苗のバックにいる「神道政治連盟」のクソ老害ども。明治時代の価値観を2026年の日本人に押し付けて、女性の権利や多様性を徹底的に弾圧しようとするカルト右翼。高市はその最高の人形。',
+        tags: [],
       };
-      expect(evaluateZupQuality(spamEvent2).passes).toBe(false);
+      expect(evaluateZupQuality(cjkSpam2).passes).toBe(false);
+
+      const cjkSpam3 = {
+        content: '靖国神社――それは殺人狂たちの隔離病棟だ。そこへ行く連中は、狂人たちの集まりに過ぎない。',
+        tags: [],
+      };
+      expect(evaluateZupQuality(cjkSpam3).passes).toBe(false);
     });
   });
 

@@ -237,30 +237,128 @@ export function isGibberish(content: string): boolean {
   return false;
 }
 
-// CJK Unified Ideographs, Hiragana, Katakana, Hangul, Cyrillic, Arabic
-const NON_LATIN_SCRIPT_REGEX = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f\uac00-\ud7af\u0400-\u04ff\u0600-\u06ff]/g;
+// CJK Unified Ideographs, Hiragana, Katakana, Hangul, Cyrillic, Arabic, Hebrew, Thai
+const NON_LATIN_SCRIPT_REGEX = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f\uac00-\ud7af\u0400-\u04ff\u0600-\u06ff\u0590-\u05ff\u0e00-\u0e7f]/g;
 
 /**
  * Validates that content is predominantly English / Latin-script text.
- * Drops posts dominated by CJK (Chinese, Japanese, Korean), Cyrillic, or non-English scripts.
+ * Drops posts containing CJK (Chinese, Japanese, Korean), Cyrillic, Arabic, or non-English scripts.
  */
 export function isNonEnglish(content: string): boolean {
   if (!content) return false;
   // Strip URLs and nostr links before evaluating characters
   const clean = content.replace(URI_REGEX, '').trim();
-  if (clean.length < 4) return false;
+  if (clean.length === 0) return false;
 
-  const nonLatinMatches = clean.match(NON_LATIN_SCRIPT_REGEX) || [];
-  const nonLatinCount = nonLatinMatches.length;
-
-  // If there are more than 3 non-Latin/CJK characters and they make up > 15% of non-whitespace text
-  const nonSpaceLength = clean.replace(/\s+/g, '').length;
-  if (nonSpaceLength > 0 && nonLatinCount >= 3 && (nonLatinCount / nonSpaceLength) > 0.15) {
+  // STRICT: Any CJK / Japanese (Hiragana/Katakana) / Korean (Hangul) character drops the post immediately
+  const cjkMatches = clean.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f\uac00-\ud7af]/g);
+  if (cjkMatches && cjkMatches.length > 0) {
     return true;
   }
 
-  // Also drop if post has any significant CJK text (>= 6 characters)
-  if (nonLatinCount >= 6) {
+  // Check general non-Latin scripts (Cyrillic, Arabic, Hebrew, Thai, etc.)
+  const nonLatinMatches = clean.match(NON_LATIN_SCRIPT_REGEX) || [];
+  const nonLatinCount = nonLatinMatches.length;
+  if (nonLatinCount > 0) {
+    const nonSpaceLength = clean.replace(/\s+/g, '').length;
+    if (nonSpaceLength > 0 && (nonLatinCount >= 3 || nonLatinCount / nonSpaceLength > 0.15)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Regex for low-effort greetings, signoffs, and trivial single-word/short conversational noise.
+ */
+const LOW_EFFORT_GREETING_REGEX = /^(?:gm|gmorning|good\s*morning|good\s*afternoon|good\s*evening|good\s*night|gn|bom\s*dia|buenos\s*dias|welcome\s*back|hello\s*(?:world|nostr)?|hi\s*all|hey\s*all|pv)[\s\p{Emoji}\p{Punctuation}]*$/iu;
+
+const LOW_EFFORT_AFFIRMATION_REGEX = /^(?:yes|no|yep|nope|true|agreed|interesting|well\s*said|100%|💯|fuck\s*yea[h!]*(?:\s*boii+)?|horny\s*hmu|tnx[\s\w]*|thanks|great\s*advice|nice|cool|morning\s*lemon|thebaby\s*still\s*here|wainscot|lifting\s*of\s*the\s*veil|gm\s*lemon[\s\p{Emoji}]*)[\s\p{Punctuation}\p{Emoji}]*$/iu;
+
+/**
+ * Checks if a note is a low-effort greeting, zero-context one-liner, or trivial noise.
+ */
+export function isLowEffortGreetingOrNoise(content: string): boolean {
+  if (!content) return false;
+  const clean = content.replace(URI_REGEX, '').trim();
+  if (clean.length === 0) return false;
+
+  // Exact match on low-effort greetings
+  if (LOW_EFFORT_GREETING_REGEX.test(clean)) {
+    return true;
+  }
+
+  // Exact match on low-effort affirmations or noise
+  if (LOW_EFFORT_AFFIRMATION_REGEX.test(clean)) {
+    return true;
+  }
+
+  // Specific user-reported spam phrases
+  if (/^morning\s+lemon/i.test(clean) || /^horny\s+hmu/i.test(clean) || /^bom\s+dia\s+#nostr/i.test(clean)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * High-signal technical keywords dictionary.
+ */
+const TECH_KEYWORDS = [
+  'code', 'coding', 'developer', 'dev', 'devs', 'software', 'engineer', 'engineering',
+  'ai', 'llm', 'gpt', 'anthropic', 'claude', 'deepseek', 'gemini', 'transformer',
+  'machine learning', 'neural', 'weights', 'inference', 'rag', 'agent', 'agents',
+  'nostr', 'relay', 'relays', 'nip-', 'nip05', 'nip19', 'npub', 'nsec', 'kind',
+  'btc', 'bitcoin', 'sats', 'satoshis', 'lightning', 'ln', 'ecash', 'cashu', 'fedimint',
+  'crypto', 'cryptography', 'e2ee', 'encryption', 'hash', 'sha256', 'argon2', 'aes',
+  'rust', 'typescript', 'javascript', 'python', 'golang', 'c++', 'zig', 'wasm',
+  'linux', 'kernel', 'ebpf', 'xdp', 'posix', 'systemd', 'docker', 'kubernetes',
+  'database', 'rxdb', 'sqlite', 'postgres', 'redis', 'appwrite', 'duckdb',
+  'api', 'http', 'rest', 'websocket', 'grpc', 'graphql', 'oauth', 'passkey', 'webauthn',
+  'hardware', 'cpu', 'gpu', 'asic', 'fpga', 'riscv', 'arm', 'firmware',
+  'openbricks', 'tailwind', 'frontend', 'backend', 'fullstack', 'compiler', 'git', 'github',
+  'commit', 'deploy', 'production', 'architecture', 'distributed', 'p2p', 'webrtc',
+  'stem', 'physics', 'math', 'quantum', 'algorithm', 'data structure', 'latency', 'benchmark',
+];
+
+const TECH_KEYWORD_REGEX = new RegExp(
+  `\\b(?:${TECH_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')).join('|')})\\b`,
+  'i'
+);
+
+/**
+ * Validates if an event belongs to the Tech / STEM ecosystem.
+ */
+export function isTechRelated(content: string, tags: string[][] = []): boolean {
+  if (!content) return false;
+
+  // 1. Check technical tags
+  const techTags = new Set([
+    'tech', 'technology', 'bitcoin', 'btc', 'lightning', 'nostr', 'dev', 'coding',
+    'programming', 'software', 'engineering', 'rust', 'typescript', 'python', 'ai',
+    'ml', 'llm', 'crypto', 'cryptography', 'security', 'hardware', 'linux', 'kernel',
+    'openbricks', 'stem', 'math', 'physics', 'web3', 'p2p', 'open-source', 'foss',
+  ]);
+
+  for (const tag of tags) {
+    if (tag[0] === 't' && tag[1] && techTags.has(tag[1].toLowerCase())) {
+      return true;
+    }
+  }
+
+  // 2. Check content for technical keywords
+  if (TECH_KEYWORD_REGEX.test(content)) {
+    return true;
+  }
+
+  // 3. Code blocks (e.g. ```typescript or inline `code`)
+  if (content.includes('```') || /`[^`]{3,}`/.test(content)) {
+    return true;
+  }
+
+  // 4. GitHub / GitLab / ArXiv / Tech domain URLs
+  if (/(?:github\.com|gitlab\.com|arxiv\.org|crates\.io|npmjs\.com|pypi\.org|huggingface\.co)/i.test(content)) {
     return true;
   }
 
@@ -283,6 +381,14 @@ export function evaluateZupQuality(event: {
       passes: false,
       reason: 'gibberish',
       details: 'Filtered out: Non-English script detected (English-only client policy).',
+    };
+  }
+
+  if (isLowEffortGreetingOrNoise(content)) {
+    return {
+      passes: false,
+      reason: 'gibberish',
+      details: 'Filtered out: Low-effort greeting or trivial conversational noise.',
     };
   }
 

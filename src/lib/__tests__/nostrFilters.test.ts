@@ -6,6 +6,7 @@ import {
   isGibberish,
   evaluateZupQuality,
   sanitizeZupContent,
+  isTechRelated,
 } from '../nostrFilters';
 
 describe('Nostr Anti-Spam & Waterfall Quality Filters', () => {
@@ -181,6 +182,46 @@ describe('Nostr Anti-Spam & Waterfall Quality Filters', () => {
         tags: [],
       };
       expect(evaluateZupQuality(cjkSpam3).passes).toBe(false);
+
+      // Short CJK (<= 3 chars)
+      expect(evaluateZupQuality({ content: '絶望的' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'おかし' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: '冬こい' }).passes).toBe(false);
+    });
+
+    test('rejects low-effort greetings and conversational noise', () => {
+      expect(evaluateZupQuality({ content: 'Morning lemon 🥰🥰' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'GM 🍋🌄' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'Gm' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'Gmorning' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'PV 🤙🏼🍀☕' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'Horny hmu' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'Bom dia #nostr\n#nostr' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'Yes' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'True' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'Great advice' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'thebaby still here. 👋' }).passes).toBe(false);
+    });
+  });
+
+  describe('isTechRelated', () => {
+    test('identifies technical content by keywords, code blocks, or tags', () => {
+      expect(
+        isTechRelated(
+          'Replaced our ingress proxy with an eBPF XDP filter written in Rust. Kernel context switches dropped by 92%.'
+        )
+      ).toBe(true);
+
+      expect(isTechRelated('Check out this commit: ```const a = 1;```')).toBe(true);
+
+      expect(isTechRelated('Great perspective on monetary economics', [['t', 'bitcoin']])).toBe(true);
+      expect(isTechRelated('Building on open-source relays', [['t', 'nostr']])).toBe(true);
+    });
+
+    test('rejects generic non-tech noise', () => {
+      expect(isTechRelated('I love eating apples and bananas')).toBe(false);
+      expect(isTechRelated('Going to the beach today with my dog')).toBe(false);
+      expect(isTechRelated('What is everyone having for lunch?')).toBe(false);
     });
   });
 

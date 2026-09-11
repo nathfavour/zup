@@ -52,7 +52,7 @@ export function evaluateWireLayer(event: {
 
     // Drop non-Latin / CJK script blasts at wire level (English-only client policy)
     const cjkMatches = content.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\u0400-\u04ff]/g);
-    if (cjkMatches && cjkMatches.length >= 4) {
+    if (cjkMatches && cjkMatches.length >= 1) {
       return { drop: true, reason: 'non_english_script' };
     }
   }

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { FeedFilter, NostrEvent, NostrKeypair } from '../types';
 import { formatTimeAgo, formatTruncatedKey } from '../lib/nostr';
-import { evaluateZupQuality, sanitizeZupContent } from '../lib/nostrFilters';
+import { evaluateZupQuality, sanitizeZupContent, isTechRelated } from '../lib/nostrFilters';
 import { extractPostMedia } from '../lib/momentMedia';
 
 interface FeedViewProps {
@@ -52,6 +52,8 @@ export function FeedView({
   onLoadNewEvents,
   onLoadOlderEvents,
   isOlderLoading = false,
+  activeFilter = 'tech',
+  onSelectFilter,
   blockedSpamCount = 0,
 }: FeedViewProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -66,6 +68,18 @@ export function FeedView({
   // 1. Filter events cleanly (Quality Shield always protects in background)
   const filteredEvents = useMemo(() => {
     let pool = events.filter((e) => evaluateZupQuality(e).passes);
+
+    // Apply active category / feed filter
+    if (activeFilter === 'tech') {
+      pool = pool.filter((e) => isTechRelated(e.content, e.tags));
+    } else if (activeFilter === 'media') {
+      pool = pool.filter((e) => {
+        const media = extractPostMedia(e.content);
+        return media.images.length > 0 || media.videos.length > 0;
+      });
+    } else if (activeFilter === 'zapped') {
+      pool = pool.filter((e) => (e.zapsCount || 0) > 0 || e.isZapped);
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -83,7 +97,7 @@ export function FeedView({
     }
 
     return pool;
-  }, [events, searchQuery]);
+  }, [events, activeFilter, searchQuery]);
 
   // 2. Slice for infinite scrolling
   const visibleEvents = useMemo(() => {
@@ -171,6 +185,36 @@ export function FeedView({
           </button>
         )}
       </div>
+
+      {/* Filter Tabs (OpenBricks Tactile Pills) */}
+      {onSelectFilter && (
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          {(
+            [
+              { id: 'tech', label: 'Tech & Code' },
+              { id: 'all', label: 'All Clean' },
+              { id: 'media', label: 'Media' },
+              { id: 'zapped', label: '⚡ Zapped' },
+            ] as const
+          ).map((tab) => {
+            const isActive = activeFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onSelectFilter(tab.id)}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                  isActive
+                    ? 'bg-[#161412] text-white border-white/40 shadow-sm'
+                    : 'bg-transparent text-white/60 hover:text-white border-white/10 hover:border-white/20'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Ephemeral Floating Refresh Bubble (Only shows when there are newer posts user hasn't seen) */}
       {newEventsCount > 0 && (

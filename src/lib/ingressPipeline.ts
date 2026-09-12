@@ -262,8 +262,9 @@ export function calculateIngressScore(meta: IngressScoringMetadata): IngressDeci
     score += 40;
     reasons.push('+40: Followed by Follows (Hop 2)');
   } else {
-    score -= 30;
-    reasons.push('-30: Disconnected / Hop 3+');
+    // Neutral distance penalty for Hop 3+ strangers on public relays
+    score -= 10;
+    reasons.push('-10: Public Relay Peer / Hop 3+');
   }
 
   // 2. DNS Verification (NIP-05)
@@ -276,9 +277,6 @@ export function calculateIngressScore(meta: IngressScoringMetadata): IngressDeci
   if (meta.lifetimeZapsSats >= 1000) {
     score += 20;
     reasons.push('+20: Economic Anchor >= 1,000 sats');
-  } else if (meta.lifetimeZapsSats === 0 && !meta.hasNip05) {
-    score -= 15;
-    reasons.push('-15: 0 Sats Transacted and No NIP-05');
   }
 
   // 4. Negative Signals
@@ -341,17 +339,6 @@ export function processIngressFunnel(
 
   // Layer 2: WoT Distance
   const distance = getHopDistance(rawEvent.pubkey, wotState);
-
-  // If root post and author is > 2 hops away, require economic anchor or NIP-05
-  const isReply = rawEvent.tags.some((t) => t[0] === 'e');
-  const hasEconomicProof = (meta.lifetimeZapsSats || 0) >= 1000 || Boolean(meta.hasNip05);
-  if (!isReply && distance > 2 && !hasEconomicProof) {
-    return {
-      score: -50,
-      action: 'purge',
-      reasons: ['Layer 2: Hop > 2 with 0 economic staking/NIP-05 on root note'],
-    };
-  }
 
   // Layer 3: Heuristics & SimHash
   const simhash = compute64BitSimHash(rawEvent.content);

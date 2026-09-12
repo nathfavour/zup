@@ -227,6 +227,10 @@ describe('Nostr Anti-Spam & Waterfall Quality Filters', () => {
 
       expect(isTechRelated('Great perspective on monetary economics', [['t', 'bitcoin']])).toBe(true);
       expect(isTechRelated('Building on open-source relays', [['t', 'nostr']])).toBe(true);
+      expect(isTechRelated('New release v1.2 with Bun and React 19 support!')).toBe(true);
+      expect(isTechRelated('Testing Appwrite and RxDB local database sync.')).toBe(true);
+      expect(isTechRelated('Privacy-first client-side encryption with Argon2id.')).toBe(true);
+      expect(isTechRelated('Deploying new Nostr relay node.')).toBe(true);
     });
 
     test('rejects generic non-tech noise', () => {

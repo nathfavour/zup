@@ -260,7 +260,7 @@ export function FeedView({
                 </p>
                 <button
                   type="button"
-                  onClick={() => setActiveFilter('all')}
+                  onClick={() => onSelectFilter?.('all')}
                   className="mt-2 px-4 py-1.5 rounded-[12px] bg-[#161412] hover:bg-[#25221f] border border-white/20 text-white font-bold text-xs transition-all cursor-pointer"
                 >
                   View All Clean Notes

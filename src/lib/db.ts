@@ -289,16 +289,16 @@ export async function getDatabase(): Promise<ZupDatabase> {
         db = await createRxDatabase<ZupDatabaseCollections>({
           name: 'zup_cypher_db_v1',
           storage: getRxStorageDexie(),
-          multiInstance: false,
-          closeDuplicates: true,
+          multiInstance: true,
+          ignoreDuplicate: true,
         });
       } catch (storageErr) {
         console.warn('Dexie storage failed or unavailable, falling back to memory storage:', storageErr);
         db = await createRxDatabase<ZupDatabaseCollections>({
-          name: `zup_cypher_db_fallback_${Date.now()}`,
+          name: 'zup_cypher_db_fallback',
           storage: getRxStorageMemory(),
-          multiInstance: false,
-          closeDuplicates: true,
+          multiInstance: true,
+          ignoreDuplicate: true,
         });
       }
 

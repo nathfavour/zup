@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { 
   Zap, 
   Wallet, 
@@ -64,7 +64,7 @@ export function WalletView({
     setTimeout(() => setCopiedInvoice(false), 2000);
   };
 
-  const handleConnectNWC = (e: React.FormEvent) => {
+  const handleConnectNWC = (e: FormEvent) => {
     e.preventDefault();
     if (!nwcUri.trim()) return;
     setIsNwcConnected(true);

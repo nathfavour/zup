@@ -206,8 +206,8 @@ export function isGibberish(content: string): boolean {
   const npubCount = (trimmed.match(/npub1[a-z0-9]{58}/gi) || []).length;
   if (npubCount >= 2 && trimmed.length < 300) return true;
 
-  // 4. Keyboard mash / string repetition slop (e.g. "asdfghjasdfghjasdfghjasdfghjasdfghj" or "123123123123123")
-  if (/(.{2,8})\1{4,}/i.test(trimmed)) return true;
+  // 4. Keyboard mash / string repetition slop (e.g. "asdfghjasdfghjasdfghjasdfghjasdfghj")
+  if (/([a-z0-9]{4,10})\1{4,}/i.test(trimmed)) return true;
 
   // 5. Unending digits / dangling broken URL path fragments (e.g., isolated standalone "609101/" or long digit gibberish)
   if (/(?:^|\s)\d{5,}\/(?:\s|$)/.test(trimmed)) return true;
@@ -255,9 +255,9 @@ export function isNonEnglish(content: string): boolean {
   const clean = content.replace(URI_REGEX, '').trim();
   if (clean.length === 0) return false;
 
-  // STRICT: Any CJK / Japanese (Hiragana/Katakana) / Korean (Hangul) character drops the post immediately
+  // CJK / Japanese (Hiragana/Katakana) / Korean (Hangul) script flood check
   const cjkMatches = clean.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f\uac00-\ud7af]/g);
-  if (cjkMatches && cjkMatches.length > 0) {
+  if (cjkMatches && cjkMatches.length >= 6) {
     return true;
   }
 
@@ -279,7 +279,7 @@ export function isNonEnglish(content: string): boolean {
  */
 const LOW_EFFORT_GREETING_REGEX = /^(?:gm|gmorning|good\s*morning|good\s*afternoon|good\s*evening|good\s*night|gn|bom\s*dia|buenos\s*dias|welcome\s*back|hello\s*(?:world|nostr)?|hi\s*all|hey\s*all|pv)[\s\p{Emoji}\p{Punctuation}]*$/iu;
 
-const LOW_EFFORT_AFFIRMATION_REGEX = /^(?:yes|no|yep|nope|true|agreed|interesting|well\s*said|100%|💯|fuck\s*yea[h!]*(?:\s*boii+)?|horny\s*hmu|tnx[\s\w]*|thanks|great\s*advice|nice|cool|morning\s*lemon|thebaby\s*still\s*here|wainscot|lifting\s*of\s*the\s*veil|gm\s*lemon[\s\p{Emoji}]*)[\s\p{Punctuation}\p{Emoji}]*$/iu;
+const LOW_EFFORT_AFFIRMATION_REGEX = /^(?:yes|no|yep|nope|true|agreed|interesting|well\s*said|100%|💯|fuck\s*yea[h!]*(?:\s*boii+)?|horny\s*hmu|tnx[\s\w]*|thanks|great\s*advice|nice|cool|morning\s*lemon|thebaby\s*still\s*here|wainscot|lifting\s*of\s*the\s*veil|gm\s*lemon|test|testing|check|hello|hi|hey|yo|sup|lol|lmao|so|okay|ok|first|words)[\s\p{Punctuation}\p{Emoji}]*$/iu;
 
 /**
  * Checks if a note is a low-effort greeting, zero-context one-liner, or trivial noise.

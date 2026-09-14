@@ -1,5 +1,6 @@
 import { Bell, Wallet } from 'lucide-react';
 import { NostrKeypair } from '../types';
+import { generateLocalIdenticon } from '../lib/nostr';
 import { ZupLogo } from './ZupLogo';
 
 interface HeaderProps {
@@ -94,7 +95,7 @@ export function Header({
             aria-label="Sovereign Profile"
           >
             <img
-              src={keypair.avatar}
+              src={keypair.avatar || generateLocalIdenticon(keypair.pubkeyHex || 'anon')}
               alt={keypair.name || 'Profile'}
               className="w-full h-full rounded-full object-cover bg-black"
             />

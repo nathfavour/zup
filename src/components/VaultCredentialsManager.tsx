@@ -27,6 +27,7 @@ import {
   encryptMEKWithPassword,
   createPasskeyRecord,
   testPasskeyAssertion,
+  masterPassCrypto,
   ARGON2_CONFIG,
 } from '../lib/crypto';
 
@@ -361,8 +362,8 @@ export function VaultCredentialsManager({
 
     setIsInitializing(true);
     try {
-      const mek = generateMEK();
-      const wrapped = await encryptMEKWithPassword(mek, initPassword);
+      const activeMek = mek || masterPassCrypto.getMEK() || generateMEK();
+      const wrapped = await encryptMEKWithPassword(activeMek, initPassword);
 
       const securityState: VaultSecurityState = {
         id: 'primary_vault_security',
@@ -381,7 +382,7 @@ export function VaultCredentialsManager({
 
       onUpdateVaultSecurity(securityState);
       if (onUnlocked) {
-        onUnlocked(mek);
+        onUnlocked(activeMek);
       }
       setIsInitializing(false);
       setShowInlineInit(false);

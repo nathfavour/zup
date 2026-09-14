@@ -48,4 +48,21 @@ describe('Sovereign Identity Key Management & Persistence', () => {
     const derivedPub = getPublicKey(hexToBytes(decryptedPriv));
     expect(derivedPub).toBe(kp.pubkeyHex);
   });
+
+  test('re-encrypting stored secret with same active MEK maintains decryption consistency', async () => {
+    const activeMek = generateMEK();
+    const kp = createNewKeypair(false);
+
+    // Initial encryption with active MEK
+    const initialEncrypted = await encryptSecret(kp.privkeyHex!, activeMek);
+
+    // Verify decryption with active MEK
+    const decryptedFirst = await decryptSecret(initialEncrypted, activeMek);
+    expect(decryptedFirst).toBe(kp.privkeyHex);
+
+    // Re-encrypting with active MEK (e.g. on vault security update)
+    const reencrypted = await encryptSecret(decryptedFirst, activeMek);
+    const decryptedSecond = await decryptSecret(reencrypted, activeMek);
+    expect(decryptedSecond).toBe(kp.privkeyHex);
+  });
 });

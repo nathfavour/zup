@@ -37,6 +37,7 @@ import {
   broadcastEventToRelays,
   signProfileMetadata
 } from '../lib/nostr';
+import { syncEngine } from '../lib/syncEngine';
 import { extractPostMedia } from '../lib/momentMedia';
 import { ProfileSettingsDrawer } from './ProfileSettingsDrawer';
 
@@ -141,6 +142,9 @@ export function ProfileView({
     let isMounted = true;
     async function loadOnChainProfile() {
       if (!keypair.pubkeyHex) return;
+      // Do not overwrite local user profile changes if pending sync to on-chain
+      if (keypair.id && syncEngine.isPending(keypair.id)) return;
+
       const relayUrls = relays.map((r) => r.url);
       try {
         const onChain = await fetchNostrProfile(keypair.pubkeyHex, relayUrls);
@@ -218,6 +222,7 @@ export function ProfileView({
           setRelayReplies(formattedReplies);
           setRelayReactions(formattedReactions);
           setFollowingCount(contacts.followingCount);
+          setFollowersCount(contacts.followersCount);
 
           // Calculate total broadcasts and reactions to persist into local engine
           const totalBroadcasts = formattedNotes.length;
@@ -227,6 +232,7 @@ export function ProfileView({
           onUpdateKeypair({
             ...keypair,
             followingCount: contacts.followingCount,
+            followersCount: contacts.followersCount,
             broadcastsCount: totalBroadcasts,
             reactionsCount: totalReactions,
           });

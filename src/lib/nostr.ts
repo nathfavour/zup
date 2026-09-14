@@ -416,7 +416,75 @@ export async function queryRelays(
 }
 
 /**
- * Fetch Kind 0 profile metadata for a pubkey from directory relays and default relays
+ * Fetch account profile stats (followers, following, metadata) from Primal Cache REST API
+ */
+export async function fetchPrimalAccountStats(pubkeyHex: string): Promise<{
+  followersCount?: number;
+  followingCount?: number;
+  profile?: {
+    name?: string;
+    displayName?: string;
+    about?: string;
+    avatar?: string;
+    nip05?: string;
+    lud16?: string;
+  };
+} | null> {
+  if (!pubkeyHex) return null;
+  try {
+    const response = await fetch('https://cache2.primal.net/api', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(['user_profile', { pubkey: pubkeyHex }]),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!Array.isArray(data)) return null;
+
+    let followersCount: number | undefined;
+    let followingCount: number | undefined;
+    let profile: { name?: string; displayName?: string; about?: string; avatar?: string; nip05?: string; lud16?: string } | undefined;
+
+    for (const item of data) {
+      if (item.kind === 10000105 && item.content) {
+        try {
+          const stats = JSON.parse(item.content);
+          if (typeof stats.followers_count === 'number') followersCount = stats.followers_count;
+          if (typeof stats.follows_count === 'number') followingCount = stats.follows_count;
+        } catch {
+          // ignore
+        }
+      } else if (item.kind === 0 && item.content) {
+        try {
+          const meta = JSON.parse(item.content);
+          const resolvedAvatar = meta.picture || meta.image || meta.avatar || undefined;
+          const resolvedName = meta.name || meta.username || undefined;
+          const resolvedDisplay = meta.display_name || meta.displayName || resolvedName;
+          profile = {
+            name: resolvedName,
+            displayName: resolvedDisplay,
+            about: meta.about || meta.bio || undefined,
+            avatar: resolvedAvatar,
+            nip05: meta.nip05 || undefined,
+            lud16: meta.lud16 || meta.lud06 || undefined,
+          };
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    if (followersCount !== undefined || followingCount !== undefined || profile) {
+      return { followersCount, followingCount, profile };
+    }
+  } catch (err) {
+    console.warn('Primal API account lookup fallback failed:', err);
+  }
+  return null;
+}
+
+/**
+ * Fetch Kind 0 profile metadata for a pubkey from directory relays and default relays with Primal fallback
  */
 export async function fetchNostrProfile(pubkeyHex: string, extraRelays: string[] = []): Promise<{
   name?: string;
@@ -440,30 +508,37 @@ export async function fetchNostrProfile(pubkeyHex: string, extraRelays: string[]
   ]));
 
   const events = await queryRelays(directoryRelays, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }], 4000);
-  if (!events.length) return null;
-
-  // Pick the newest event
-  events.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
-  for (const ev of events) {
-    try {
-      const meta = JSON.parse(ev.content);
-      const resolvedAvatar = meta.picture || meta.image || meta.avatar || undefined;
-      const resolvedName = meta.name || meta.username || undefined;
-      const resolvedDisplay = meta.display_name || meta.displayName || resolvedName;
-      if (resolvedName || resolvedDisplay || resolvedAvatar || meta.about) {
-        return {
-          name: resolvedName,
-          displayName: resolvedDisplay,
-          about: meta.about || meta.bio || undefined,
-          avatar: resolvedAvatar,
-          nip05: meta.nip05 || undefined,
-          lud16: meta.lud16 || meta.lud06 || undefined,
-        };
+  if (events.length) {
+    // Pick the newest event
+    events.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    for (const ev of events) {
+      try {
+        const meta = JSON.parse(ev.content);
+        const resolvedAvatar = meta.picture || meta.image || meta.avatar || undefined;
+        const resolvedName = meta.name || meta.username || undefined;
+        const resolvedDisplay = meta.display_name || meta.displayName || resolvedName;
+        if (resolvedName || resolvedDisplay || resolvedAvatar || meta.about) {
+          return {
+            name: resolvedName,
+            displayName: resolvedDisplay,
+            about: meta.about || meta.bio || undefined,
+            avatar: resolvedAvatar,
+            nip05: meta.nip05 || undefined,
+            lud16: meta.lud16 || meta.lud06 || undefined,
+          };
+        }
+      } catch {
+        // try next
       }
-    } catch {
-      // try next
     }
   }
+
+  // Fall back to Primal API if relay query returned nothing or missing metadata
+  const primalData = await fetchPrimalAccountStats(pubkeyHex);
+  if (primalData?.profile) {
+    return primalData.profile;
+  }
+
   return null;
 }
 
@@ -501,18 +576,44 @@ export async function fetchUserReactionsFromRelays(pubkeyHex: string, relays: st
 export async function fetchUserContactsFromRelays(pubkeyHex: string, relays: string[]): Promise<{
   followingPubkeys: string[];
   followingCount: number;
+  followersCount: number;
 }> {
-  const events = await queryRelays(relays, [{ kinds: [3], authors: [pubkeyHex], limit: 1 }], 4000);
-  if (!events.length) {
-    return { followingPubkeys: [], followingCount: 0 };
+  const eventsPromise = queryRelays(relays, [{ kinds: [3], authors: [pubkeyHex], limit: 1 }], 4000);
+  const followerEventsPromise = queryRelays(relays, [{ kinds: [3], '#p': [pubkeyHex], limit: 200 }], 4000);
+  const primalPromise = fetchPrimalAccountStats(pubkeyHex);
+
+  const [events, followerEvents, primalData] = await Promise.all([
+    eventsPromise,
+    followerEventsPromise,
+    primalPromise,
+  ]);
+
+  let followingPubkeys: string[] = [];
+  let followingCount = 0;
+  let followersCount = followerEvents.length;
+
+  if (events.length) {
+    events.sort((a, b) => b.created_at - a.created_at);
+    const latest = events[0];
+    const pTags = (latest.tags || []).filter((t: string[]) => t[0] === 'p' && t[1]);
+    followingPubkeys = pTags.map((t: string[]) => t[1]);
+    followingCount = followingPubkeys.length;
   }
-  events.sort((a, b) => b.created_at - a.created_at);
-  const latest = events[0];
-  const pTags = (latest.tags || []).filter((t: string[]) => t[0] === 'p' && t[1]);
-  const followingPubkeys = pTags.map((t: string[]) => t[1]);
+
+  // Fall back to or augment with Primal account stats if Primal returned higher accurate numbers
+  if (primalData) {
+    if (typeof primalData.followersCount === 'number' && primalData.followersCount > followersCount) {
+      followersCount = primalData.followersCount;
+    }
+    if (typeof primalData.followingCount === 'number' && !events.length) {
+      followingCount = primalData.followingCount;
+    }
+  }
+
   return {
     followingPubkeys,
-    followingCount: followingPubkeys.length,
+    followingCount,
+    followersCount,
   };
 }
 

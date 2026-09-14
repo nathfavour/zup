@@ -2,6 +2,43 @@ import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools';
 import * as nip19 from 'nostr-tools/nip19';
 import { NostrEvent, NostrKeypair, RelayInfo } from '../types';
 
+/**
+ * Generate a local, offline SVG identicon data URI from any pubkey/seed
+ * Eliminates external network fetches (e.g. Dicebear) to save data & battery.
+ */
+export function generateLocalIdenticon(seed: string): string {
+  if (!seed) seed = 'anonymous';
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+    hash |= 0;
+  }
+
+  const hue1 = Math.abs(hash) % 360;
+  const hue2 = (hue1 + 140) % 360;
+  const c1 = `hsl(${hue1}, 75%, 60%)`;
+  const c2 = `hsl(${hue2}, 85%, 45%)`;
+  const bg = `hsl(${(hue1 + 220) % 360}, 25%, 12%)`;
+
+  let rects = '';
+  for (let x = 0; x < 3; x++) {
+    for (let y = 0; y < 5; y++) {
+      const charIndex = (x * 5 + y) % seed.length;
+      const val = seed.charCodeAt(charIndex) + hash;
+      if (val % 2 === 0) {
+        const fill = (x + y) % 2 === 0 ? c1 : c2;
+        rects += `<rect x="${x * 20}" y="${y * 20}" width="20" height="20" fill="${fill}"/>`;
+        if (x < 2) {
+          rects += `<rect x="${(4 - x) * 20}" y="${y * 20}" width="20" height="20" fill="${fill}"/>`;
+        }
+      }
+    }
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" fill="${bg}"/>${rects}</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 export function bytesToHex(bytes: Uint8Array): string {
   let hex = '';
   for (let i = 0; i < bytes.length; i++) {
@@ -105,7 +142,7 @@ export function createNewKeypair(isEphemeral: boolean = false): NostrKeypair {
     name: isEphemeral ? `Ghost_${pubHex.slice(0, 5)}` : `Anon_${pubHex.slice(0, 5)}`,
     displayName: isEphemeral ? 'Burner Identity' : 'Sovereign Peer',
     about: isEphemeral ? 'Ephemeral zero-trace burner identity on Zup.' : 'Decentralized Nostr entity on Zup.',
-    avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubHex}`,
+    avatar: generateLocalIdenticon(pubHex),
   };
 }
 
@@ -128,7 +165,7 @@ export function importKey(input: string): NostrKeypair | null {
           isEphemeral: false,
           name: `nostr_${pubHex.slice(0, 8)}`,
           displayName: `Nostr (${pubHex.slice(0, 6)}...${pubHex.slice(-4)})`,
-          avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubHex}`,
+          avatar: generateLocalIdenticon(pubHex),
         };
       }
     } else if (trimmed.startsWith('npub1')) {
@@ -141,7 +178,7 @@ export function importKey(input: string): NostrKeypair | null {
           isEphemeral: false,
           name: `watch_${pubHex.slice(0, 8)}`,
           displayName: `Watch (${pubHex.slice(0, 6)}...${pubHex.slice(-4)})`,
-          avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubHex}`,
+          avatar: generateLocalIdenticon(pubHex),
         };
       }
     } else if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
@@ -159,7 +196,7 @@ export function importKey(input: string): NostrKeypair | null {
           isEphemeral: false,
           name: `Hex_${pubHex.slice(0, 6)}`,
           displayName: 'Key Import',
-          avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubHex}`,
+          avatar: generateLocalIdenticon(pubHex),
         };
       } catch {
         // Assume hex is public key
@@ -170,7 +207,7 @@ export function importKey(input: string): NostrKeypair | null {
           isEphemeral: false,
           name: `Pub_${trimmed.slice(0, 6)}`,
           displayName: 'Public Peer',
-          avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${trimmed}`,
+          avatar: generateLocalIdenticon(trimmed),
         };
       }
     }
@@ -497,17 +534,10 @@ export async function fetchNostrProfile(pubkeyHex: string, extraRelays: string[]
   if (!pubkeyHex) return null;
 
   const directoryRelays = Array.from(new Set([
-    'wss://purplepag.es',
-    'wss://user.kindpag.es',
-    'wss://relay.damus.io',
-    'wss://nos.lol',
-    'wss://relay.primal.net',
-    'wss://relay.nostr.band',
-    'wss://relay.snort.social',
-    ...extraRelays,
-  ]));
+    ...(extraRelays.length > 0 ? extraRelays : ['wss://purplepag.es', 'wss://user.kindpag.es', 'wss://relay.damus.io']),
+  ])).slice(0, 3);
 
-  const events = await queryRelays(directoryRelays, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }], 4000);
+  const events = await queryRelays(directoryRelays, [{ kinds: [0], authors: [pubkeyHex], limit: 1 }], 2500);
   if (events.length) {
     // Pick the newest event
     events.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));

@@ -13,7 +13,7 @@ import {
   Zap
 } from 'lucide-react';
 import { TactileDrawer } from './TactileDrawer';
-import { importKey, formatTruncatedKey, fetchNostrProfile } from '../lib/nostr';
+import { importKey, formatTruncatedKey, fetchNostrProfile, generateLocalIdenticon } from '../lib/nostr';
 import { encryptSecret } from '../lib/crypto';
 import { StoredIdentity, NostrKeypair } from '../types';
 
@@ -196,7 +196,7 @@ export function ImportIdentityDrawer({
         {parsedKeypair && (
           <div className="p-3.5 rounded-[18px] bg-[#000000] border-2 border-[#10B981] shadow-[0_0_12px_#10B98133] flex items-center gap-3">
             <img
-              src={parsedKeypair.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${parsedKeypair.pubkeyHex}`}
+              src={parsedKeypair.avatar || generateLocalIdenticon(parsedKeypair.pubkeyHex)}
               alt="Preview"
               className="w-10 h-10 rounded-full border border-white/20 bg-black shrink-0 object-cover"
             />

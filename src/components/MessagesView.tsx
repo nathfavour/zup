@@ -9,7 +9,7 @@ import {
   User 
 } from 'lucide-react';
 import { DirectMessageThread, NostrKeypair } from '../types';
-import { formatTimeAgo, formatTruncatedKey } from '../lib/nostr';
+import { formatTimeAgo, formatTruncatedKey, generateLocalIdenticon } from '../lib/nostr';
 
 interface MessagesViewProps {
   threads: DirectMessageThread[];
@@ -153,7 +153,7 @@ export function MessagesView({
                   <img
                     src={
                       thread.peerAvatar ||
-                      `https://api.dicebear.com/7.x/identicon/svg?seed=${thread.peerPubkey}`
+                      generateLocalIdenticon(thread.peerPubkey)
                     }
                     alt={thread.peerName}
                     className="w-10 h-10 rounded-full border border-white/20 bg-black shrink-0 object-cover"
@@ -200,7 +200,7 @@ export function MessagesView({
                   <img
                     src={
                       activeThread.peerAvatar ||
-                      `https://api.dicebear.com/7.x/identicon/svg?seed=${activeThread.peerPubkey}`
+                      generateLocalIdenticon(activeThread.peerPubkey)
                     }
                     alt={activeThread.peerName}
                     className="w-8 h-8 rounded-full border border-white/20 bg-black shrink-0"

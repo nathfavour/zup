@@ -293,7 +293,7 @@ class KylrixOAuthManager {
     const userId = `kylrix_usr_${bytesToHex(generateRandomBytes(6))}`;
     const name = customName?.trim() || 'Kylrix Sovereign';
     const email = customEmail?.trim() || 'sovereign@kylrix.space';
-    const avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${userId}`;
+    const avatar = generateLocalIdenticon(userId);
 
     const profile: KylrixProfile = {
       userId,

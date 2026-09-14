@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { NostrEvent, NostrKeypair, RelayInfo } from '../types';
 import { TactileDrawer } from './TactileDrawer';
-import { formatTimeAgo, formatTruncatedKey, pubkeyToNpub } from '../lib/nostr';
+import { formatTimeAgo, formatTruncatedKey, pubkeyToNpub, generateLocalIdenticon } from '../lib/nostr';
 import { sanitizeZupContent } from '../lib/nostrFilters';
 import { extractPostMedia } from '../lib/momentMedia';
 
@@ -25,6 +25,7 @@ interface PostDetailDrawerProps {
   onClose: () => void;
   keypair: NostrKeypair;
   relays: RelayInfo[];
+  activeSocketsMap?: Map<string, WebSocket>;
   onLikeEvent: (eventId: string) => void;
   onRepostEvent: (eventId: string) => void;
   onOpenZap: (event: NostrEvent) => void;
@@ -37,6 +38,7 @@ export function PostDetailDrawer({
   onClose,
   keypair,
   relays,
+  activeSocketsMap,
   onLikeEvent,
   onRepostEvent,
   onOpenZap,
@@ -74,78 +76,80 @@ export function PostDetailDrawer({
     let reposts = post.repostsCount || 0;
     let zaps = post.zapsCount || 0;
 
-    const activeSockets: WebSocket[] = [];
+    const subId = `post_detail_${post.id.slice(0, 8)}`;
+    const subMessage = JSON.stringify([
+      'REQ',
+      subId,
+      { kinds: [1, 6, 7, 9735], '#e': [post.id], limit: 50 },
+    ]);
+    const closeMessage = JSON.stringify(['CLOSE', subId]);
+    const activeListeners: { ws: WebSocket; listener: (ev: MessageEvent) => void }[] = [];
 
-    relays.forEach((relay) => {
-      if (relay.status !== 'connected' && relay.status !== 'connecting') return;
+    const handleMessage = (url: string, msgEv: MessageEvent) => {
       try {
-        const ws = new WebSocket(relay.url);
-        activeSockets.push(ws);
+        const data = JSON.parse(msgEv.data);
+        if (!Array.isArray(data) || data[0] !== 'EVENT' || data[1] !== subId) return;
+        const incoming = data[2];
+        if (!incoming || !incoming.id) return;
 
-        ws.onopen = () => {
-          // Subscribe to replies (Kind 1 referencing post.id) and reactions (Kind 7, 6, 9735)
-          const subMessage = JSON.stringify([
-            'REQ',
-            `post_detail_${post.id.slice(0, 8)}`,
-            { kinds: [1, 6, 7, 9735], '#e': [post.id], limit: 50 },
-          ]);
-          ws.send(subMessage);
-        };
+        // Prevent double-counting across multiple relay WebSockets
+        if (seenEventIds.has(incoming.id)) return;
+        seenEventIds.add(incoming.id);
 
-        ws.onmessage = (msg) => {
-          try {
-            const data = JSON.parse(msg.data);
-            if (!Array.isArray(data) || data[0] !== 'EVENT') return;
-            const incoming = data[2];
-            if (!incoming || !incoming.id) return;
-
-            // Prevent double-counting across multiple relay WebSockets
-            if (seenEventIds.has(incoming.id)) return;
-            seenEventIds.add(incoming.id);
-
-            if (incoming.kind === 1) {
-              // Check if it's a direct reply
-              const cleanContent = sanitizeZupContent(incoming.content);
-              const replyEvent: NostrEvent = {
-                id: incoming.id,
-                pubkey: incoming.pubkey,
-                created_at: incoming.created_at || Math.floor(Date.now() / 1000),
-                kind: 1,
-                tags: incoming.tags || [],
-                content: cleanContent,
-                sig: incoming.sig || '',
-                relayUrl: relay.url,
-                likesCount: 0,
-                repostsCount: 0,
-                zapsCount: 0,
-                repliesCount: 0,
-                author: {
-                  name: `npub...${incoming.pubkey.slice(0, 6)}`,
-                  displayName: `Peer ${incoming.pubkey.slice(0, 6)}`,
-                  npub: pubkeyToNpub(incoming.pubkey),
-                  avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${incoming.pubkey}`,
-                },
-              };
-              foundReplies.set(incoming.id, replyEvent);
-              setReplies(Array.from(foundReplies.values()).sort((a, b) => a.created_at - b.created_at));
-            } else if (incoming.kind === 7) {
-              likes++;
-              setLikesCount(likes);
-            } else if (incoming.kind === 6) {
-              reposts++;
-              setRepostsCount(reposts);
-            } else if (incoming.kind === 9735) {
-              zaps += 21; // base zap increment
-              setZapsCount(zaps);
-            }
-          } catch {
-            // Ignore parse errors
-          }
-        };
+        if (incoming.kind === 1) {
+          // Check if it's a direct reply
+          const cleanContent = sanitizeZupContent(incoming.content);
+          const replyEvent: NostrEvent = {
+            id: incoming.id,
+            pubkey: incoming.pubkey,
+            created_at: incoming.created_at || Math.floor(Date.now() / 1000),
+            kind: 1,
+            tags: incoming.tags || [],
+            content: cleanContent,
+            sig: incoming.sig || '',
+            relayUrl: url,
+            likesCount: 0,
+            repostsCount: 0,
+            zapsCount: 0,
+            repliesCount: 0,
+            author: {
+              name: `npub...${incoming.pubkey.slice(0, 6)}`,
+              displayName: `Peer ${incoming.pubkey.slice(0, 6)}`,
+              npub: pubkeyToNpub(incoming.pubkey),
+              avatar: generateLocalIdenticon(incoming.pubkey),
+            },
+          };
+          foundReplies.set(incoming.id, replyEvent);
+          setReplies(Array.from(foundReplies.values()).sort((a, b) => a.created_at - b.created_at));
+        } else if (incoming.kind === 7) {
+          likes++;
+          setLikesCount(likes);
+        } else if (incoming.kind === 6) {
+          reposts++;
+          setRepostsCount(reposts);
+        } else if (incoming.kind === 9735) {
+          zaps += 21; // base zap increment
+          setZapsCount(zaps);
+        }
       } catch {
-        // Ignore socket errors
+        // Ignore parse errors
       }
-    });
+    };
+
+    if (activeSocketsMap && activeSocketsMap.size > 0) {
+      activeSocketsMap.forEach((ws, url) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          try {
+            ws.send(subMessage);
+            const listener = (msgEv: MessageEvent) => handleMessage(url, msgEv);
+            ws.addEventListener('message', listener);
+            activeListeners.push({ ws, listener });
+          } catch {
+            // Ignore socket errors
+          }
+        }
+      });
+    }
 
     const timeout = setTimeout(() => {
       setIsFetchingReplies(false);
@@ -153,9 +157,26 @@ export function PostDetailDrawer({
 
     return () => {
       clearTimeout(timeout);
-      activeSockets.forEach((ws) => ws.close());
+      if (activeSocketsMap) {
+        activeSocketsMap.forEach((ws) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send(closeMessage);
+            } catch {
+              // Ignore
+            }
+          }
+        });
+      }
+      activeListeners.forEach(({ ws, listener }) => {
+        try {
+          ws.removeEventListener('message', listener);
+        } catch {
+          // Ignore
+        }
+      });
     };
-  }, [post, isOpen, relays]);
+  }, [post, isOpen, relays, activeSocketsMap]);
 
   if (!post) return null;
 
@@ -185,7 +206,7 @@ export function PostDetailDrawer({
         name: keypair.name || 'You',
         displayName: keypair.displayName || 'Sovereign Peer',
         npub: keypair.npub,
-        avatar: keypair.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${keypair.pubkeyHex}`,
+        avatar: keypair.avatar || generateLocalIdenticon(keypair.pubkeyHex),
       },
     };
 
@@ -210,7 +231,7 @@ export function PostDetailDrawer({
             <img
               src={
                 post.author?.avatar ||
-                `https://api.dicebear.com/7.x/identicon/svg?seed=${post.pubkey}`
+                generateLocalIdenticon(post.pubkey)
               }
               alt={post.author?.name || 'Author'}
               className="w-12 h-12 rounded-full border border-white/20 bg-black shrink-0 object-cover"
@@ -416,7 +437,7 @@ export function PostDetailDrawer({
                   <img
                     src={
                       reply.author?.avatar ||
-                      `https://api.dicebear.com/7.x/identicon/svg?seed=${reply.pubkey}`
+                      generateLocalIdenticon(reply.pubkey)
                     }
                     alt=""
                     className="w-7 h-7 rounded-full border border-white/20 bg-black shrink-0 object-cover"

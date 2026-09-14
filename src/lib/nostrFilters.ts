@@ -45,6 +45,12 @@ const SPAM_SIGNATURES = [
   /recovery.*agent/i,
   /#stickerpals_broadcast/i,
   /#bot_broadcast/i,
+  // Generic price check & ticker bot spam (e.g., "check btc price", "what is btc price", standalone ticker alerts)
+  /^(?:check|what\s+is|what's)\s+(?:the\s+)?(?:btc|bitcoin|crypto|sats)\s+price/i,
+  /^(?:btc|bitcoin)\s+price\s+check/i,
+  /^(?:check\s+btc\s+price|check\s+bitcoin\s+price)/i,
+  /^(?:current\s+btc\s+price|latest\s+btc\s+price)\b/i,
+  /^(?:btc|bitcoin|eth|sol)\s+(?:is\s+at|price:?)\s*\$?\d+/i,
   // Game server telemetry & presence logs (e.g. GTA RP, FiveM bots, automated aimd logs)
   /\[AIMD\]/i,
   /Player Revived/i,
@@ -80,8 +86,65 @@ const EMOJI_REGEX = /(?:[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\
 
 export interface FilterResult {
   passes: boolean;
-  reason?: 'uri_packed' | 'space_spam' | 'tag_spam' | 'gibberish' | 'keyword_spam';
+  reason?: 'uri_packed' | 'space_spam' | 'tag_spam' | 'gibberish' | 'keyword_spam' | 'low_substance';
   details?: string;
+  substanceScore?: number;
+}
+
+/**
+ * Predictive Substance Score Algorithm (-100 to +100).
+ * Evaluates structural information density, code blocks, technical vocabulary, and meaningful discussion
+ * vs meaningless short chatter, zero-context price checks, and low-entropy slop.
+ */
+export function predictSubstanceScore(content: string, tags: string[][] = []): number {
+  if (!content) return -100;
+  const clean = content.replace(URI_REGEX, '').trim();
+  if (clean.length < 5) return -80;
+
+  let score = 0;
+
+  // 1. Length & Word Count Baseline
+  const words = clean.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+
+  if (wordCount >= 40) score += 30;
+  else if (wordCount >= 20) score += 15;
+  else if (wordCount < 6) score -= 20;
+  else if (wordCount <= 3) score -= 35;
+
+  // 2. Code blocks, technical markdown formatting, and technical deep links
+  if (content.includes('```') || /`[^`]{3,}`/.test(content)) {
+    score += 40;
+  }
+  if (/(?:github\.com|gitlab\.com|arxiv\.org|crates\.io|npmjs\.com|pypi\.org|huggingface\.co|replit\.com|stackoverflow\.com)/i.test(content)) {
+    score += 35;
+  }
+
+  // 3. Technical & Engineering Vocabulary Density
+  // Only grant the +25 tech substance boost if post has sufficient length (>=15 words), tech tags, code blocks, or tech URLs
+  const hasTechTags = tags.some((t) => t[0] === 't' && ['tech', 'dev', 'coding', 'rust', 'typescript', 'python', 'ai', 'linux'].includes(t[1]?.toLowerCase()));
+  if ((isTechRelated(content, tags) && (wordCount >= 15 || hasTechTags)) || content.includes('```')) {
+    score += 25;
+  }
+
+  // 4. Low-Substance & Price Ticker Penalties
+  if (/^(?:check|what\s+is|what's)\s+(?:the\s+)?(?:btc|bitcoin|crypto|sats)\s+price/i.test(clean) ||
+      /^(?:btc|bitcoin)\s+price\s+check/i.test(clean) ||
+      /^(?:check\s+btc\s+price|check\s+bitcoin\s+price)/i.test(clean)) {
+    score -= 90;
+  }
+
+  // Pure price ticker / number dumps without technical breakdown
+  if (/^(?:btc|bitcoin|eth|sol)\s*(?:is|at|:)?\s*\$?\d{2,6}(?:\.\d+)?$/i.test(clean)) {
+    score -= 80;
+  }
+
+  // Short generic phrases without technical or contextual substance
+  if (wordCount < 6 && !isTechRelated(content, tags) && !content.includes('```')) {
+    score -= 25;
+  }
+
+  return Math.max(-100, Math.min(100, score));
 }
 
 /**
@@ -341,9 +404,20 @@ const TECH_KEYWORD_REGEX = new RegExp(
 
 /**
  * Validates if an event belongs to the Tech / STEM ecosystem.
+ * Excludes generic price checking or price ticker noise.
  */
 export function isTechRelated(content: string, tags: string[][] = []): boolean {
   if (!content) return false;
+
+  const clean = content.replace(URI_REGEX, '').trim();
+
+  // Exclude low-substance price checking or ticker spam from Tech classification
+  if (/^(?:check|what\s+is|what's)\s+(?:the\s+)?(?:btc|bitcoin|crypto|sats)\s+price/i.test(clean) ||
+      /^(?:btc|bitcoin)\s+price\s+check/i.test(clean) ||
+      /^(?:check\s+btc\s+price|check\s+bitcoin\s+price)/i.test(clean) ||
+      /^(?:btc|bitcoin|eth|sol)\s*(?:is|at|\s)+?\$?[\d,]+(?:\.\d+)?$/i.test(clean)) {
+    return false;
+  }
 
   // 1. Check technical tags
   const techTags = new Set([
@@ -436,7 +510,17 @@ export function evaluateZupQuality(event: {
     };
   }
 
-  return { passes: true };
+  const substanceScore = predictSubstanceScore(content, tags);
+  if (substanceScore < -40) {
+    return {
+      passes: false,
+      reason: 'low_substance',
+      details: `Filtered out: Low substance score (${substanceScore}) - meaningless chatter or price check spam.`,
+      substanceScore,
+    };
+  }
+
+  return { passes: true, substanceScore };
 }
 
 /**

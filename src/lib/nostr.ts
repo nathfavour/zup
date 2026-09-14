@@ -58,6 +58,17 @@ export function hexToBytes(hex: string): Uint8Array {
 
 export const DEFAULT_RELAYS: RelayInfo[] = [
   {
+    url: 'wss://relay.primal.net',
+    status: 'connected',
+    read: true,
+    write: true,
+    eventsReceived: 0,
+    eventsSent: 0,
+    latencyMs: 42,
+    description: 'Primal High-Speed Caching & Search Relay',
+    isDefault: true,
+  },
+  {
     url: 'wss://purplepag.es',
     status: 'connected',
     read: true,
@@ -66,17 +77,6 @@ export const DEFAULT_RELAYS: RelayInfo[] = [
     eventsSent: 0,
     latencyMs: 50,
     description: 'NIP-01 Directory & Profile Relay',
-    isDefault: true,
-  },
-  {
-    url: 'wss://user.kindpag.es',
-    status: 'connected',
-    read: true,
-    write: true,
-    eventsReceived: 0,
-    eventsSent: 0,
-    latencyMs: 55,
-    description: 'Profile & Metadata Directory Relay',
     isDefault: true,
   },
   {
@@ -102,14 +102,14 @@ export const DEFAULT_RELAYS: RelayInfo[] = [
     isDefault: true,
   },
   {
-    url: 'wss://relay.primal.net',
+    url: 'wss://user.kindpag.es',
     status: 'connected',
     read: true,
     write: true,
     eventsReceived: 0,
     eventsSent: 0,
-    latencyMs: 64,
-    description: 'Primal High-Speed Media & Event Cache',
+    latencyMs: 55,
+    description: 'Profile & Metadata Directory Relay',
     isDefault: true,
   },
   {

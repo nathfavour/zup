@@ -11,6 +11,7 @@
  */
 
 import { NostrEvent } from '../types';
+import { predictSubstanceScore } from './nostrFilters';
 
 // ============================================================================
 // Layer 1: Zero-Allocation Wire Filters (O(1) Checks)
@@ -238,6 +239,7 @@ export interface IngressScoringMetadata {
   unfollowedMentionsCount: number;
   nip56ReportsCount?: number;
   isSimHashDuplicate?: boolean;
+  substanceScore?: number;
 }
 
 export interface IngressDecision {
@@ -279,7 +281,13 @@ export function calculateIngressScore(meta: IngressScoringMetadata): IngressDeci
     reasons.push('+20: Economic Anchor >= 1,000 sats');
   }
 
-  // 4. Negative Signals
+  // 4. Predictive Substance Score Adjustment
+  if (typeof meta.substanceScore === 'number') {
+    score += meta.substanceScore;
+    reasons.push(`${meta.substanceScore >= 0 ? '+' : ''}${meta.substanceScore}: Predictive Substance Score`);
+  }
+
+  // 5. Negative Signals
   if (meta.isSimHashDuplicate) {
     score -= 100;
     reasons.push('-100: SimHash Near-Duplicate Spam Blast');
@@ -378,6 +386,16 @@ export function processIngressFunnel(
   const pTags = rawEvent.tags.filter((t) => t[0] === 'p').map((t) => t[1]);
   const unfollowedMentions = pTags.filter((pk) => !wotState.hop1Pubkeys.has(pk) && pk !== wotState.userPubkey).length;
 
+  // Compute predictive substance score for post content
+  const substanceScore = predictSubstanceScore(rawEvent.content, rawEvent.tags);
+  if (substanceScore < -40) {
+    return {
+      score: substanceScore - 50,
+      action: 'purge',
+      reasons: [`Layer 3: Low substance score (${substanceScore}) - meaningless chatter or price check spam`],
+    };
+  }
+
   // Layer 4: Score combination
   return calculateIngressScore({
     wotDistance: distance,
@@ -386,5 +404,6 @@ export function processIngressFunnel(
     unfollowedMentionsCount: unfollowedMentions,
     nip56ReportsCount: meta.nip56ReportsCount || 0,
     isSimHashDuplicate: isDuplicate,
+    substanceScore,
   });
 }

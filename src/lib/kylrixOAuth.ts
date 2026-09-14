@@ -1,5 +1,6 @@
 import { KylrixOAuthSession, KylrixProfile, SyncOrigin } from '../types';
 import { bytesToHex, generateRandomBytes } from './crypto';
+import { generateLocalIdenticon } from './nostr';
 
 export const KYLRIX_OAUTH_CONFIG = {
   clientId: (import.meta as any).env?.VITE_KYLRIX_OAUTH_CLIENT_ID || 'zup-nostr-client',

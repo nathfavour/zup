@@ -15,6 +15,7 @@ import {
   generateMEK, 
   encryptMEKWithPassword, 
   createPasskeyRecord, 
+  masterPassCrypto,
   ARGON2_CONFIG 
 } from '../lib/crypto';
 import { VaultSecurityState } from '../types';
@@ -24,12 +25,14 @@ interface EncryptionSetupDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onCompleteSetup: (securityState: VaultSecurityState, mek: Uint8Array) => void;
+  existingMek?: Uint8Array | null;
 }
 
 export function EncryptionSetupDrawer({
   isOpen,
   onClose,
   onCompleteSetup,
+  existingMek,
 }: EncryptionSetupDrawerProps) {
   // Single flow steps: 'password' -> 'prompt_biometric'
   const [step, setStep] = useState<'password' | 'prompt_biometric'>('password');
@@ -64,8 +67,8 @@ export function EncryptionSetupDrawer({
 
     setIsProcessing(true);
     try {
-      // Setup the Master Encryption Key (256-bit random AES key)
-      const mek = generateMEK();
+      // Use active MEK if available, otherwise generate a new MEK
+      const mek = existingMek || masterPassCrypto.getMEK() || generateMEK();
       // Encrypt the MEK with Argon2id-derived KEK from user's password
       const wrapped = await encryptMEKWithPassword(mek, password);
 

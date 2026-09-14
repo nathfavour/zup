@@ -251,6 +251,7 @@ export default function App() {
           if (isSecInitialized) {
             setIsVaultLocked(true);
             setMek(null);
+            setIsUnlockOpen(true);
           } else {
             sessionMek = generateMEK();
             masterPassCrypto.setMEK(sessionMek);
@@ -864,8 +865,44 @@ export default function App() {
   };
 
   const handleUpdateVaultSecurity = async (updated: VaultSecurityState) => {
+    let currentMek = mek || masterPassCrypto.getMEK();
     if (db) {
       await db.vault_security.upsert(updated);
+
+      if (currentMek) {
+        const idDocs = await db.identities.find().exec();
+        for (const doc of idDocs) {
+          const item = doc.toJSON() as StoredIdentity;
+          let privHexToEncrypt: string | undefined;
+          let nsecToEncrypt: string | undefined;
+
+          if (item.encryptedPrivkeyHex) {
+            try {
+              privHexToEncrypt = await decryptSecret(item.encryptedPrivkeyHex, currentMek);
+              if (item.encryptedNsec) {
+                nsecToEncrypt = await decryptSecret(item.encryptedNsec, currentMek);
+              }
+            } catch {
+              // ignore
+            }
+          }
+          if (!privHexToEncrypt && item.pubkeyHex === keypair.pubkeyHex && keypair.privkeyHex) {
+            privHexToEncrypt = keypair.privkeyHex;
+            nsecToEncrypt = keypair.nsec;
+          }
+
+          if (privHexToEncrypt) {
+            const encPriv = await encryptSecret(privHexToEncrypt, currentMek);
+            const encNsec = nsecToEncrypt ? await encryptSecret(nsecToEncrypt, currentMek) : undefined;
+            await doc.update({
+              $set: {
+                encryptedPrivkeyHex: encPriv,
+                encryptedNsec: encNsec,
+              },
+            });
+          }
+        }
+      }
     }
     setVaultSecurity(updated);
     syncEngine.markPending('primary_vault_security', 1, 'setting', updated);
@@ -1598,6 +1635,7 @@ export default function App() {
               onOpenUnlock={() => setIsUnlockOpen(true)}
               onOpenSetupEncryption={() => setIsSetupEncryptionOpen(true)}
               onUpdateVaultSecurity={handleUpdateVaultSecurity}
+              onUnlocked={handleUnlocked}
               onOpenPro={() => {
                 setProFeatureName('Tor Multi-Hop Circuit');
                 setIsProOpen(true);
@@ -1658,6 +1696,7 @@ export default function App() {
         isOpen={isSetupEncryptionOpen}
         onClose={() => setIsSetupEncryptionOpen(false)}
         onCompleteSetup={handleCompleteEncryptionSetup}
+        existingMek={mek}
       />
 
       {/* Unlock Drawer (Default: Passkey / Biometrics, with Password fallback) */}

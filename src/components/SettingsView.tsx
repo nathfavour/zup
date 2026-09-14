@@ -50,6 +50,7 @@ interface SettingsViewProps {
   onOpenUnlock: () => void;
   onOpenSetupEncryption: () => void;
   onUpdateVaultSecurity: (updated: VaultSecurityState) => void;
+  onUnlocked?: (mek: Uint8Array) => void;
   onOpenPro: () => void;
   onClearCache: () => void;
   onResetDefaultRelays: () => void;
@@ -100,6 +101,7 @@ export function SettingsView({
   onOpenUnlock,
   onOpenSetupEncryption,
   onUpdateVaultSecurity,
+  onUnlocked,
   onOpenPro,
   onClearCache,
   onResetDefaultRelays,
@@ -415,6 +417,7 @@ export function SettingsView({
         onOpenUnlock={onOpenUnlock}
         onOpenSetupEncryption={onOpenSetupEncryption}
         onUpdateVaultSecurity={onUpdateVaultSecurity}
+        onUnlocked={onUnlocked}
       />
 
       {/* 4. Privacy & Network Controls */}

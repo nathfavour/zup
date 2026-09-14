@@ -69,6 +69,11 @@ export function FeedView({
   const filteredEvents = useMemo(() => {
     let pool = events.filter((e) => evaluateZupQuality(e).passes);
 
+    // Main feed shows original root posts by default (filter out replies unless searching)
+    if (!searchQuery.trim()) {
+      pool = pool.filter((e) => !e.tags.some((t) => t[0] === 'e'));
+    }
+
     // Apply active category / feed filter
     if (activeFilter === 'tech') {
       pool = pool.filter((e) => isTechRelated(e.content, e.tags));
@@ -314,6 +319,42 @@ export function FeedView({
                     </div>
                   </div>
                 )}
+
+                {/* Tiny thread link component if this note is a reply */}
+                {(() => {
+                  const eTag = event.tags.find((t) => t[0] === 'e');
+                  if (!eTag) return null;
+                  const replyTargetId = eTag[1];
+                  return (
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const parentPost = events.find((ev) => ev.id === replyTargetId);
+                        if (parentPost && onSelectPost) {
+                          onSelectPost(parentPost);
+                        } else if (onSelectPost) {
+                          onSelectPost({
+                            id: replyTargetId,
+                            pubkey: '',
+                            created_at: Math.floor(Date.now() / 1000),
+                            kind: 1,
+                            tags: [],
+                            content: '[Thread original post]',
+                            sig: '',
+                          });
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-[11px] font-mono text-white/50 hover:text-[#EC4899] transition-colors cursor-pointer w-fit pb-1"
+                      title="View original thread post"
+                    >
+                      <div className="flex flex-col items-center">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#EC4899]/60" />
+                        <div className="w-0.5 h-2.5 bg-white/20" />
+                      </div>
+                      <span>Replying to <span className="underline">#{formatTruncatedKey(replyTargetId, 6, 4)}</span></span>
+                    </div>
+                  );
+                })()}
 
                 {/* Author Header */}
                 <div className="flex items-start justify-between gap-2.5">

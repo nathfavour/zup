@@ -490,7 +490,7 @@ export default function App() {
                 const profile = {
                   name: meta.name || meta.username,
                   displayName: meta.display_name || meta.displayName || meta.name,
-                  avatar: meta.picture,
+                  avatar: meta.picture || meta.image || meta.avatar,
                   nip05: meta.nip05,
                 };
                 profileCacheRef.current.set(incoming.pubkey, profile);

@@ -81,7 +81,7 @@ export default function App() {
 
   // Navigation & Filter State
   const [activeTab, setActiveTab] = useState<ActiveTab>('feed');
-  const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>('tech');
 
   const EMPTY_KEYPAIR: NostrKeypair = {
     pubkeyHex: '',

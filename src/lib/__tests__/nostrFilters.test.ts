@@ -213,6 +213,13 @@ describe('Nostr Anti-Spam & Waterfall Quality Filters', () => {
       expect(evaluateZupQuality({ content: 'stomach\n#bitcoin\n#seed\n#bip39' }).passes).toBe(false);
       expect(evaluateZupQuality({ content: 'observe\n#bitcoin\n#seed\n#bip39' }).passes).toBe(false);
     });
+
+    test('rejects low-substance price checking and ticker spam', () => {
+      expect(evaluateZupQuality({ content: 'check btc price' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'what is the btc price?' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'btc price check' }).passes).toBe(false);
+      expect(evaluateZupQuality({ content: 'BTC price: $96,500' }).passes).toBe(false);
+    });
   });
 
   describe('isTechRelated', () => {
@@ -233,10 +240,12 @@ describe('Nostr Anti-Spam & Waterfall Quality Filters', () => {
       expect(isTechRelated('Deploying new Nostr relay node.')).toBe(true);
     });
 
-    test('rejects generic non-tech noise', () => {
+    test('rejects generic non-tech noise and price checks', () => {
       expect(isTechRelated('I love eating apples and bananas')).toBe(false);
       expect(isTechRelated('Going to the beach today with my dog')).toBe(false);
       expect(isTechRelated('What is everyone having for lunch?')).toBe(false);
+      expect(isTechRelated('check btc price')).toBe(false);
+      expect(isTechRelated('BTC is at $96,500')).toBe(false);
     });
   });
 

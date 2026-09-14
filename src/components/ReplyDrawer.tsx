@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Send, MessageSquare, ShieldCheck, Radio } from 'lucide-react';
 import { NostrEvent, NostrKeypair, RelayInfo } from '../types';
 import { TactileDrawer } from './TactileDrawer';
-import { formatTimeAgo, formatTruncatedKey } from '../lib/nostr';
+import { formatTimeAgo, formatTruncatedKey, generateLocalIdenticon } from '../lib/nostr';
 
 interface ReplyDrawerProps {
   targetEvent: NostrEvent | null;
@@ -70,7 +70,7 @@ export function ReplyDrawer({
             <img
               src={
                 targetEvent.author?.avatar ||
-                `https://api.dicebear.com/7.x/identicon/svg?seed=${targetEvent.pubkey}`
+                generateLocalIdenticon(targetEvent.pubkey)
               }
               alt=""
               className="w-7 h-7 rounded-full border border-white/20 bg-black shrink-0"

@@ -15,7 +15,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { FeedFilter, NostrEvent, NostrKeypair } from '../types';
-import { formatTimeAgo, formatTruncatedKey } from '../lib/nostr';
+import { formatTimeAgo, formatTruncatedKey, generateLocalIdenticon } from '../lib/nostr';
 import { evaluateZupQuality, sanitizeZupContent, isTechRelated } from '../lib/nostrFilters';
 import { extractPostMedia } from '../lib/momentMedia';
 
@@ -362,7 +362,7 @@ export function FeedView({
                     <img
                       src={
                         event.author?.avatar ||
-                        `https://api.dicebear.com/7.x/identicon/svg?seed=${event.pubkey}`
+                        generateLocalIdenticon(event.pubkey)
                       }
                       alt={event.author?.name || 'Builder'}
                       className="w-10 h-10 rounded-full border border-white/20 bg-black shrink-0 object-cover"

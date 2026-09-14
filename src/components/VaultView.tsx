@@ -23,7 +23,7 @@ import {
   Fingerprint
 } from 'lucide-react';
 import { NostrKeypair, StoredIdentity, VaultSecurityState } from '../types';
-import { createNewKeypair, formatTruncatedKey } from '../lib/nostr';
+import { createNewKeypair, formatTruncatedKey, generateLocalIdenticon } from '../lib/nostr';
 import { VaultCredentialsManager } from './VaultCredentialsManager';
 
 interface VaultViewProps {
@@ -249,7 +249,7 @@ export function VaultView({
                 <img
                   src={
                     identity.avatar ||
-                    `https://api.dicebear.com/7.x/identicon/svg?seed=${identity.pubkeyHex}`
+                    generateLocalIdenticon(identity.pubkeyHex)
                   }
                   alt={identity.displayName}
                   className="w-11 h-11 rounded-full border border-white/20 bg-black shrink-0 object-cover"

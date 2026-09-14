@@ -25,7 +25,8 @@ import {
   pubkeyToNpub,
   bytesToHex,
   hexToBytes,
-  fetchNostrProfile
+  fetchNostrProfile,
+  generateLocalIdenticon
 } from './lib/nostr';
 import { getDatabase, ZupDatabase } from './lib/db';
 import { 
@@ -116,8 +117,9 @@ export default function App() {
     avatar?: string;
     nip05?: string;
   }>>(new Map());
-  // Set of pubkeys already requested for Kind 0
+  // Set of pubkeys already requested for Kind 0 and metadata batch queue
   const requestedPubkeysRef = useRef<Set<string>>(new Set());
+  const pendingMetadataQueueRef = useRef<Set<string>>(new Set());
 
   // Automatically decrypt active identity private key & nsec whenever MEK or active identity changes
   useEffect(() => {
@@ -564,7 +566,7 @@ export default function App() {
                 type: notifType,
                 sourcePubkey: incoming.pubkey,
                 sourceName: cachedAuthor?.displayName || cachedAuthor?.name || `nostr_${incoming.pubkey.slice(0, 8)}`,
-                sourceAvatar: cachedAuthor?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${incoming.pubkey}`,
+                sourceAvatar: cachedAuthor?.avatar || generateLocalIdenticon(incoming.pubkey),
                 sourceNpub: pubkeyToNpub(incoming.pubkey),
                 targetEventId,
                 targetEventContent: notifContent,
@@ -573,20 +575,10 @@ export default function App() {
                 read: false,
               };
 
-              // Request Kind 0 profile if not in cache
+              // Request Kind 0 profile if not in cache (batched)
               if (!cachedAuthor && !requestedPubkeysRef.current.has(incoming.pubkey)) {
                 requestedPubkeysRef.current.add(incoming.pubkey);
-                try {
-                  ws.send(
-                    JSON.stringify([
-                      'REQ',
-                      `meta_${incoming.pubkey.slice(0, 8)}`,
-                      { kinds: [0], authors: [incoming.pubkey], limit: 1 },
-                    ])
-                  );
-                } catch {
-                  // pass
-                }
+                pendingMetadataQueueRef.current.add(incoming.pubkey);
               }
 
               setNotifications((prev) => {
@@ -645,25 +637,15 @@ export default function App() {
                   name: cached?.name || `npub...${incoming.pubkey.slice(0, 6)}`,
                   displayName: cached?.displayName || `Peer ${incoming.pubkey.slice(0, 6)}`,
                   npub,
-                  avatar: cached?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${incoming.pubkey}`,
+                  avatar: cached?.avatar || generateLocalIdenticon(incoming.pubkey),
                   nip05: cached?.nip05,
                 },
               };
 
-              // If author profile is not yet in cache, request Kind 0 metadata from this relay
+              // If author profile is not yet in cache, request Kind 0 metadata (batched)
               if (!cached && !requestedPubkeysRef.current.has(incoming.pubkey)) {
                 requestedPubkeysRef.current.add(incoming.pubkey);
-                try {
-                  ws.send(
-                    JSON.stringify([
-                      'REQ',
-                      `meta_${incoming.pubkey.slice(0, 8)}`,
-                      { kinds: [0], authors: [incoming.pubkey], limit: 1 },
-                    ])
-                  );
-                } catch {
-                  // pass
-                }
+                pendingMetadataQueueRef.current.add(incoming.pubkey);
               }
 
               // Upsert note into RxDB background cache
@@ -772,7 +754,35 @@ export default function App() {
       }
     });
 
+    // Batched Kind 0 profile metadata request flusher (runs every 1500ms)
+    const metadataInterval = setInterval(() => {
+      if (pendingMetadataQueueRef.current.size === 0) return;
+      const pubkeysToFetch = Array.from(pendingMetadataQueueRef.current);
+      pendingMetadataQueueRef.current.clear();
+
+      // Chunk pubkeys into batches of 10
+      for (let i = 0; i < pubkeysToFetch.length; i += 10) {
+        const chunk = pubkeysToFetch.slice(i, i + 10);
+        const reqPayload = JSON.stringify([
+          'REQ',
+          `meta_batch_${Date.now()}_${i}`,
+          { kinds: [0], authors: chunk },
+        ]);
+
+        activeSocketsRef.current.forEach((ws) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send(reqPayload);
+            } catch {
+              // Ignore
+            }
+          }
+        });
+      }
+    }, 1500);
+
     return () => {
+      clearInterval(metadataInterval);
       activeSocketsRef.current.forEach((ws) => ws.close());
       activeSocketsRef.current.clear();
     };
@@ -1218,7 +1228,7 @@ export default function App() {
       peerPubkey: pubkey,
       peerNpub: clean.startsWith('npub1') ? clean : `npub1_${pubkey.slice(0, 10)}`,
       peerName: `Peer_${pubkey.slice(0, 6)}`,
-      peerAvatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubkey}`,
+      peerAvatar: generateLocalIdenticon(pubkey),
       lastMessage: 'Thread initialized. Direct messages are encrypted.',
       timestamp: Math.floor(Date.now() / 1000),
       unreadCount: 0,
@@ -1402,7 +1412,7 @@ export default function App() {
         name: updated.name || `Anon_${updated.pubkeyHex.slice(0, 5)}`,
         displayName: updated.displayName || 'Sovereign Peer',
         about: updated.about,
-        avatar: updated.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${updated.pubkeyHex}`,
+        avatar: updated.avatar || generateLocalIdenticon(updated.pubkeyHex),
         isEphemeral: Boolean(updated.isEphemeral),
         isWatchOnly: Boolean(updated.isWatchOnly),
         encryptedPrivkeyHex: encPriv,
@@ -1648,6 +1658,7 @@ export default function App() {
         onClose={() => setSelectedPostEvent(null)}
         keypair={keypair}
         relays={relays}
+        activeSocketsMap={activeSocketsRef.current}
         onLikeEvent={handleLikeEvent}
         onRepostEvent={handleRepostEvent}
         onOpenZap={(ev) => setZapTargetEvent(ev)}

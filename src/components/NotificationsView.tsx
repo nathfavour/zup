@@ -10,7 +10,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { NostrNotification, NostrKeypair, NostrEvent } from '../types';
-import { formatTruncatedKey } from '../lib/nostr';
+import { formatTruncatedKey, generateLocalIdenticon } from '../lib/nostr';
 
 interface NotificationsViewProps {
   notifications: NostrNotification[];
@@ -161,7 +161,7 @@ export function NotificationsView({
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
                       <img
-                        src={notif.sourceAvatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${notif.sourcePubkey}`}
+                        src={notif.sourceAvatar || generateLocalIdenticon(notif.sourcePubkey)}
                         alt={notif.sourceName}
                         className="w-5 h-5 rounded-full border border-white/20 bg-black shrink-0 object-cover"
                       />

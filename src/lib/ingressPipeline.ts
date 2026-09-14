@@ -50,9 +50,9 @@ export function evaluateWireLayer(event: {
       return { drop: true, reason: 'empty_payload_no_media' };
     }
 
-    // Drop non-Latin / CJK script blasts at wire level (English-only client policy)
+    // Drop non-Latin / CJK script blasts at wire level if dominant (English-first client policy)
     const cjkMatches = content.match(/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\u0400-\u04ff]/g);
-    if (cjkMatches && cjkMatches.length >= 1) {
+    if (cjkMatches && cjkMatches.length >= 6) {
       return { drop: true, reason: 'non_english_script' };
     }
   }
@@ -361,10 +361,12 @@ export function processIngressFunnel(
     };
   }
 
-  // Link-to-text density check
+  // Link-to-text density check: only purge if post is excessive link dump / affiliate spam
   const urls = rawEvent.content.match(/https?:\/\/[^\s]+/g) || [];
-  const words = rawEvent.content.trim().split(/\s+/).filter((w) => w.length > 0);
-  if (distance > 1 && words.length > 0 && urls.length / words.length > 0.5) {
+  const nonMediaUrls = urls.filter(
+    (u) => !/\.(?:png|jpe?g|gif|webp|avif|mp4|mov)(?:\?.*)?$/i.test(u) && !/(?:nostr\.build|imgur\.com)/i.test(u)
+  );
+  if (distance > 1 && nonMediaUrls.length >= 4) {
     return {
       score: -60,
       action: 'purge',

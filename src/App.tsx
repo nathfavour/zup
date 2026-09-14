@@ -80,7 +80,7 @@ export default function App() {
 
   // Navigation & Filter State
   const [activeTab, setActiveTab] = useState<ActiveTab>('feed');
-  const [feedFilter, setFeedFilter] = useState<FeedFilter>('tech');
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
 
   // Identities & Active Keypair
   const [storedIdentities, setStoredIdentities] = useState<StoredIdentity[]>([]);
@@ -228,7 +228,7 @@ export default function App() {
         if (!isSecInitialized && !masterPassCrypto.hasMEK()) {
           let sessionHex: string | null = null;
           try {
-            sessionHex = sessionStorage.getItem('zup_session_mek');
+            sessionHex = sessionStorage.getItem('zup_session_mek') || localStorage.getItem('zup_session_mek');
           } catch {
             // ignore
           }
@@ -239,6 +239,7 @@ export default function App() {
             sessionMek = generateMEK();
             try {
               sessionStorage.setItem('zup_session_mek', bytesToHex(sessionMek));
+              localStorage.setItem('zup_session_mek', bytesToHex(sessionMek));
             } catch {
               // ignore
             }
@@ -325,6 +326,7 @@ export default function App() {
             setMek(activeMek);
             try {
               sessionStorage.setItem('zup_session_mek', bytesToHex(activeMek));
+              localStorage.setItem('zup_session_mek', bytesToHex(activeMek));
             } catch {
               // ignore
             }
@@ -696,21 +698,17 @@ export default function App() {
                 return;
               }
 
-              // Initial feed population (first 15 notes only upon app launch)
-              if (!feedInitializedRef.current || visibleEventsCountRef.current < 15) {
+              // Initial feed population (populates until at least 15 visible notes exist)
+              if (visibleEventsCountRef.current < 15) {
                 setEvents((prev) => {
                   if (prev.some((e) => e.id === formatted.id)) return prev;
                   const next = [...prev, formatted];
                   next.sort((a, b) => b.created_at - a.created_at);
                   visibleEventsCountRef.current = next.length;
-                  if (next.length >= 15) {
-                    feedInitializedRef.current = true;
-                  }
                   return next;
                 });
               } else {
-                // Buffer in pending queue! Stop feed jerking and content replacing!
-                // Shows in the ephemeral refresh bubble for user to click when ready.
+                // Buffer in pending queue! Shows in ephemeral refresh bubble for user to click when ready.
                 setPendingNewEvents((prev) => {
                   if (prev.some((e) => e.id === formatted.id)) return prev;
                   return [formatted, ...prev];
@@ -825,6 +823,7 @@ export default function App() {
       }
       try {
         sessionStorage.removeItem('zup_session_mek');
+        localStorage.removeItem('zup_session_mek');
       } catch {
         // ignore
       }

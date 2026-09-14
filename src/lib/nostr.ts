@@ -1,4 +1,4 @@
-import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools/pure';
+import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools';
 import * as nip19 from 'nostr-tools/nip19';
 import { NostrEvent, NostrKeypair, RelayInfo } from '../types';
 

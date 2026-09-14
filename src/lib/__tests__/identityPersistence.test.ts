@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createNewKeypair, importKey, pubkeyToNpub, bytesToHex, hexToBytes } from '../nostr';
 import { generateMEK, encryptSecret, decryptSecret } from '../crypto';
-import { getPublicKey } from 'nostr-tools/pure';
+import { getPublicKey } from 'nostr-tools';
 
 describe('Sovereign Identity Key Management & Persistence', () => {
   test('createNewKeypair generates matching pubkey and privkey', () => {

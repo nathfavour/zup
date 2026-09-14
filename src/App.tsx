@@ -83,10 +83,17 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('feed');
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
 
+  const EMPTY_KEYPAIR: NostrKeypair = {
+    pubkeyHex: '',
+    npub: '',
+    isEphemeral: false,
+    isWatchOnly: true,
+  };
+
   // Identities & Active Keypair
   const [storedIdentities, setStoredIdentities] = useState<StoredIdentity[]>([]);
   const [activeIdentityId, setActiveIdentityId] = useState<string>('');
-  const [keypair, setKeypair] = useState<NostrKeypair>(() => createNewKeypair(false));
+  const [keypair, setKeypair] = useState<NostrKeypair>(EMPTY_KEYPAIR);
 
   // Relays, Events, Threads State (driven by RxDB & live relay stream)
   const [relays, setRelays] = useState<RelayInfo[]>(DEFAULT_RELAYS);
@@ -218,27 +225,37 @@ export default function App() {
           const sec = secDoc.toJSON() as VaultSecurityState;
           setVaultSecurity(sec);
           isSecInitialized = Boolean(sec.isInitialized);
-          if (masterPassCrypto.hasMEK()) {
-            setMek(masterPassCrypto.getMEK());
+        }
+
+        // Retrieve or restore session MEK
+        let sessionMek: Uint8Array | null = null;
+        let sessionHex: string | null = null;
+        try {
+          sessionHex = sessionStorage.getItem('zup_session_mek') || localStorage.getItem('zup_session_mek');
+        } catch {
+          // ignore
+        }
+
+        if (sessionHex) {
+          try {
+            sessionMek = hexToBytes(sessionHex);
+            masterPassCrypto.setMEK(sessionMek);
+            setMek(sessionMek);
             setIsVaultLocked(false);
-          } else {
-            setIsVaultLocked(true);
+          } catch {
+            sessionMek = null;
           }
         }
 
-        // If vault security is not initialized yet, retrieve or create session MEK
-        if (!isSecInitialized && !masterPassCrypto.hasMEK()) {
-          let sessionHex: string | null = null;
-          try {
-            sessionHex = sessionStorage.getItem('zup_session_mek') || localStorage.getItem('zup_session_mek');
-          } catch {
-            // ignore
-          }
-          let sessionMek: Uint8Array;
-          if (sessionHex) {
-            sessionMek = hexToBytes(sessionHex);
+        if (!sessionMek) {
+          if (isSecInitialized) {
+            setIsVaultLocked(true);
+            setMek(null);
           } else {
             sessionMek = generateMEK();
+            masterPassCrypto.setMEK(sessionMek);
+            setMek(sessionMek);
+            setIsVaultLocked(false);
             try {
               sessionStorage.setItem('zup_session_mek', bytesToHex(sessionMek));
               localStorage.setItem('zup_session_mek', bytesToHex(sessionMek));
@@ -246,9 +263,6 @@ export default function App() {
               // ignore
             }
           }
-          masterPassCrypto.setMEK(sessionMek);
-          setMek(sessionMek);
-          setIsVaultLocked(false);
         }
 
         // Keep tabs in sync with MasterPassCrypto volatile MEK
@@ -320,60 +334,10 @@ export default function App() {
             }).catch(() => {});
           }
         } else {
-          // Seed initial default identity
-          let activeMek = masterPassCrypto.getMEK();
-          if (!activeMek) {
-            activeMek = generateMEK();
-            masterPassCrypto.setMEK(activeMek);
-            setMek(activeMek);
-            try {
-              sessionStorage.setItem('zup_session_mek', bytesToHex(activeMek));
-              localStorage.setItem('zup_session_mek', bytesToHex(activeMek));
-            } catch {
-              // ignore
-            }
-          }
-
-          const fresh = createNewKeypair(false);
-          let encPriv: string | undefined;
-          let encNsec: string | undefined;
-          if (fresh.privkeyHex && activeMek) {
-            try {
-              encPriv = await encryptSecret(fresh.privkeyHex, activeMek);
-              if (fresh.nsec) {
-                encNsec = await encryptSecret(fresh.nsec, activeMek);
-              }
-            } catch (err) {
-              console.warn('Initial identity encryption warning:', err);
-            }
-          }
-
-          const initialStored: StoredIdentity = {
-            id: `id_${fresh.pubkeyHex.slice(0, 10)}_${Date.now()}`,
-            pubkeyHex: fresh.pubkeyHex,
-            npub: fresh.npub,
-            name: fresh.name || 'Anon',
-            displayName: fresh.displayName || 'Sovereign Peer',
-            avatar: fresh.avatar,
-            isEphemeral: false,
-            isWatchOnly: false,
-            encryptedPrivkeyHex: encPriv,
-            encryptedNsec: encNsec,
-            createdAt: Date.now(),
-            lastActiveAt: Date.now(),
-          };
-          await database.identities.upsert(initialStored);
-          setStoredIdentities([initialStored]);
-          setActiveIdentityId(initialStored.id);
-          try {
-            localStorage.setItem('zup_active_identity_id', initialStored.id);
-          } catch {
-            // ignore
-          }
-          setKeypair({
-            ...fresh,
-            id: initialStored.id,
-          });
+          // No identity stored - do not spin up random identity automatically
+          setStoredIdentities([]);
+          setActiveIdentityId('');
+          setKeypair(EMPTY_KEYPAIR);
         }
 
         // C. Initial Notes Snapshot from RxDB (prevents feed from jumping on background writes)
@@ -831,12 +795,6 @@ export default function App() {
           });
         }
       }
-      try {
-        sessionStorage.removeItem('zup_session_mek');
-        localStorage.removeItem('zup_session_mek');
-      } catch {
-        // ignore
-      }
     }
 
     setVaultSecurity(securityState);
@@ -844,6 +802,12 @@ export default function App() {
     setMek(unlockedMEK);
     setIsVaultLocked(false);
     setIsSetupEncryptionOpen(false);
+    try {
+      sessionStorage.setItem('zup_session_mek', bytesToHex(unlockedMEK));
+      localStorage.setItem('zup_session_mek', bytesToHex(unlockedMEK));
+    } catch {
+      // ignore
+    }
     syncEngine.markPending('primary_vault_security', 1, 'setting', securityState);
   };
 
@@ -851,6 +815,12 @@ export default function App() {
     masterPassCrypto.setMEK(unlockedMEK);
     setMek(unlockedMEK);
     setIsVaultLocked(false);
+    try {
+      sessionStorage.setItem('zup_session_mek', bytesToHex(unlockedMEK));
+      localStorage.setItem('zup_session_mek', bytesToHex(unlockedMEK));
+    } catch {
+      // ignore
+    }
 
     // If active identity has encrypted privkey, decrypt it for signing
     const activeStored = storedIdentities.find(
@@ -877,6 +847,12 @@ export default function App() {
 
   const handleLockVault = () => {
     masterPassCrypto.lockApplication();
+    try {
+      sessionStorage.removeItem('zup_session_mek');
+      localStorage.removeItem('zup_session_mek');
+    } catch {
+      // ignore
+    }
     setMek(null);
     setIsVaultLocked(true);
     // Mask private key in active keypair for protection
@@ -1333,7 +1309,7 @@ export default function App() {
       if (activeStored) {
         handleSelectIdentity(activeStored);
       } else {
-        setKeypair(createNewKeypair(false));
+        setKeypair(EMPTY_KEYPAIR);
       }
     }
   };

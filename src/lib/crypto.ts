@@ -612,6 +612,14 @@ class MasterPassCryptoManager {
       this.activeMEK = null;
       this.notify();
     }
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem('zup_session_mek');
+        localStorage.removeItem('zup_session_mek');
+      } catch {
+        // ignore
+      }
+    }
   }
 
   public lockApplication(): void {

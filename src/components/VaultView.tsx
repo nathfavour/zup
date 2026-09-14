@@ -229,99 +229,131 @@ export function VaultView({
           </button>
         </div>
 
-        <div className="flex flex-col gap-2.5">
-          {identities.map((identity) => {
-            const isActive =
-              identity.pubkeyHex === keypair.pubkeyHex ||
-              (activeIdentityId && identity.id === activeIdentityId);
-
-            return (
-              <div
-                key={identity.id}
-                onClick={() => onSelectIdentity(identity)}
-                className={`p-3.5 rounded-[18px] transition-all cursor-pointer flex items-center gap-3 group ${
-                  isActive
-                    ? 'bg-[#000000] border-2 border-[#10B981] shadow-[0_0_14px_#10B98133]'
-                    : 'bg-[#000000] border border-white/20 hover:border-white/50'
-                }`}
+        {identities.length === 0 ? (
+          <div className="p-5 rounded-[20px] bg-[#000000] border border-dashed border-white/20 flex flex-col items-center justify-center gap-3 text-center">
+            <User size={32} className="text-white/40" />
+            <div>
+              <h5 className="text-white font-black text-sm uppercase tracking-wider m-0">
+                No Sovereign Identity Imported Yet
+              </h5>
+              <p className="text-white/60 text-xs mt-1 m-0">
+                Import your existing nsec / npub or spin up a new identity below.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={onOpenImportDrawer}
+                className="px-4 py-2 rounded-[14px] bg-[#10B981] hover:bg-[#059669] text-black font-black text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-[0_0_12px_#10B98133]"
               >
-                {/* Avatar with crisp border */}
-                <img
-                  src={
-                    identity.avatar ||
-                    generateLocalIdenticon(identity.pubkeyHex)
-                  }
-                  alt={identity.displayName}
-                  className="w-11 h-11 rounded-full border border-white/20 bg-black shrink-0 object-cover"
-                />
+                <Upload size={14} />
+                <span>Import Nostr Identity</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateFresh}
+                className="px-4 py-2 rounded-[14px] bg-[#161412] hover:bg-black border border-white/20 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Spin Up New Identity</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {identities.map((identity) => {
+              const isActive =
+                identity.pubkeyHex === keypair.pubkeyHex ||
+                (activeIdentityId && identity.id === activeIdentityId);
 
-                {/* Identity Metadata */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <h4 className="text-white font-black text-xs m-0 truncate group-hover:text-[#10B981] transition-colors">
-                        {identity.displayName || identity.name}
-                      </h4>
-                      {identity.name && (
-                        <span className="text-white/60 text-[11px] font-mono font-medium truncate">
-                          @{identity.name}
-                        </span>
-                      )}
-                    </div>
+              return (
+                <div
+                  key={identity.id}
+                  onClick={() => onSelectIdentity(identity)}
+                  className={`p-3.5 rounded-[18px] transition-all cursor-pointer flex items-center gap-3 group ${
+                    isActive
+                      ? 'bg-[#000000] border-2 border-[#10B981] shadow-[0_0_14px_#10B98133]'
+                      : 'bg-[#000000] border border-white/20 hover:border-white/50'
+                  }`}
+                >
+                  {/* Avatar with crisp border */}
+                  <img
+                    src={
+                      identity.avatar ||
+                      generateLocalIdenticon(identity.pubkeyHex)
+                    }
+                    alt={identity.displayName}
+                    className="w-11 h-11 rounded-full border border-white/20 bg-black shrink-0 object-cover"
+                  />
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {isActive && (
-                        <span className="px-2 py-0.5 rounded-full bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40 text-[9px] font-mono font-black">
-                          ACTIVE
-                        </span>
-                      )}
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-black uppercase ${
-                          identity.isWatchOnly
-                            ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40'
-                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                        }`}
-                      >
-                        {identity.isWatchOnly ? 'Watch Only' : 'Full Signer'}
-                      </span>
-                    </div>
-                  </div>
+                  {/* Identity Metadata */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h4 className="text-white font-black text-xs m-0 truncate group-hover:text-[#10B981] transition-colors">
+                          {identity.displayName || identity.name}
+                        </h4>
+                        {identity.name && (
+                          <span className="text-white/60 text-[11px] font-mono font-medium truncate">
+                            @{identity.name}
+                          </span>
+                        )}
+                      </div>
 
-                  <div className="flex items-center justify-between gap-2 mt-1">
-                    <p className="text-white font-mono text-[11px] font-bold m-0 truncate">
-                      {formatTruncatedKey(identity.npub, 14, 8)}
-                    </p>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {identity.lud16 && (
-                        <span className="text-[10px] text-amber-400 font-mono font-medium flex items-center gap-0.5">
-                          <Zap size={11} />
-                          {identity.lud16}
-                        </span>
-                      )}
-
-                      {!isActive && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(`Remove identity "${identity.displayName}" from local RxDB?`)) {
-                              onDeleteIdentity(identity.id);
-                            }
-                          }}
-                          className="text-white/40 hover:text-red-400 p-1 cursor-pointer transition-colors"
-                          title="Delete Identity"
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isActive && (
+                          <span className="px-2 py-0.5 rounded-full bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/40 text-[9px] font-mono font-black">
+                            ACTIVE
+                          </span>
+                        )}
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-black uppercase ${
+                            identity.isWatchOnly
+                              ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40'
+                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          }`}
                         >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
+                          {identity.isWatchOnly ? 'Watch Only' : 'Full Signer'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <p className="text-white font-mono text-[11px] font-bold m-0 truncate">
+                        {formatTruncatedKey(identity.npub, 14, 8)}
+                      </p>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {identity.lud16 && (
+                          <span className="text-[10px] text-amber-400 font-mono font-medium flex items-center gap-0.5">
+                            <Zap size={11} />
+                            {identity.lud16}
+                          </span>
+                        )}
+
+                        {!isActive && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Remove identity "${identity.displayName}" from local RxDB?`)) {
+                                onDeleteIdentity(identity.id);
+                              }
+                            }}
+                            className="text-white/40 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                            title="Delete Identity"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Active Identity Keys Display Section */}

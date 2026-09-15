@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { TactileDrawer } from './TactileDrawer';
 import { importKey, formatTruncatedKey, fetchNostrProfile, generateLocalIdenticon } from '../lib/nostr';
-import { encryptSecret } from '../lib/crypto';
+import { encryptSecret, masterPassCrypto, generateMEK } from '../lib/crypto';
 import { StoredIdentity, NostrKeypair } from '../types';
 
 interface ImportIdentityDrawerProps {
@@ -51,9 +51,10 @@ export function ImportIdentityDrawer({
       return;
     }
 
-    if (isPrivate && !mek) {
-      setError('Vault is locked. Please unlock vault first to encrypt your private key.');
-      return;
+    let activeMek = mek || masterPassCrypto.getMEK();
+    if (isPrivate && !activeMek) {
+      activeMek = generateMEK();
+      masterPassCrypto.setMEK(activeMek);
     }
 
     setIsSaving(true);
@@ -63,10 +64,10 @@ export function ImportIdentityDrawer({
       let encryptedPrivHex: string | undefined;
       let encryptedNsec: string | undefined;
 
-      if (parsedKeypair.privkeyHex && mek) {
-        encryptedPrivHex = await encryptSecret(parsedKeypair.privkeyHex, mek);
+      if (parsedKeypair.privkeyHex && activeMek) {
+        encryptedPrivHex = await encryptSecret(parsedKeypair.privkeyHex, activeMek);
         if (parsedKeypair.nsec) {
-          encryptedNsec = await encryptSecret(parsedKeypair.nsec, mek);
+          encryptedNsec = await encryptSecret(parsedKeypair.nsec, activeMek);
         }
       }
 

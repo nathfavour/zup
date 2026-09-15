@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { 
   Shield, 
   ShieldCheck, 
@@ -27,6 +27,8 @@ import {
   Key,
   Copy
 } from 'lucide-react';
+import { nip19 } from 'nostr-tools';
+import { hexToBytes } from '../lib/nostr';
 import { NostrKeypair, RelayInfo, VaultSecurityState, PasskeyRecord, SyncStatus, KylrixOAuthSession } from '../types';
 import { 
   createPasskeyRecord, 
@@ -135,6 +137,18 @@ export function SettingsView({
 
   const [showPrivKeySettings, setShowPrivKeySettings] = useState(false);
   const [copiedKeySettings, setCopiedKeySettings] = useState<string | null>(null);
+
+  const effectiveNsec = useMemo(() => {
+    if (keypair.nsec) return keypair.nsec;
+    if (keypair.privkeyHex) {
+      try {
+        return nip19.nsecEncode(hexToBytes(keypair.privkeyHex));
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }, [keypair.nsec, keypair.privkeyHex]);
 
   const handleCopySettings = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -255,21 +269,17 @@ export function SettingsView({
             {/* Private Key (nsec) */}
             <div 
               className={`p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col justify-between gap-2 shadow-sm ${
-                isLocked || !keypair.nsec ? 'cursor-pointer hover:border-[#EC4899]/60 transition-colors' : ''
+                isLocked && vaultSecurity?.isInitialized ? 'cursor-pointer hover:border-[#EC4899]/60 transition-colors' : ''
               }`}
               onClick={() => {
-                if (isLocked) {
-                  if (vaultSecurity?.isInitialized) {
-                    onOpenUnlock();
-                  } else {
-                    onOpenSetupEncryption();
-                  }
+                if (isLocked && vaultSecurity?.isInitialized) {
+                  onOpenUnlock();
                 }
               }}
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-black text-white uppercase tracking-wider">Private Key (nsec)</span>
-                {keypair.nsec ? (
+                {effectiveNsec ? (
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
@@ -287,7 +297,7 @@ export function SettingsView({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleCopySettings(keypair.nsec!, 'nsec')}
+                      onClick={() => handleCopySettings(effectiveNsec, 'nsec')}
                       className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                     >
                       {copiedKeySettings === 'nsec' ? (
@@ -298,16 +308,12 @@ export function SettingsView({
                       <span>{copiedKeySettings === 'nsec' ? 'Copied' : 'Copy nsec'}</span>
                     </button>
                   </div>
-                ) : isLocked ? (
+                ) : isLocked && vaultSecurity?.isInitialized ? (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (vaultSecurity?.isInitialized) {
-                        onOpenUnlock();
-                      } else {
-                        onOpenSetupEncryption();
-                      }
+                      onOpenUnlock();
                     }}
                     className="text-xs font-bold text-[#EC4899] hover:underline flex items-center gap-1 cursor-pointer"
                   >
@@ -317,20 +323,24 @@ export function SettingsView({
                 ) : null}
               </div>
               <p className="font-mono text-xs text-white break-all m-0 select-all font-semibold">
-                {keypair.nsec ? (
+                {effectiveNsec ? (
                   showPrivKeySettings ? (
-                    keypair.nsec
+                    effectiveNsec
                   ) : (
                     '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••'
                   )
-                ) : isLocked ? (
+                ) : isLocked && vaultSecurity?.isInitialized ? (
                   <span className="text-[#F59E0B] text-xs flex items-center gap-1 font-sans font-bold">
                     <Lock size={12} />
                     Vault locked. Tap here to unlock and reveal nsec.
                   </span>
-                ) : (
+                ) : keypair.isWatchOnly ? (
                   <span className="text-white text-xs font-sans font-medium">
                     Watch-only identity (No private key loaded)
+                  </span>
+                ) : (
+                  <span className="text-white text-xs font-sans font-medium">
+                    No private key stored for this identity
                   </span>
                 )}
               </p>

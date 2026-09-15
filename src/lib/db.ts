@@ -284,24 +284,6 @@ export async function getDatabase(): Promise<ZupDatabase> {
 
   dbPromise = (async () => {
     try {
-      let db: ZupDatabase;
-      try {
-        db = await createRxDatabase<ZupDatabaseCollections>({
-          name: 'zup_cypher_db_v1',
-          storage: getRxStorageDexie(),
-          multiInstance: true,
-          ignoreDuplicate: true,
-        });
-      } catch (storageErr) {
-        console.warn('Dexie storage failed or unavailable, falling back to memory storage:', storageErr);
-        db = await createRxDatabase<ZupDatabaseCollections>({
-          name: 'zup_cypher_db_fallback',
-          storage: getRxStorageMemory(),
-          multiInstance: true,
-          ignoreDuplicate: true,
-        });
-      }
-
       const collectionsConfig = {
         identities: { schema: identitySchema },
         f_nostr_identities: { schema: fNostrIdentitySchema },
@@ -314,36 +296,59 @@ export async function getDatabase(): Promise<ZupDatabase> {
         vault_security: { schema: vaultSecuritySchema },
       };
 
-      try {
-        await db.addCollections(collectionsConfig);
-      } catch (collErr) {
-        console.warn('addCollections encountered error on database instance:', collErr);
-        // Do NOT call db.remove() or wipe existing data on collection error
+      let db: ZupDatabase | null = null;
+      const hasIndexedDB = typeof indexedDB !== 'undefined';
+
+      if (hasIndexedDB) {
         try {
-          // Attempt adding collections individually in case some already exist
-          for (const [key, config] of Object.entries(collectionsConfig)) {
-            if (!db.collections[key]) {
-              await db.addCollections({ [key]: config } as any);
-            }
-          }
-        } catch (retryErr) {
-          console.warn('Individual collection addition fallback:', retryErr);
+          const dexieDb = await createRxDatabase<ZupDatabaseCollections>({
+            name: 'zup_cypher_db_v1',
+            storage: getRxStorageDexie(),
+            multiInstance: true,
+          });
+          await dexieDb.addCollections(collectionsConfig);
+          db = dexieDb;
+        } catch (dexieErr) {
+          console.warn('Dexie storage or collection initialization failed, falling back to memory storage:', dexieErr);
+          db = null;
         }
       }
 
+      if (!db) {
+        const memDb = await createRxDatabase<ZupDatabaseCollections>({
+          name: 'zup_cypher_db_fallback',
+          storage: getRxStorageMemory(),
+          multiInstance: true,
+        });
+        await memDb.addCollections(collectionsConfig);
+        db = memDb;
+      }
+
       // Seed initial relays if empty
-      const existingRelays = await db.relays.find().exec();
-      if (existingRelays.length === 0) {
-        for (const r of DEFAULT_RELAYS) {
-          await db.relays.upsert(r);
+      if (db.collections.relays) {
+        try {
+          const existingRelays = await db.relays.find().exec();
+          if (existingRelays.length === 0) {
+            for (const r of DEFAULT_RELAYS) {
+              await db.relays.upsert(r);
+            }
+          }
+        } catch (e) {
+          console.warn('Could not check or seed default relays:', e);
         }
       }
 
       // Clean up any legacy demo mock events from prior runs so feed is 100% real Nostr events
-      const allNotes = await db.notes.find().exec();
-      for (const doc of allNotes) {
-        if (doc.id && doc.id.startsWith('e10')) {
-          await doc.remove();
+      if (db.collections.notes) {
+        try {
+          const allNotes = await db.notes.find().exec();
+          for (const doc of allNotes) {
+            if (doc.id && doc.id.startsWith('e10')) {
+              await doc.remove();
+            }
+          }
+        } catch (e) {
+          console.warn('Could not clean up legacy notes:', e);
         }
       }
 

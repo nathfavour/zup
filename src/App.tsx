@@ -69,9 +69,42 @@ export default function App() {
   const [db, setDb] = useState<ZupDatabase | null>(null);
 
   // Security & MEK Encryption State
-  const [vaultSecurity, setVaultSecurity] = useState<VaultSecurityState | null>(null);
-  const [mek, setMek] = useState<Uint8Array | null>(() => masterPassCrypto.getMEK());
-  const [isVaultLocked, setIsVaultLocked] = useState(() => !masterPassCrypto.hasMEK());
+  const [vaultSecurity, setVaultSecurity] = useState<VaultSecurityState | null>(() => {
+    try {
+      const raw = localStorage.getItem('zup_backup_vault_security');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [mek, setMek] = useState<Uint8Array | null>(() => {
+    const mem = masterPassCrypto.getMEK();
+    if (mem) return mem;
+    try {
+      const hex = sessionStorage.getItem('zup_session_mek') || localStorage.getItem('zup_session_mek');
+      if (hex) {
+        const bytes = hexToBytes(hex);
+        masterPassCrypto.setMEK(bytes);
+        return bytes;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  const [isVaultLocked, setIsVaultLocked] = useState(() => {
+    try {
+      const rawSec = localStorage.getItem('zup_backup_vault_security');
+      const sec = rawSec ? JSON.parse(rawSec) : null;
+      const hex = sessionStorage.getItem('zup_session_mek') || localStorage.getItem('zup_session_mek');
+      if (sec?.isInitialized && !hex) return true;
+    } catch {
+      // ignore
+    }
+    return false;
+  });
 
   // Drawers for Security & Setup
   const [isSetupEncryptionOpen, setIsSetupEncryptionOpen] = useState(false);
@@ -90,10 +123,75 @@ export default function App() {
     isWatchOnly: true,
   };
 
+  // Dual-persistence helpers to prevent state wipes across refreshes
+  const saveIdentitiesBackup = (list: StoredIdentity[]) => {
+    try {
+      localStorage.setItem('zup_backup_identities', JSON.stringify(list));
+    } catch {
+      // ignore
+    }
+  };
+
+  const saveVaultSecurityBackup = (sec: VaultSecurityState | null) => {
+    try {
+      if (sec) {
+        localStorage.setItem('zup_backup_vault_security', JSON.stringify(sec));
+      } else {
+        localStorage.removeItem('zup_backup_vault_security');
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   // Identities & Active Keypair
-  const [storedIdentities, setStoredIdentities] = useState<StoredIdentity[]>([]);
-  const [activeIdentityId, setActiveIdentityId] = useState<string>('');
-  const [keypair, setKeypair] = useState<NostrKeypair>(EMPTY_KEYPAIR);
+  const [storedIdentities, setStoredIdentities] = useState<StoredIdentity[]>(() => {
+    try {
+      const raw = localStorage.getItem('zup_backup_identities');
+      return raw ? (JSON.parse(raw) as StoredIdentity[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [activeIdentityId, setActiveIdentityId] = useState<string>(() => {
+    try {
+      return localStorage.getItem('zup_active_identity_id') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [keypair, setKeypair] = useState<NostrKeypair>(() => {
+    try {
+      const rawIds = localStorage.getItem('zup_backup_identities');
+      const list: StoredIdentity[] = rawIds ? JSON.parse(rawIds) : [];
+      const savedId = localStorage.getItem('zup_active_identity_id');
+      const active = list.find((i) => i.id === savedId) || list[0];
+      if (active) {
+        return {
+          id: active.id,
+          pubkeyHex: active.pubkeyHex,
+          npub: active.npub,
+          name: active.name,
+          displayName: active.displayName,
+          avatar: active.avatar,
+          lud16: active.lud16,
+          nip05: active.nip05,
+          followingCount: active.followingCount,
+          followersCount: active.followersCount,
+          broadcastsCount: active.broadcastsCount,
+          reactionsCount: active.reactionsCount,
+          zapsCount: active.zapsCount,
+          isEphemeral: false,
+          isWatchOnly: active.isWatchOnly,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return EMPTY_KEYPAIR;
+  });
 
   // Relays, Events, Threads State (driven by RxDB & live relay stream)
   const [relays, setRelays] = useState<RelayInfo[]>(DEFAULT_RELAYS);
@@ -143,14 +241,38 @@ export default function App() {
         activeMek = masterPassCrypto.getMEK();
       }
 
-      if (activeMek && active?.encryptedPrivkeyHex) {
-        try {
-          resolvedPrivHex = await decryptSecret(active.encryptedPrivkeyHex, activeMek);
-          if (active.encryptedNsec) {
-            resolvedNsec = await decryptSecret(active.encryptedNsec, activeMek);
+      if (activeMek && (active?.encryptedPrivkeyHex || active?.encryptedNsec)) {
+        if (active?.encryptedPrivkeyHex) {
+          try {
+            resolvedPrivHex = await decryptSecret(active.encryptedPrivkeyHex, activeMek);
+          } catch (err) {
+            console.warn('Could not decrypt stored private key:', err);
           }
-        } catch (err) {
-          console.warn('Could not decrypt stored private key:', err);
+        }
+        if (active?.encryptedNsec) {
+          try {
+            resolvedNsec = await decryptSecret(active.encryptedNsec, activeMek);
+          } catch (err) {
+            console.warn('Could not decrypt stored nsec:', err);
+          }
+        }
+      }
+
+      if (resolvedPrivHex && !resolvedNsec) {
+        try {
+          resolvedNsec = nip19.nsecEncode(hexToBytes(resolvedPrivHex));
+        } catch {
+          // ignore
+        }
+      }
+      if (resolvedNsec && !resolvedPrivHex) {
+        try {
+          const dec = nip19.decode(resolvedNsec);
+          if (dec.type === 'nsec') {
+            resolvedPrivHex = bytesToHex(dec.data);
+          }
+        } catch {
+          // ignore
         }
       }
 
@@ -161,9 +283,22 @@ export default function App() {
         }
 
         let nextNsec: string | undefined = resolvedNsec;
+        if (!nextNsec && prev.pubkeyHex === active.pubkeyHex && prev.nsec) {
+          nextNsec = prev.nsec;
+        }
         if (!nextNsec && nextPriv) {
           try {
             nextNsec = nip19.nsecEncode(hexToBytes(nextPriv));
+          } catch {
+            // Ignore
+          }
+        }
+        if (!nextPriv && nextNsec) {
+          try {
+            const dec = nip19.decode(nextNsec);
+            if (dec.type === 'nsec') {
+              nextPriv = bytesToHex(dec.data);
+            }
           } catch {
             // Ignore
           }
@@ -219,12 +354,34 @@ export default function App() {
         setDb(database);
 
         // A. Check Vault Security State
-        const secDoc = await database.vault_security.findOne('primary_vault_security').exec();
+        let currentSec: VaultSecurityState | null = null;
+        try {
+          const secDoc = await database.vault_security.findOne('primary_vault_security').exec();
+          if (secDoc) {
+            currentSec = secDoc.toJSON() as VaultSecurityState;
+          }
+        } catch (e) {
+          console.warn('Error reading vault_security from db:', e);
+        }
+
+        // Restore from localStorage backup if not found in database instance
+        if (!currentSec) {
+          try {
+            const rawSec = localStorage.getItem('zup_backup_vault_security');
+            if (rawSec) {
+              currentSec = JSON.parse(rawSec) as VaultSecurityState;
+              await database.vault_security.upsert(currentSec);
+            }
+          } catch (e) {
+            console.warn('Error restoring vault_security from backup:', e);
+          }
+        }
+
         let isSecInitialized = false;
-        if (secDoc) {
-          const sec = secDoc.toJSON() as VaultSecurityState;
-          setVaultSecurity(sec);
-          isSecInitialized = Boolean(sec.isInitialized);
+        if (currentSec) {
+          setVaultSecurity(currentSec);
+          saveVaultSecurityBackup(currentSec);
+          isSecInitialized = Boolean(currentSec.isInitialized);
         }
 
         // Retrieve or restore session MEK
@@ -273,11 +430,39 @@ export default function App() {
         });
         subs.push({ unsubscribe: unsubCrypto });
 
-        // B. Load Identities from RxDB
-        const idDocs = await database.identities.find().exec();
-        if (idDocs.length > 0) {
-          const list = idDocs.map((d) => d.toJSON() as StoredIdentity);
+        // B. Load Identities from RxDB or localStorage backup
+        let list: StoredIdentity[] = [];
+        try {
+          const idDocs = await database.identities.find().exec();
+          if (idDocs && idDocs.length > 0) {
+            list = idDocs.map((d) => d.toJSON() as StoredIdentity);
+          }
+        } catch (e) {
+          console.warn('Error reading identities from db:', e);
+        }
+
+        // If not in database instance, restore from localStorage backup
+        if (list.length === 0) {
+          try {
+            const rawIds = localStorage.getItem('zup_backup_identities');
+            if (rawIds) {
+              const parsed = JSON.parse(rawIds) as StoredIdentity[];
+              if (parsed && parsed.length > 0) {
+                list = parsed;
+                for (const item of list) {
+                  await database.identities.upsert(item);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Error restoring identities from backup:', e);
+          }
+        }
+
+        if (list.length > 0) {
           setStoredIdentities(list);
+          saveIdentitiesBackup(list);
+
           let savedActiveId: string | null = null;
           try {
             savedActiveId = localStorage.getItem('zup_active_identity_id');
@@ -296,10 +481,51 @@ export default function App() {
           } catch {
             // ignore
           }
+
+          // Decrypt active keys immediately if MEK is available
+          let activePrivHex: string | undefined;
+          let activeNsec: string | undefined;
+          const activeKeyMek = sessionMek || masterPassCrypto.getMEK();
+          if (activeKeyMek) {
+            if (active.encryptedPrivkeyHex) {
+              try {
+                activePrivHex = await decryptSecret(active.encryptedPrivkeyHex, activeKeyMek);
+              } catch (e) {
+                console.warn('Could not decrypt privkeyHex during initial load:', e);
+              }
+            }
+            if (active.encryptedNsec) {
+              try {
+                activeNsec = await decryptSecret(active.encryptedNsec, activeKeyMek);
+              } catch (e) {
+                console.warn('Could not decrypt nsec during initial load:', e);
+              }
+            }
+            if (activePrivHex && !activeNsec) {
+              try {
+                activeNsec = nip19.nsecEncode(hexToBytes(activePrivHex));
+              } catch {
+                // ignore
+              }
+            }
+            if (activeNsec && !activePrivHex) {
+              try {
+                const dec = nip19.decode(activeNsec);
+                if (dec.type === 'nsec') {
+                  activePrivHex = bytesToHex(dec.data);
+                }
+              } catch {
+                // ignore
+              }
+            }
+          }
+
           setKeypair({
             id: active.id,
             pubkeyHex: active.pubkeyHex,
             npub: active.npub,
+            privkeyHex: activePrivHex,
+            nsec: activeNsec,
             name: active.name,
             displayName: active.displayName,
             avatar: active.avatar,
@@ -370,8 +596,10 @@ export default function App() {
         subs.push(msgsSub);
 
         const idsSub = database.identities.find().$.subscribe((docs) => {
-          if (docs) {
-            setStoredIdentities(docs.map((d) => d.toJSON() as StoredIdentity));
+          if (docs && docs.length > 0) {
+            const list = docs.map((d) => d.toJSON() as StoredIdentity);
+            setStoredIdentities(list);
+            saveIdentitiesBackup(list);
           }
         });
         subs.push(idsSub);
@@ -380,7 +608,9 @@ export default function App() {
           .findOne('primary_vault_security')
           .$.subscribe((doc) => {
             if (doc) {
-              setVaultSecurity(doc.toJSON() as VaultSecurityState);
+              const sec = doc.toJSON() as VaultSecurityState;
+              setVaultSecurity(sec);
+              saveVaultSecurityBackup(sec);
             }
           });
         subs.push(secSub);
@@ -760,6 +990,7 @@ export default function App() {
     securityState: VaultSecurityState,
     unlockedMEK: Uint8Array
   ) => {
+    let reEncryptedIdentities: StoredIdentity[] = [];
     if (db) {
       await db.vault_security.upsert(securityState);
 
@@ -794,11 +1025,23 @@ export default function App() {
               encryptedNsec: newEncNsec,
             },
           });
+          reEncryptedIdentities.push({
+            ...item,
+            encryptedPrivkeyHex: newEncPriv,
+            encryptedNsec: newEncNsec,
+          });
+        } else {
+          reEncryptedIdentities.push(item);
         }
       }
     }
 
     setVaultSecurity(securityState);
+    saveVaultSecurityBackup(securityState);
+    if (reEncryptedIdentities.length > 0) {
+      setStoredIdentities(reEncryptedIdentities);
+      saveIdentitiesBackup(reEncryptedIdentities);
+    }
     masterPassCrypto.setMEK(unlockedMEK);
     setMek(unlockedMEK);
     setIsVaultLocked(false);
@@ -827,12 +1070,34 @@ export default function App() {
     const activeStored = storedIdentities.find(
       (i) => i.id === activeIdentityId || i.pubkeyHex === keypair.pubkeyHex
     );
-    if (activeStored && activeStored.encryptedPrivkeyHex) {
+    if (activeStored && (activeStored.encryptedPrivkeyHex || activeStored.encryptedNsec)) {
       try {
-        const decryptedPrivHex = await decryptSecret(activeStored.encryptedPrivkeyHex, unlockedMEK);
-        const decryptedNsec = activeStored.encryptedNsec
-          ? await decryptSecret(activeStored.encryptedNsec, unlockedMEK)
-          : undefined;
+        let decryptedPrivHex: string | undefined;
+        let decryptedNsec: string | undefined;
+
+        if (activeStored.encryptedPrivkeyHex) {
+          decryptedPrivHex = await decryptSecret(activeStored.encryptedPrivkeyHex, unlockedMEK);
+        }
+        if (activeStored.encryptedNsec) {
+          decryptedNsec = await decryptSecret(activeStored.encryptedNsec, unlockedMEK);
+        }
+        if (decryptedPrivHex && !decryptedNsec) {
+          try {
+            decryptedNsec = nip19.nsecEncode(hexToBytes(decryptedPrivHex));
+          } catch {
+            // ignore
+          }
+        }
+        if (decryptedNsec && !decryptedPrivHex) {
+          try {
+            const dec = nip19.decode(decryptedNsec);
+            if (dec.type === 'nsec') {
+              decryptedPrivHex = bytesToHex(dec.data);
+            }
+          } catch {
+            // ignore
+          }
+        }
 
         setKeypair((prev) => ({
           ...prev,
@@ -866,6 +1131,7 @@ export default function App() {
 
   const handleUpdateVaultSecurity = async (updated: VaultSecurityState) => {
     let currentMek = mek || masterPassCrypto.getMEK();
+    let reEncryptedIdentities: StoredIdentity[] = [];
     if (db) {
       await db.vault_security.upsert(updated);
 
@@ -900,11 +1166,23 @@ export default function App() {
                 encryptedNsec: encNsec,
               },
             });
+            reEncryptedIdentities.push({
+              ...item,
+              encryptedPrivkeyHex: encPriv,
+              encryptedNsec: encNsec,
+            });
+          } else {
+            reEncryptedIdentities.push(item);
           }
         }
       }
     }
     setVaultSecurity(updated);
+    saveVaultSecurityBackup(updated);
+    if (reEncryptedIdentities.length > 0) {
+      setStoredIdentities(reEncryptedIdentities);
+      saveIdentitiesBackup(reEncryptedIdentities);
+    }
     syncEngine.markPending('primary_vault_security', 1, 'setting', updated);
   };
 
@@ -923,11 +1201,31 @@ export default function App() {
     let resolvedNsec: string | undefined;
 
     // Decrypt if unlocked
-    if (identity.encryptedPrivkeyHex && mek) {
+    const activeMek = mek || masterPassCrypto.getMEK();
+    if (activeMek && (identity.encryptedPrivkeyHex || identity.encryptedNsec)) {
       try {
-        resolvedPrivHex = await decryptSecret(identity.encryptedPrivkeyHex, mek);
+        if (identity.encryptedPrivkeyHex) {
+          resolvedPrivHex = await decryptSecret(identity.encryptedPrivkeyHex, activeMek);
+        }
         if (identity.encryptedNsec) {
-          resolvedNsec = await decryptSecret(identity.encryptedNsec, mek);
+          resolvedNsec = await decryptSecret(identity.encryptedNsec, activeMek);
+        }
+        if (resolvedPrivHex && !resolvedNsec) {
+          try {
+            resolvedNsec = nip19.nsecEncode(hexToBytes(resolvedPrivHex));
+          } catch {
+            // ignore
+          }
+        }
+        if (resolvedNsec && !resolvedPrivHex) {
+          try {
+            const dec = nip19.decode(resolvedNsec);
+            if (dec.type === 'nsec') {
+              resolvedPrivHex = bytesToHex(dec.data);
+            }
+          } catch {
+            // ignore
+          }
         }
       } catch (err) {
         console.warn('Could not decrypt private key for selected identity:', err);
@@ -965,19 +1263,63 @@ export default function App() {
     if (db) {
       await db.identities.upsert(updatedStored);
     }
-    setStoredIdentities((prev) =>
-      prev.map((i) => (i.id === identity.id ? updatedStored : i))
-    );
+    setStoredIdentities((prev) => {
+      const next = prev.map((i) => (i.id === identity.id ? updatedStored : i));
+      saveIdentitiesBackup(next);
+      return next;
+    });
   };
 
   const handleIdentityImported = async (
     stored: StoredIdentity,
     resolvedKeypair: NostrKeypair
   ) => {
-    const updatedStored = {
+    let finalKeypair = { ...resolvedKeypair };
+    if (finalKeypair.privkeyHex && !finalKeypair.nsec) {
+      try {
+        finalKeypair.nsec = nip19.nsecEncode(hexToBytes(finalKeypair.privkeyHex));
+      } catch {
+        // ignore
+      }
+    }
+    if (finalKeypair.nsec && !finalKeypair.privkeyHex) {
+      try {
+        const dec = nip19.decode(finalKeypair.nsec);
+        if (dec.type === 'nsec') {
+          finalKeypair.privkeyHex = bytesToHex(dec.data);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const activeMek = mek || masterPassCrypto.getMEK();
+    let encPriv = stored.encryptedPrivkeyHex;
+    let encNsec = stored.encryptedNsec;
+    if (activeMek) {
+      if (!encPriv && finalKeypair.privkeyHex) {
+        try {
+          encPriv = await encryptSecret(finalKeypair.privkeyHex, activeMek);
+        } catch {
+          // ignore
+        }
+      }
+      if (!encNsec && finalKeypair.nsec) {
+        try {
+          encNsec = await encryptSecret(finalKeypair.nsec, activeMek);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const updatedStored: StoredIdentity = {
       ...stored,
+      encryptedPrivkeyHex: encPriv,
+      encryptedNsec: encNsec,
       lastActiveAt: Date.now(),
     };
+
     if (db) {
       await db.identities.upsert(updatedStored);
     }
@@ -986,9 +1328,13 @@ export default function App() {
     } catch {
       // ignore
     }
-    setStoredIdentities((prev) => [updatedStored, ...prev.filter((i) => i.id !== stored.id)]);
+    setStoredIdentities((prev) => {
+      const next = [updatedStored, ...prev.filter((i) => i.id !== stored.id)];
+      saveIdentitiesBackup(next);
+      return next;
+    });
     setActiveIdentityId(stored.id);
-    setKeypair(resolvedKeypair);
+    setKeypair(finalKeypair);
   };
 
   const handleDeleteIdentity = async (identityId: string) => {
@@ -998,7 +1344,11 @@ export default function App() {
         await doc.remove();
       }
     }
-    setStoredIdentities((prev) => prev.filter((i) => i.id !== identityId));
+    setStoredIdentities((prev) => {
+      const next = prev.filter((i) => i.id !== identityId);
+      saveIdentitiesBackup(next);
+      return next;
+    });
   };
 
   // =========================================================================
@@ -1352,8 +1702,14 @@ export default function App() {
   };
 
   const handleClearCache = async () => {
-    if (db) {
-      await db.remove();
+    if (confirm('Clear feed cache and reload? Sovereign keys and security settings remain safely preserved.')) {
+      if (db) {
+        try {
+          await db.notes.find().remove();
+        } catch {
+          // ignore
+        }
+      }
       window.location.reload();
     }
   };
@@ -1409,9 +1765,11 @@ export default function App() {
       if (db) {
         await db.identities.upsert(updatedStored);
       }
-      setStoredIdentities((prev) =>
-        prev.map((i) => (i.id === existing.id ? updatedStored : i))
-      );
+      setStoredIdentities((prev) => {
+        const next = prev.map((i) => (i.id === existing.id ? updatedStored : i));
+        saveIdentitiesBackup(next);
+        return next;
+      });
       setKeypair({
         ...updated,
         id: existing.id,
@@ -1437,7 +1795,11 @@ export default function App() {
       if (db) {
         await db.identities.upsert(newStored);
       }
-      setStoredIdentities((prev) => [newStored, ...prev.filter((i) => i.id !== newStored.id)]);
+      setStoredIdentities((prev) => {
+        const next = [newStored, ...prev.filter((i) => i.id !== newStored.id)];
+        saveIdentitiesBackup(next);
+        return next;
+      });
       setActiveIdentityId(newStored.id);
       try {
         localStorage.setItem('zup_active_identity_id', newStored.id);

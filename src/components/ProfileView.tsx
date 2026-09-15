@@ -39,7 +39,6 @@ import {
 } from '../lib/nostr';
 import { syncEngine } from '../lib/syncEngine';
 import { extractPostMedia } from '../lib/momentMedia';
-import { ProfileSettingsDrawer } from './ProfileSettingsDrawer';
 
 interface ProfileViewProps {
   keypair: NostrKeypair;
@@ -52,6 +51,7 @@ interface ProfileViewProps {
   onReplyEvent: (event: NostrEvent) => void;
   onSelectPost?: (event: NostrEvent) => void;
   onBackToFeed: () => void;
+  onOpenSettings?: () => void;
   // Relays and Key Vault management for top Settings button
   relays: RelayInfo[];
   onAddRelay: (url: string, read: boolean, write: boolean) => void;
@@ -85,6 +85,7 @@ export function ProfileView({
   onReplyEvent,
   onSelectPost,
   onBackToFeed,
+  onOpenSettings,
   relays,
   onAddRelay,
   onToggleRelayPermission,
@@ -106,7 +107,6 @@ export function ProfileView({
   onOpenPro,
 }: ProfileViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<ProfileSubTab>('zups');
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isLoadingRelayData, setIsLoadingRelayData] = useState(false);
@@ -351,11 +351,17 @@ export function ProfileView({
           </div>
         </div>
 
-        {/* Top Profile Settings Button: Relegates Relays & Key Vault to top Settings icon */}
+        {/* Top Profile Settings Button: Navigates directly to native Settings page */}
         <button
           id="profile-top-settings-btn"
           type="button"
-          onClick={() => setIsSettingsOpen(true)}
+          onClick={() => {
+            if (onOpenSettings) {
+              onOpenSettings();
+            } else {
+              setActiveSubTab('relays');
+            }
+          }}
           className="flex items-center gap-2 px-3 py-1.5 rounded-[14px] bg-[#161412] hover:bg-[#25221f] border border-white/20 hover:border-[#EC4899]/60 text-white transition-all cursor-pointer shadow-sm group"
           title="Relays, Key Vault & Security Settings"
           aria-label="Settings"
@@ -480,7 +486,13 @@ export function ProfileView({
               {/* Connected Relays Status */}
               <button 
                 type="button"
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={() => {
+                  if (onOpenSettings) {
+                    onOpenSettings();
+                  } else {
+                    setActiveSubTab('relays');
+                  }
+                }}
                 className="flex items-center gap-1 text-[#EC4899] font-mono text-[11px] hover:underline cursor-pointer bg-transparent border-0 p-0"
               >
                 <Radio size={13} />
@@ -685,34 +697,7 @@ export function ProfileView({
         )}
       </div>
 
-      {/* 5. Relays & Key Vault Settings Drawer (Triggered by top Settings button) */}
-      <ProfileSettingsDrawer
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        keypair={keypair}
-        onUpdateKeypair={onUpdateKeypair}
-        relays={relays}
-        onAddRelay={onAddRelay}
-        onToggleRelayPermission={onToggleRelayPermission}
-        onRemoveRelay={onRemoveRelay}
-        onTestPing={onTestPing}
-        onResetDefaultRelays={onResetDefaultRelays}
-        vaultSecurity={vaultSecurity}
-        isLocked={isVaultLocked}
-        onLockVault={onLockVault}
-        onOpenUnlock={onOpenUnlock}
-        onOpenSetupEncryption={onOpenSetupEncryption}
-        onToggleEphemeral={onToggleEphemeral}
-        identities={identities}
-        activeIdentityId={activeIdentityId}
-        onSelectIdentity={onSelectIdentity}
-        onOpenImportDrawer={onOpenImportDrawer}
-        onDeleteIdentity={onDeleteIdentity}
-        onClearCache={onClearCache}
-        onOpenPro={onOpenPro}
-      />
-
-      {/* 6. Edit Profile Modal */}
+      {/* 5. Edit Profile Modal */}
       {isEditProfileOpen && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-md animate-fadeIn"

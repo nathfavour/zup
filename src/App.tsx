@@ -1922,6 +1922,7 @@ export default function App() {
               onReplyEvent={(ev) => setReplyTargetEvent(ev)}
               onSelectPost={(ev) => setSelectedPostEvent(ev)}
               onBackToFeed={() => setActiveTab('feed')}
+              onOpenSettings={() => setActiveTab('settings')}
               relays={relays}
               onAddRelay={handleAddRelay}
               onToggleRelayPermission={handleToggleRelayPermission}
@@ -2005,6 +2006,18 @@ export default function App() {
               onClearCache={handleClearCache}
               onResetDefaultRelays={handleResetDefaultRelays}
               onOpenSync={() => setIsKylrixSyncOpen(true)}
+              onBackToFeed={() => setActiveTab('feed')}
+              onAddRelay={handleAddRelay}
+              onToggleRelayPermission={handleToggleRelayPermission}
+              onRemoveRelay={handleRemoveRelay}
+              onTestPing={handleTestPing}
+              identities={storedIdentities}
+              activeIdentityId={activeIdentityId}
+              onSelectIdentity={handleSelectIdentity}
+              onOpenImportDrawer={() => setIsImportIdentityOpen(true)}
+              onDeleteIdentity={handleDeleteIdentity}
+              onToggleEphemeral={handleToggleEphemeral}
+              onUpdateKeypair={handleUpdateKeypair}
             />
           )}
         </main>

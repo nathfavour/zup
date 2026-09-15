@@ -28,3 +28,5 @@
 ### 🎨 Design & Interaction (OpenBricks)
 - **OpenBricks Design Language**: Dark mode, opaque surfaces (`#000000`, `#141210`, `#161412`), subtle borders (`border-white/10` to `border-white/20`), tactile action triggers, and zero translucent blurs on product chrome.
 - **Layman-First UI Copy**: Clear, direct, human-friendly wording. Avoid unnecessarily alienating jargon where simple terms communicate better.
+- **No Overlays / No Modals**: We never use overlays, popups, backdrop blurs, or modal dialogs here. All views, configuration panels, settings, and workflows (including Settings, Relays, Profile, and Vault) must be orderly, neat first-class pages or inline embedded panels matching Feed and Profile. Clicking Settings anywhere in the app must navigate cleanly to the native inline Settings page, never an overlay.
+

@@ -254,7 +254,7 @@ export function WalletView({
                   </div>
                   <div className="min-w-0">
                     <span className="text-white font-extrabold text-xs block truncate">
-                      {z.sourceName || 'Anonymous Cypherpunk'}
+                      {z.sourceName || 'Zap Sender'}
                     </span>
                     <span className="text-white/50 text-[10px] font-medium truncate block">
                       {z.comment || 'Zapped your note'}

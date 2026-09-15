@@ -23,11 +23,13 @@ import {
   Copy, 
   ExternalLink,
   User,
+  UserX,
+  LogOut,
   Flame,
   CheckCircle2
 } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
-import { hexToBytes, formatTruncatedKey } from '../lib/nostr';
+import { hexToBytes, formatTruncatedKey, generateLocalIdenticon } from '../lib/nostr';
 import { 
   NostrKeypair, 
   RelayInfo, 
@@ -70,6 +72,8 @@ export interface SettingsViewProps {
   onOpenImportDrawer?: () => void;
   onToggleEphemeral?: () => void;
   onUpdateKeypair?: (kp: NostrKeypair) => void;
+  onCreateNewAccount?: () => void;
+  onDisconnectAccount?: () => void;
 }
 
 // Accessible custom toggle switch
@@ -132,8 +136,12 @@ export function SettingsView({
   onDeleteIdentity,
   onOpenImportDrawer,
   onToggleEphemeral,
+  onCreateNewAccount,
+  onDisconnectAccount,
 }: SettingsViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<SettingsSubTab>('keys');
+
+  const hasActiveAccount = Boolean(keypair && keypair.pubkeyHex && keypair.npub);
 
   // Sync state
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(syncEngine.getSyncStatus());
@@ -354,188 +362,256 @@ export function SettingsView({
       {/* 3. SUB-TAB 1: ACCOUNT & KEYS */}
       {activeSubTab === 'keys' && (
         <div className="flex flex-col gap-4 animate-fadeIn">
-          {/* Identity Profile Overview */}
-          <section className="bg-[#161412] border border-white/20 rounded-[24px] p-5 flex flex-col gap-4 shadow-xl">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <img
-                  src={keypair.avatar}
-                  alt={keypair.name || 'Account Avatar'}
-                  className="w-12 h-12 rounded-[16px] object-cover border border-white/20 bg-black shrink-0"
-                />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-white text-base font-black truncate m-0">
-                      {keypair.displayName || keypair.name || 'Anonymous Peer'}
-                    </h2>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
-                      Sovereign
-                    </span>
-                    {keypair.isEphemeral && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30 flex items-center gap-1">
-                        <Flame size={10} />
-                        Burner
-                      </span>
-                    )}
+          {!hasActiveAccount ? (
+            <section className="bg-[#161412] border border-white/20 rounded-[24px] p-6 sm:p-8 flex flex-col gap-6 shadow-xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-[16px] bg-[#000000] border border-white/20 flex items-center justify-center text-white/50 shrink-0">
+                    <UserX size={24} />
                   </div>
-                  <p className="text-white/60 font-mono text-xs truncate mt-0.5 m-0 font-medium">
-                    {keypair.npub ? formatTruncatedKey(keypair.npub, 12, 8) : 'No Public Key'}
-                  </p>
+                  <div className="min-w-0">
+                    <h2 className="text-white text-base font-black truncate m-0">
+                      No Logged In Account
+                    </h2>
+                    <p className="text-white/60 text-xs mt-0.5 m-0 font-medium">
+                      No sovereign identity is active in this browser session.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#000000] border border-white/20 text-xs font-mono text-white/50 font-bold">
+                    Disconnected
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#000000] border border-white/20 text-xs font-mono text-white font-bold">
-                  <ShieldCheck size={14} className="text-[#10B981]" />
-                  <span>secp256k1</span>
-                </span>
-              </div>
-            </div>
-
-            {/* Cryptographic Keys Section (npub & nsec) */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <Key size={14} className="text-[#EC4899]" />
-                  <span>Active Identity Keys</span>
-                </span>
-                {isLocked && vaultSecurity?.isInitialized && !isSudoActive() && (
-                  <button
-                    type="button"
-                    onClick={onOpenUnlock}
-                    className="text-xs font-bold text-[#EC4899] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Unlock size={12} />
-                    <span>Unlock to view nsec</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Public Key (npub) */}
-                <div className="p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col justify-between gap-2 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-white uppercase tracking-wider">Public Key (npub)</span>
+              <div className="p-4 rounded-[18px] bg-[#000000] border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <p className="text-xs text-white/70 font-medium leading-relaxed m-0">
+                  Connect a sovereign Nostr identity to publish notes, sign cryptographic events, and manage relays.
+                </p>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
+                  {onCreateNewAccount && (
                     <button
                       type="button"
-                      onClick={() => handleCopySettings(keypair.npub, 'npub')}
-                      className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      onClick={onCreateNewAccount}
+                      className="flex-1 sm:flex-none px-4 py-2 rounded-[14px] bg-[#EC4899] hover:bg-[#db2777] text-white text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
                     >
-                      {copiedKeySettings === 'npub' ? (
-                        <Check size={12} className="text-[#10B981]" />
-                      ) : (
-                        <Copy size={12} />
-                      )}
-                      <span>{copiedKeySettings === 'npub' ? 'Copied' : 'Copy'}</span>
+                      <Plus size={14} />
+                      <span>Create Account</span>
                     </button>
+                  )}
+                  {onOpenImportDrawer && (
+                    <button
+                      type="button"
+                      onClick={onOpenImportDrawer}
+                      className="flex-1 sm:flex-none px-4 py-2 rounded-[14px] bg-[#161412] hover:bg-[#25221f] border border-white/20 text-white text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+                    >
+                      <Key size={14} />
+                      <span>Import Keys</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
+          ) : (
+            <section className="bg-[#161412] border border-white/20 rounded-[24px] p-5 flex flex-col gap-4 shadow-xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <img
+                    src={keypair.avatar || generateLocalIdenticon(keypair.pubkeyHex)}
+                    alt={keypair.name || 'Account Avatar'}
+                    className="w-12 h-12 rounded-[16px] object-cover border border-white/20 bg-black shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-white text-base font-black truncate m-0">
+                        {keypair.displayName || keypair.name || formatTruncatedKey(keypair.npub, 10, 6) || 'Sovereign Account'}
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30">
+                        Sovereign
+                      </span>
+                      {keypair.isEphemeral && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30 flex items-center gap-1">
+                          <Flame size={10} />
+                          Burner
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-white/60 font-mono text-xs truncate mt-0.5 m-0 font-medium">
+                      {formatTruncatedKey(keypair.npub, 12, 8)}
+                    </p>
                   </div>
-                  <p className="font-mono text-xs text-white break-all m-0 select-all font-semibold">
-                    {keypair.npub}
-                  </p>
                 </div>
 
-                {/* Private Key (nsec) */}
-                <div 
-                  className={`p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col justify-between gap-2 shadow-sm ${
-                    isLocked && vaultSecurity?.isInitialized ? 'cursor-pointer hover:border-[#EC4899]/60 transition-colors' : ''
-                  }`}
-                  onClick={() => {
-                    if (isLocked && vaultSecurity?.isInitialized) {
-                      onOpenUnlock();
-                    }
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-white uppercase tracking-wider">Private Key (nsec)</span>
-                    {effectiveNsec ? (
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (isLocked && vaultSecurity?.isInitialized && !isSudoActive()) {
-                              onOpenUnlock();
-                              return;
-                            }
-                            setShowPrivKeySettings(!showPrivKeySettings);
-                          }}
-                          className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          {showPrivKeySettings ? <EyeOff size={12} /> : <Eye size={12} />}
-                          <span>{showPrivKeySettings ? 'Hide' : 'Show'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleCopySettings(effectiveNsec, 'nsec')}
-                          className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          {copiedKeySettings === 'nsec' ? (
-                            <Check size={12} className="text-[#10B981]" />
-                          ) : (
-                            <Copy size={12} />
-                          )}
-                          <span>{copiedKeySettings === 'nsec' ? 'Copied' : 'Copy nsec'}</span>
-                        </button>
-                      </div>
-                    ) : isLocked && vaultSecurity?.isInitialized ? (
+                <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#000000] border border-white/20 text-xs font-mono text-white font-bold">
+                    <ShieldCheck size={14} className="text-[#10B981]" />
+                    <span>secp256k1</span>
+                  </span>
+                  {onDisconnectAccount && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Disconnect active account from this session? Your keys remain safely stored on this device.')) {
+                          onDisconnectAccount();
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-[12px] bg-[#000000] hover:bg-rose-500/15 border border-white/20 hover:border-rose-500/40 text-white/70 hover:text-rose-400 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                      title="Disconnect active account"
+                    >
+                      <LogOut size={13} />
+                      <span>Log Out</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Cryptographic Keys Section (npub & nsec) */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <Key size={14} className="text-[#EC4899]" />
+                    <span>Active Identity Keys</span>
+                  </span>
+                  {isLocked && vaultSecurity?.isInitialized && !isSudoActive() && (
+                    <button
+                      type="button"
+                      onClick={onOpenUnlock}
+                      className="text-xs font-bold text-[#EC4899] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Unlock size={12} />
+                      <span>Unlock to view nsec</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Public Key (npub) */}
+                  <div className="p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col justify-between gap-2 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black text-white uppercase tracking-wider">Public Key (npub)</span>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenUnlock();
-                        }}
-                        className="text-xs font-bold text-[#EC4899] hover:underline flex items-center gap-1 cursor-pointer"
+                        onClick={() => handleCopySettings(keypair.npub, 'npub')}
+                        className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
-                        <Unlock size={12} />
-                        <span>Unlock</span>
+                        {copiedKeySettings === 'npub' ? (
+                          <Check size={12} className="text-[#10B981]" />
+                        ) : (
+                          <Copy size={12} />
+                        )}
+                        <span>{copiedKeySettings === 'npub' ? 'Copied' : 'Copy'}</span>
                       </button>
-                    ) : null}
+                    </div>
+                    <p className="font-mono text-xs text-white break-all m-0 select-all font-semibold">
+                      {keypair.npub}
+                    </p>
                   </div>
-                  <p className="font-mono text-xs text-white break-all m-0 select-all font-semibold">
-                    {effectiveNsec ? (
-                      showPrivKeySettings ? (
-                        effectiveNsec
-                      ) : (
-                        '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••'
-                      )
-                    ) : isLocked && vaultSecurity?.isInitialized ? (
-                      <span className="text-[#F59E0B] text-xs flex items-center gap-1 font-sans font-bold">
-                        <Lock size={12} />
-                        Vault locked. Tap here to unlock and reveal nsec.
-                      </span>
-                    ) : keypair.isWatchOnly ? (
-                      <span className="text-white text-xs font-sans font-medium">
-                        Watch-only identity (No private key loaded)
-                      </span>
-                    ) : (
-                      <span className="text-white text-xs font-sans font-medium">
-                        No private key stored for this identity
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
 
-            {/* Ephemeral Mode Toggle */}
-            {onToggleEphemeral && (
-              <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <span className="text-xs font-bold text-white block">
-                    Ephemeral Burner Session Mode
-                  </span>
-                  <p className="text-white/60 text-xs mt-0.5 m-0 font-medium">
-                    When active, private keys are wiped on tab close and never written to persistent disk.
-                  </p>
+                  {/* Private Key (nsec) */}
+                  <div 
+                    className={`p-3.5 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col justify-between gap-2 shadow-sm ${
+                      isLocked && vaultSecurity?.isInitialized ? 'cursor-pointer hover:border-[#EC4899]/60 transition-colors' : ''
+                    }`}
+                    onClick={() => {
+                      if (isLocked && vaultSecurity?.isInitialized) {
+                        onOpenUnlock();
+                      }
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black text-white uppercase tracking-wider">Private Key (nsec)</span>
+                      {effectiveNsec ? (
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isLocked && vaultSecurity?.isInitialized && !isSudoActive()) {
+                                onOpenUnlock();
+                                return;
+                              }
+                              setShowPrivKeySettings(!showPrivKeySettings);
+                            }}
+                            className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            {showPrivKeySettings ? <EyeOff size={12} /> : <Eye size={12} />}
+                            <span>{showPrivKeySettings ? 'Hide' : 'Show'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCopySettings(effectiveNsec, 'nsec')}
+                            className="text-white hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            {copiedKeySettings === 'nsec' ? (
+                              <Check size={12} className="text-[#10B981]" />
+                            ) : (
+                              <Copy size={12} />
+                            )}
+                            <span>{copiedKeySettings === 'nsec' ? 'Copied' : 'Copy nsec'}</span>
+                          </button>
+                        </div>
+                      ) : isLocked && vaultSecurity?.isInitialized ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenUnlock();
+                          }}
+                          className="text-xs font-bold text-[#EC4899] hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Unlock size={12} />
+                          <span>Unlock</span>
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="font-mono text-xs text-white break-all m-0 select-all font-semibold">
+                      {effectiveNsec ? (
+                        showPrivKeySettings ? (
+                          effectiveNsec
+                        ) : (
+                          '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••'
+                        )
+                      ) : isLocked && vaultSecurity?.isInitialized ? (
+                        <span className="text-[#F59E0B] text-xs flex items-center gap-1 font-sans font-bold">
+                          <Lock size={12} />
+                          Vault locked. Tap here to unlock and reveal nsec.
+                        </span>
+                      ) : keypair.isWatchOnly ? (
+                        <span className="text-white/60 text-xs font-sans font-medium">
+                          Watch-only identity (No private key loaded)
+                        </span>
+                      ) : (
+                        <span className="text-white/60 text-xs font-sans font-medium">
+                          No private key stored for this identity
+                        </span>
+                      )}
+                    </p>
+                  </div>
                 </div>
-                <ToggleSwitch
-                  id="toggle-ephemeral-mode"
-                  checked={!!keypair.isEphemeral}
-                  onChange={onToggleEphemeral}
-                  ariaLabel="Toggle Ephemeral Session Mode"
-                />
               </div>
-            )}
-          </section>
+
+              {/* Ephemeral Mode Toggle */}
+              {onToggleEphemeral && (
+                <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-white block">
+                      Ephemeral Burner Session Mode
+                    </span>
+                    <p className="text-white/60 text-xs mt-0.5 m-0 font-medium">
+                      When active, private keys are wiped on tab close and never written to persistent disk.
+                    </p>
+                  </div>
+                  <ToggleSwitch
+                    id="toggle-ephemeral-mode"
+                    checked={!!keypair.isEphemeral}
+                    onChange={onToggleEphemeral}
+                    ariaLabel="Toggle Ephemeral Session Mode"
+                  />
+                </div>
+              )}
+            </section>
+          )}
 
           {/* Stored Sovereign Identities Switcher */}
           {identities.length > 0 && (
@@ -563,7 +639,7 @@ export function SettingsView({
 
               <div className="flex flex-col gap-2">
                 {identities.map((id) => {
-                  const isActive = id.id === activeIdentityId || id.npub === keypair.npub;
+                  const isActive = hasActiveAccount && (id.id === activeIdentityId || id.npub === keypair.npub);
                   return (
                     <div
                       key={id.id}
@@ -582,7 +658,7 @@ export function SettingsView({
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-white font-bold text-xs truncate">
-                              {id.displayName || id.name}
+                              {id.displayName || id.name || formatTruncatedKey(id.npub, 10, 6)}
                             </span>
                             {isActive && (
                               <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-[#EC4899]/20 text-[#EC4899] border border-[#EC4899]/40">

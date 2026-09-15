@@ -9,6 +9,7 @@ import {
   ArrowRight 
 } from 'lucide-react';
 import { NostrEvent } from '../types';
+import { formatTruncatedKey } from '../lib/nostr';
 import { TactileDrawer } from './TactileDrawer';
 
 interface ZapModalProps {
@@ -66,7 +67,7 @@ export function ZapModal({
       isOpen={!!event}
       onClose={onClose}
       title="Lightning Zap"
-      subtitle={`Send sats to ${event.author?.displayName || event.author?.name || 'Anonymous'}`}
+      subtitle={`Send sats to ${event.author?.displayName || event.author?.name || formatTruncatedKey(event.pubkey, 8, 6)}`}
       footerActions={
         zapReceipt ? (
           <button

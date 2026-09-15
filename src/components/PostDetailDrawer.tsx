@@ -239,7 +239,7 @@ export function PostDetailDrawer({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-white font-black text-base truncate">
-                  {post.author?.displayName || post.author?.name || 'Anonymous Peer'}
+                  {post.author?.displayName || post.author?.name || formatTruncatedKey(post.pubkey, 8, 6)}
                 </span>
                 {post.author?.nip05 && (
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30">

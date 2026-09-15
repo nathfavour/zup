@@ -371,7 +371,7 @@ export function FeedView({
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-white font-black text-sm truncate">
-                          {event.author?.displayName || event.author?.name || 'Anonymous Peer'}
+                          {event.author?.displayName || event.author?.name || formatTruncatedKey(event.pubkey, 8, 6)}
                         </span>
                         {event.author?.nip05 && (
                           <span

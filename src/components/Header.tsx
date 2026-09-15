@@ -1,4 +1,4 @@
-import { Bell, Wallet } from 'lucide-react';
+import { Bell, Wallet, User } from 'lucide-react';
 import { NostrKeypair } from '../types';
 import { generateLocalIdenticon } from '../lib/nostr';
 import { ZupLogo } from './ZupLogo';
@@ -20,6 +20,8 @@ export function Header({
   onOpenWallet,
   onGoToFeed,
 }: HeaderProps) {
+  const hasAccount = Boolean(keypair.pubkeyHex && keypair.npub);
+
   return (
     <header
       id="app-header"
@@ -90,15 +92,21 @@ export function Header({
             type="button"
             id="topbar-profile-btn"
             onClick={onOpenProfile}
-            className="w-9 h-9 rounded-full overflow-hidden border-2 border-white/20 hover:border-[#EC4899] transition-all cursor-pointer p-0.5 bg-[#161412] shrink-0 active:scale-95 focus:outline-none"
-            title={keypair.name ? `Profile (${keypair.name})` : 'Profile'}
-            aria-label="Sovereign Profile"
+            className="w-9 h-9 rounded-full overflow-hidden border-2 border-white/20 hover:border-[#EC4899] transition-all cursor-pointer p-0.5 bg-[#161412] shrink-0 active:scale-95 focus:outline-none flex items-center justify-center"
+            title={hasAccount ? (keypair.name ? `Profile (@${keypair.name})` : 'Profile') : 'Profile (No account logged in)'}
+            aria-label="Profile"
           >
-            <img
-              src={keypair.avatar || generateLocalIdenticon(keypair.pubkeyHex || 'anon')}
-              alt={keypair.name || 'Profile'}
-              className="w-full h-full rounded-full object-cover bg-black"
-            />
+            {hasAccount ? (
+              <img
+                src={keypair.avatar || generateLocalIdenticon(keypair.pubkeyHex)}
+                alt={keypair.name || 'Profile'}
+                className="w-full h-full rounded-full object-cover bg-black"
+              />
+            ) : (
+              <div className="w-full h-full rounded-full bg-[#161412] flex items-center justify-center text-white/50">
+                <User size={16} />
+              </div>
+            )}
           </button>
         </div>
       </div>

@@ -139,9 +139,9 @@ export function createNewKeypair(isEphemeral: boolean = false): NostrKeypair {
     nsec,
     npub,
     isEphemeral,
-    name: isEphemeral ? `Ghost_${pubHex.slice(0, 5)}` : `Anon_${pubHex.slice(0, 5)}`,
-    displayName: isEphemeral ? 'Burner Identity' : 'Sovereign Peer',
-    about: isEphemeral ? 'Ephemeral zero-trace burner identity on Zup.' : 'Decentralized Nostr entity on Zup.',
+    name: isEphemeral ? `burner_${pubHex.slice(0, 6)}` : `zup_${pubHex.slice(0, 6)}`,
+    displayName: isEphemeral ? 'Burner' : '',
+    about: '',
     avatar: generateLocalIdenticon(pubHex),
   };
 }

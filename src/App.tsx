@@ -120,7 +120,7 @@ export default function App() {
     pubkeyHex: '',
     npub: '',
     isEphemeral: false,
-    isWatchOnly: true,
+    isWatchOnly: false,
   };
 
   // Dual-persistence helpers to prevent state wipes across refreshes
@@ -1780,8 +1780,8 @@ export default function App() {
         id: `id_${updated.pubkeyHex.slice(0, 10)}_${Date.now()}`,
         pubkeyHex: updated.pubkeyHex,
         npub: updated.npub,
-        name: updated.name || `Anon_${updated.pubkeyHex.slice(0, 5)}`,
-        displayName: updated.displayName || 'Sovereign Peer',
+        name: updated.name || (updated.pubkeyHex ? `zup_${updated.pubkeyHex.slice(0, 6)}` : ''),
+        displayName: updated.displayName || '',
         about: updated.about,
         avatar: updated.avatar || generateLocalIdenticon(updated.pubkeyHex),
         isEphemeral: Boolean(updated.isEphemeral),
@@ -1810,6 +1810,22 @@ export default function App() {
         ...updated,
         id: newStored.id,
       });
+    }
+  };
+
+  const handleCreateNewAccount = () => {
+    const kp = createNewKeypair(false);
+    handleUpdateKeypair(kp);
+  };
+
+  const handleDisconnectAccount = () => {
+    setKeypair(EMPTY_KEYPAIR);
+    setActiveIdentityId(null);
+    try {
+      localStorage.removeItem('zup_active_identity_id');
+      localStorage.removeItem('zup_active_identity_npub');
+    } catch {
+      // ignore
     }
   };
 
@@ -2018,6 +2034,8 @@ export default function App() {
               onDeleteIdentity={handleDeleteIdentity}
               onToggleEphemeral={handleToggleEphemeral}
               onUpdateKeypair={handleUpdateKeypair}
+              onCreateNewAccount={handleCreateNewAccount}
+              onDisconnectAccount={handleDisconnectAccount}
             />
           )}
         </main>

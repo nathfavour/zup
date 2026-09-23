@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Edit2,
   CheckCircle2,
-  Sparkles,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -84,7 +83,7 @@ export function VaultCredentialsManager({
 
   // Password strength calculation
   const getPasswordStrength = (pass: string) => {
-    if (!pass) return { score: 0, label: 'Empty', color: 'bg-stone-700' };
+    if (!pass) return { score: 0, label: 'Empty', color: 'bg-white/20' };
     let score = 0;
     if (pass.length >= 8) score += 1;
     if (pass.length >= 12) score += 1;
@@ -146,7 +145,7 @@ export function VaultCredentialsManager({
       }
 
       if (!activeMEK) {
-        throw new Error('Could not unlock MEK. Please verify your current password.');
+        throw new Error('Could not unlock Master Key. Please verify your current password.');
       }
 
       // Re-wrap Master Key with new password using Argon2id
@@ -154,7 +153,7 @@ export function VaultCredentialsManager({
 
       const updatedSecurity: VaultSecurityState = {
         ...vaultSecurity,
-        salt: newWrapped.salt,
+        salt: newWrapped.salt || '',
         passwordWrappedMEK: newWrapped,
         updatedAt: Date.now(),
       };
@@ -368,7 +367,7 @@ export function VaultCredentialsManager({
       const securityState: VaultSecurityState = {
         id: 'primary_vault_security',
         isInitialized: true,
-        salt: wrapped.salt,
+        salt: wrapped.salt || '',
         passwordWrappedMEK: wrapped,
         passkeys: [],
         argonConfig: {
@@ -586,14 +585,14 @@ export function VaultCredentialsManager({
         {showPasswordSection && (
           <form
             onSubmit={handleChangePassword}
-            className="p-4 rounded-xl bg-[#1A1816] border border-[#2F2C28] flex flex-col gap-3.5 animate-fadeIn"
+            className="p-4 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col gap-3.5 animate-fadeIn"
           >
             <div className="flex items-center justify-between">
               <span className="text-white text-xs font-bold flex items-center gap-1.5">
                 <KeyRound size={15} className="text-[#EC4899]" />
                 Update Master Password
               </span>
-              <span className="text-stone-400 text-[11px] font-mono">
+              <span className="text-white text-[11px] font-mono font-bold">
                 Argon2id KEK Re-derivation
               </span>
             </div>
@@ -601,7 +600,7 @@ export function VaultCredentialsManager({
             {/* If Vault is locked, prompt for current password */}
             {!mek && (
               <div className="flex flex-col gap-1">
-                <label className="text-stone-300 text-xs font-medium">
+                <label className="text-white text-xs font-bold">
                   Current Master Password <span className="text-rose-400">*</span>
                 </label>
                 <input
@@ -610,14 +609,14 @@ export function VaultCredentialsManager({
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   placeholder="Enter current master password..."
                   required
-                  className="w-full bg-[#121110] border border-[#35322D] focus:border-[#EC4899] focus:outline-none rounded-xl px-3.5 py-2 text-white text-xs"
+                  className="w-full bg-[#161412] border border-white/20 focus:border-[#EC4899] focus:outline-none rounded-[14px] px-3.5 py-2 text-white text-xs placeholder:text-white/40"
                 />
               </div>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-stone-300 text-xs font-medium">
+                <label className="text-white text-xs font-bold">
                   New Master Password <span className="text-rose-400">*</span>
                 </label>
                 <input
@@ -626,12 +625,12 @@ export function VaultCredentialsManager({
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Minimum 8 characters..."
                   required
-                  className="w-full bg-[#121110] border border-[#35322D] focus:border-[#EC4899] focus:outline-none rounded-xl px-3.5 py-2 text-white text-xs"
+                  className="w-full bg-[#161412] border border-white/20 focus:border-[#EC4899] focus:outline-none rounded-[14px] px-3.5 py-2 text-white text-xs placeholder:text-white/40"
                 />
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-stone-300 text-xs font-medium">
+                <label className="text-white text-xs font-bold">
                   Confirm New Password <span className="text-rose-400">*</span>
                 </label>
                 <input
@@ -640,7 +639,7 @@ export function VaultCredentialsManager({
                   onChange={(e) => setConfirmNewPassword(e.target.value)}
                   placeholder="Re-enter new password..."
                   required
-                  className="w-full bg-[#121110] border border-[#35322D] focus:border-[#EC4899] focus:outline-none rounded-xl px-3.5 py-2 text-white text-xs"
+                  className="w-full bg-[#161412] border border-white/20 focus:border-[#EC4899] focus:outline-none rounded-[14px] px-3.5 py-2 text-white text-xs placeholder:text-white/40"
                 />
               </div>
             </div>
@@ -649,10 +648,10 @@ export function VaultCredentialsManager({
             {newPassword && (
               <div className="flex flex-col gap-1.5 pt-0.5">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-stone-400">Security Strength:</span>
-                  <span className="font-semibold text-white">{strength.label}</span>
+                  <span className="text-white font-medium">Security Strength:</span>
+                  <span className="font-bold text-white">{strength.label}</span>
                 </div>
-                <div className="w-full h-1.5 rounded-full bg-[#262421] overflow-hidden flex gap-1">
+                <div className="w-full h-1.5 rounded-full bg-[#161412] overflow-hidden flex gap-1">
                   {[1, 2, 3, 4, 5].map((level) => (
                     <div
                       key={level}
@@ -669,7 +668,7 @@ export function VaultCredentialsManager({
               <button
                 type="button"
                 onClick={() => setShowPasswordText(!showPasswordText)}
-                className="text-xs text-stone-400 hover:text-stone-200 flex items-center gap-1.5 cursor-pointer"
+                className="text-xs text-white hover:text-white flex items-center gap-1.5 cursor-pointer font-bold"
               >
                 {showPasswordText ? <EyeOff size={14} /> : <Eye size={14} />}
                 <span>{showPasswordText ? 'Hide password' : 'Show password'}</span>
@@ -679,14 +678,14 @@ export function VaultCredentialsManager({
                 <button
                   type="button"
                   onClick={() => setShowPasswordSection(false)}
-                  className="px-3.5 py-1.5 rounded-xl bg-[#24221F] border border-[#35322D] text-stone-300 text-xs font-semibold cursor-pointer hover:bg-[#2F2C28]"
+                  className="px-3.5 py-1.5 rounded-[12px] bg-[#161412] border border-white/20 text-white text-xs font-bold cursor-pointer hover:bg-white/10"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isChangingPassword || !newPassword || !confirmNewPassword}
-                  className="px-4 py-1.5 rounded-xl bg-[#EC4899] hover:bg-[#db2777] text-white text-xs font-bold cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-4 py-1.5 rounded-[12px] bg-[#EC4899] hover:bg-[#db2777] text-white text-xs font-bold cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isChangingPassword ? (
                     <>
@@ -701,14 +700,14 @@ export function VaultCredentialsManager({
             </div>
 
             {passwordError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center gap-2">
+              <div className="p-3 rounded-[12px] bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2">
                 <AlertCircle size={15} className="shrink-0" />
                 <span>{passwordError}</span>
               </div>
             )}
 
             {passwordSuccess && (
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-2">
+              <div className="p-3 rounded-[12px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
                 <CheckCircle2 size={15} className="shrink-0" />
                 <span>{passwordSuccess}</span>
               </div>
@@ -720,21 +719,21 @@ export function VaultCredentialsManager({
         {showAddPasskey && (
           <form
             onSubmit={handleAddPasskey}
-            className="p-4 rounded-xl bg-[#1A1816] border border-[#2F2C28] flex flex-col gap-3.5 animate-fadeIn"
+            className="p-4 rounded-[18px] bg-[#000000] border border-white/20 flex flex-col gap-3.5 animate-fadeIn"
           >
             <div className="flex items-center justify-between">
               <span className="text-white text-xs font-bold flex items-center gap-1.5">
                 <Fingerprint size={15} className="text-emerald-400" />
                 Enroll New Hardware Passkey / Biometric
               </span>
-              <span className="text-stone-400 text-[11px] font-mono">
+              <span className="text-white text-[11px] font-mono font-bold">
                 FIDO2 / WebAuthn / Enclave
               </span>
             </div>
 
             {/* Quick Presets */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-stone-400 text-[11px] font-medium">
+              <label className="text-white text-[11px] font-bold">
                 Quick Device Presets:
               </label>
               <div className="flex flex-wrap gap-1.5">
@@ -746,7 +745,7 @@ export function VaultCredentialsManager({
                       setPasskeyName(preset.label);
                       setAuthenticatorType(preset.type);
                     }}
-                    className="px-2 py-0.5 rounded-md bg-[#24221F] hover:bg-[#302D29] border border-[#35322D] text-[10px] text-stone-300 hover:text-white cursor-pointer transition-colors"
+                    className="px-2.5 py-1 rounded-[10px] bg-[#161412] hover:bg-white/10 border border-white/20 text-[11px] text-white cursor-pointer transition-colors font-bold"
                   >
                     + {preset.label}
                   </button>
@@ -756,7 +755,7 @@ export function VaultCredentialsManager({
 
             {/* Passkey Label Input */}
             <div className="flex flex-col gap-1">
-              <label className="text-stone-300 text-xs font-medium">
+              <label className="text-white text-xs font-bold">
                 Device / Passkey Name
               </label>
               <input
@@ -765,23 +764,23 @@ export function VaultCredentialsManager({
                 onChange={(e) => setPasskeyName(e.target.value)}
                 placeholder="e.g. MacBook Touch ID, YubiKey 5C, iPhone Face ID"
                 required
-                className="w-full bg-[#121110] border border-[#35322D] focus:border-emerald-400 focus:outline-none rounded-xl px-3.5 py-2 text-white text-xs"
+                className="w-full bg-[#161412] border border-white/20 focus:border-emerald-400 focus:outline-none rounded-[14px] px-3.5 py-2 text-white text-xs placeholder:text-white/40"
               />
             </div>
 
             {/* Authenticator Attachment Selector */}
             <div className="flex flex-col gap-1">
-              <label className="text-stone-300 text-xs font-medium">
+              <label className="text-white text-xs font-bold">
                 Authenticator Attachment:
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setAuthenticatorType('any')}
-                  className={`py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all text-xs font-semibold ${
+                  className={`py-1.5 px-2 rounded-[12px] border text-center cursor-pointer transition-all text-xs font-bold ${
                     authenticatorType === 'any'
-                      ? 'bg-emerald-500/10 border-emerald-500 text-white'
-                      : 'bg-[#121110] border-[#302D29] text-stone-400 hover:text-stone-200'
+                      ? 'bg-emerald-500/15 border-emerald-500 text-white'
+                      : 'bg-[#161412] border-white/20 text-white hover:border-white/40'
                   }`}
                 >
                   Auto
@@ -790,10 +789,10 @@ export function VaultCredentialsManager({
                 <button
                   type="button"
                   onClick={() => setAuthenticatorType('platform')}
-                  className={`py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all text-xs font-semibold ${
+                  className={`py-1.5 px-2 rounded-[12px] border text-center cursor-pointer transition-all text-xs font-bold ${
                     authenticatorType === 'platform'
-                      ? 'bg-emerald-500/10 border-emerald-500 text-white'
-                      : 'bg-[#121110] border-[#302D29] text-stone-400 hover:text-stone-200'
+                      ? 'bg-emerald-500/15 border-emerald-500 text-white'
+                      : 'bg-[#161412] border-white/20 text-white hover:border-white/40'
                   }`}
                 >
                   Biometric
@@ -802,10 +801,10 @@ export function VaultCredentialsManager({
                 <button
                   type="button"
                   onClick={() => setAuthenticatorType('cross-platform')}
-                  className={`py-1.5 px-2 rounded-lg border text-center cursor-pointer transition-all text-xs font-semibold ${
+                  className={`py-1.5 px-2 rounded-[12px] border text-center cursor-pointer transition-all text-xs font-bold ${
                     authenticatorType === 'cross-platform'
-                      ? 'bg-emerald-500/10 border-emerald-500 text-white'
-                      : 'bg-[#121110] border-[#302D29] text-stone-400 hover:text-stone-200'
+                      ? 'bg-emerald-500/15 border-emerald-500 text-white'
+                      : 'bg-[#161412] border-white/20 text-white hover:border-white/40'
                   }`}
                 >
                   FIDO2 Key
@@ -815,12 +814,12 @@ export function VaultCredentialsManager({
 
             {/* If Vault is locked, inline authorization field */}
             {!mek && (
-              <div className="p-3 rounded-xl bg-[#221F1C] border border-[#35322D] flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5 text-amber-400 text-xs font-semibold">
+              <div className="p-3 rounded-[14px] bg-[#161412] border border-white/20 flex flex-col gap-1.5">
+                <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold">
                   <Lock size={13} />
                   <span>Vault is Locked: Authorization Required</span>
                 </div>
-                <p className="text-stone-400 text-[11px] m-0">
+                <p className="text-white text-[11px] m-0 font-medium">
                   Enter master password to authorize registering this new passkey:
                 </p>
                 <input
@@ -828,7 +827,7 @@ export function VaultCredentialsManager({
                   value={passkeyUnlockPassword}
                   onChange={(e) => setPasskeyUnlockPassword(e.target.value)}
                   placeholder="Master password..."
-                  className="w-full bg-[#121110] border border-[#35322D] focus:border-emerald-400 focus:outline-none rounded-lg px-3 py-1.5 text-white text-xs"
+                  className="w-full bg-[#000000] border border-white/20 focus:border-emerald-400 focus:outline-none rounded-[12px] px-3 py-1.5 text-white text-xs placeholder:text-white/40"
                 />
               </div>
             )}
@@ -837,14 +836,14 @@ export function VaultCredentialsManager({
               <button
                 type="button"
                 onClick={() => setShowAddPasskey(false)}
-                className="px-3.5 py-1.5 rounded-xl bg-[#24221F] border border-[#35322D] text-stone-300 text-xs font-semibold cursor-pointer hover:bg-[#2F2C28]"
+                className="px-3.5 py-1.5 rounded-[12px] bg-[#161412] border border-white/20 text-white text-xs font-bold cursor-pointer hover:bg-white/10"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isRegisteringPasskey || !passkeyName.trim()}
-                className="px-4 py-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-black text-xs font-bold cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                className="px-4 py-1.5 rounded-[12px] bg-[#10B981] hover:bg-[#059669] text-black text-xs font-bold cursor-pointer transition-colors disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isRegisteringPasskey ? (
                   <>
@@ -861,14 +860,14 @@ export function VaultCredentialsManager({
             </div>
 
             {passkeyError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium flex items-center gap-2">
+              <div className="p-3 rounded-[12px] bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2">
                 <AlertCircle size={15} className="shrink-0" />
                 <span>{passkeyError}</span>
               </div>
             )}
 
             {passkeySuccess && (
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-2">
+              <div className="p-3 rounded-[12px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
                 <CheckCircle2 size={15} className="shrink-0" />
                 <span>{passkeySuccess}</span>
               </div>
@@ -879,18 +878,18 @@ export function VaultCredentialsManager({
         {/* Passkeys List Section */}
         <div className="flex flex-col gap-2 pt-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-stone-300 flex items-center gap-1.5">
+            <span className="text-xs font-bold text-white flex items-center gap-1.5">
               <Fingerprint size={15} className="text-[#EC4899]" />
               <span>Registered Passkeys & Authenticators</span>
             </span>
-            <span className="text-[11px] font-mono text-stone-400">
+            <span className="text-[11px] font-mono text-white font-bold">
               {vaultSecurity.passkeys.length} active credential{vaultSecurity.passkeys.length === 1 ? '' : 's'}
             </span>
           </div>
 
           {vaultSecurity.passkeys.length === 0 ? (
-            <div className="p-4 rounded-xl bg-[#1D1B19] border border-[#2D2A26] text-center">
-              <p className="text-stone-400 text-xs m-0">
+            <div className="p-4 rounded-[18px] bg-[#000000] border border-white/20 text-center">
+              <p className="text-white text-xs m-0 font-medium leading-relaxed">
                 No passkeys enrolled yet. Add Touch ID, Face ID, or a FIDO2 hardware key to unlock your vault in 1 click without typing your password.
               </p>
             </div>
@@ -902,10 +901,10 @@ export function VaultCredentialsManager({
                 return (
                   <div
                     key={pk.id}
-                    className="p-3.5 rounded-xl bg-[#1D1B19] border border-[#2D2A26] hover:border-[#3D3A35] flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+                    className="p-3.5 rounded-[18px] bg-[#000000] border border-white/20 hover:border-white/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-[#EC4899]/10 text-[#EC4899] border border-[#EC4899]/25 flex items-center justify-center shrink-0">
+                      <div className="w-8 h-8 rounded-[10px] bg-[#EC4899]/15 text-[#EC4899] border border-[#EC4899]/30 flex items-center justify-center shrink-0">
                         {pk.type === 'cross-platform' ? (
                           <Shield size={16} />
                         ) : pk.type === 'virtual' ? (
@@ -922,7 +921,7 @@ export function VaultCredentialsManager({
                               type="text"
                               value={editingPasskeyName}
                               onChange={(e) => setEditingPasskeyName(e.target.value)}
-                              className="bg-[#121110] border border-[#35322D] focus:border-emerald-400 text-white text-xs px-2 py-1 rounded-lg"
+                              className="bg-[#161412] border border-white/20 focus:border-emerald-400 text-white text-xs px-2.5 py-1 rounded-[10px]"
                               autoFocus
                             />
                             <button
@@ -936,7 +935,7 @@ export function VaultCredentialsManager({
                             <button
                               type="button"
                               onClick={() => setEditingPasskeyId(null)}
-                              className="text-stone-400 hover:text-stone-200 p-1 cursor-pointer"
+                              className="text-white hover:text-white/80 p-1 cursor-pointer"
                               title="Cancel"
                             >
                               ✕
@@ -944,7 +943,7 @@ export function VaultCredentialsManager({
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <h4 className="text-white font-semibold text-xs m-0 truncate">
+                            <h4 className="text-white font-bold text-xs m-0 truncate">
                               {pk.name}
                             </h4>
                             <button
@@ -953,7 +952,7 @@ export function VaultCredentialsManager({
                                 setEditingPasskeyId(pk.id);
                                 setEditingPasskeyName(pk.name);
                               }}
-                              className="text-stone-500 hover:text-stone-300 p-0.5 cursor-pointer"
+                              className="text-white/60 hover:text-white p-0.5 cursor-pointer"
                               title="Rename passkey"
                             >
                               <Edit2 size={12} />
@@ -961,7 +960,7 @@ export function VaultCredentialsManager({
                           </div>
                         )}
 
-                        <div className="flex items-center gap-2 text-[11px] font-mono text-stone-400 mt-0.5">
+                        <div className="flex items-center gap-2 text-[11px] font-mono text-white font-bold mt-0.5">
                           <span className="capitalize">
                             {pk.type === 'cross-platform'
                               ? 'Hardware Key (FIDO2)'
@@ -974,7 +973,7 @@ export function VaultCredentialsManager({
                           {pk.lastUsed && (
                             <>
                               <span>•</span>
-                              <span className="text-emerald-400/80">
+                              <span className="text-emerald-400">
                                 Verified {new Date(pk.lastUsed).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </>
@@ -986,21 +985,21 @@ export function VaultCredentialsManager({
                     {/* Test Key & Delete Actions */}
                     <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                       {testState?.status === 'testing' && (
-                        <span className="text-xs text-amber-400 flex items-center gap-1 font-medium">
+                        <span className="text-xs text-amber-400 flex items-center gap-1 font-bold">
                           <RefreshCw size={13} className="animate-spin" />
                           Testing...
                         </span>
                       )}
 
                       {testState?.status === 'success' && (
-                        <span className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
+                        <span className="text-xs text-emerald-400 flex items-center gap-1 font-bold">
                           <Check size={13} />
                           {testState.message}
                         </span>
                       )}
 
                       {testState?.status === 'error' && (
-                        <span className="text-xs text-rose-400 flex items-center gap-1 font-medium">
+                        <span className="text-xs text-rose-400 flex items-center gap-1 font-bold">
                           <AlertCircle size={13} />
                           Failed
                         </span>
@@ -1010,7 +1009,7 @@ export function VaultCredentialsManager({
                         <button
                           type="button"
                           onClick={() => handleTestPasskey(pk)}
-                          className="px-2.5 py-1 rounded-lg bg-[#25221F] hover:bg-[#302C28] border border-[#35322D] text-stone-300 hover:text-white text-[11px] font-medium cursor-pointer transition-colors"
+                          className="px-2.5 py-1 rounded-[10px] bg-[#161412] hover:bg-white/10 border border-white/20 text-white text-[11px] font-bold cursor-pointer transition-colors"
                           title="Test cryptographic assertion"
                         >
                           Test Key
@@ -1020,7 +1019,7 @@ export function VaultCredentialsManager({
                       <button
                         type="button"
                         onClick={() => handleDeletePasskey(pk.id, pk.name)}
-                        className="text-stone-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 cursor-pointer transition-colors"
+                        className="text-white/60 hover:text-rose-400 p-1.5 rounded-[10px] hover:bg-rose-500/10 cursor-pointer transition-colors"
                         title="Remove Passkey"
                       >
                         <Trash2 size={15} />

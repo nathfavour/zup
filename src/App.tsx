@@ -79,27 +79,14 @@ export default function App() {
   });
 
   const [mek, setMek] = useState<Uint8Array | null>(() => {
-    const mem = masterPassCrypto.getMEK();
-    if (mem) return mem;
-    try {
-      const hex = sessionStorage.getItem('zup_session_mek') || localStorage.getItem('zup_session_mek');
-      if (hex) {
-        const bytes = hexToBytes(hex);
-        masterPassCrypto.setMEK(bytes);
-        return bytes;
-      }
-    } catch {
-      // ignore
-    }
-    return null;
+    return masterPassCrypto.getMEK();
   });
 
   const [isVaultLocked, setIsVaultLocked] = useState(() => {
     try {
       const rawSec = localStorage.getItem('zup_backup_vault_security');
       const sec = rawSec ? JSON.parse(rawSec) : null;
-      const hex = sessionStorage.getItem('zup_session_mek') || localStorage.getItem('zup_session_mek');
-      if (sec?.isInitialized && !hex) return true;
+      if (sec?.isInitialized && !masterPassCrypto.hasMEK()) return true;
     } catch {
       // ignore
     }
@@ -384,25 +371,8 @@ export default function App() {
           isSecInitialized = Boolean(currentSec.isInitialized);
         }
 
-        // Retrieve or restore session MEK
-        let sessionMek: Uint8Array | null = null;
-        let sessionHex: string | null = null;
-        try {
-          sessionHex = sessionStorage.getItem('zup_session_mek') || localStorage.getItem('zup_session_mek');
-        } catch {
-          // ignore
-        }
-
-        if (sessionHex) {
-          try {
-            sessionMek = hexToBytes(sessionHex);
-            masterPassCrypto.setMEK(sessionMek);
-            setMek(sessionMek);
-            setIsVaultLocked(false);
-          } catch {
-            sessionMek = null;
-          }
-        }
+        // Retrieve or restore session MEK from RAM
+        let sessionMek: Uint8Array | null = masterPassCrypto.getMEK();
 
         if (!sessionMek) {
           if (isSecInitialized) {
@@ -414,12 +384,6 @@ export default function App() {
             masterPassCrypto.setMEK(sessionMek);
             setMek(sessionMek);
             setIsVaultLocked(false);
-            try {
-              sessionStorage.setItem('zup_session_mek', bytesToHex(sessionMek));
-              localStorage.setItem('zup_session_mek', bytesToHex(sessionMek));
-            } catch {
-              // ignore
-            }
           }
         }
 
@@ -1046,12 +1010,6 @@ export default function App() {
     setMek(unlockedMEK);
     setIsVaultLocked(false);
     setIsSetupEncryptionOpen(false);
-    try {
-      sessionStorage.setItem('zup_session_mek', bytesToHex(unlockedMEK));
-      localStorage.setItem('zup_session_mek', bytesToHex(unlockedMEK));
-    } catch {
-      // ignore
-    }
     syncEngine.markPending('primary_vault_security', 1, 'setting', securityState);
   };
 
@@ -1059,12 +1017,6 @@ export default function App() {
     masterPassCrypto.setMEK(unlockedMEK);
     setMek(unlockedMEK);
     setIsVaultLocked(false);
-    try {
-      sessionStorage.setItem('zup_session_mek', bytesToHex(unlockedMEK));
-      localStorage.setItem('zup_session_mek', bytesToHex(unlockedMEK));
-    } catch {
-      // ignore
-    }
 
     // If active identity has encrypted privkey, decrypt it for signing
     const activeStored = storedIdentities.find(
@@ -1113,12 +1065,6 @@ export default function App() {
 
   const handleLockVault = () => {
     masterPassCrypto.lockApplication();
-    try {
-      sessionStorage.removeItem('zup_session_mek');
-      localStorage.removeItem('zup_session_mek');
-    } catch {
-      // ignore
-    }
     setMek(null);
     setIsVaultLocked(true);
     // Mask private key in active keypair for protection

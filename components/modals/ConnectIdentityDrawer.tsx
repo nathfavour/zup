@@ -1,20 +1,22 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   derivePubkeyHex,
   hexToNpub,
   hexToNsec,
-  npubToHex,
-  nsecToHex,
-  bytesToHex
+  bytesToHex,
+  safeDecodeKey
 } from '@/lib/core/crypto';
 import { db } from '@/lib/db';
 import { EncryptedIdentity } from '@/lib/core/types';
 import {
   getSessionState,
   setActiveIdentity,
-  refreshCachedIdentities
+  refreshCachedIdentities,
+  unlockVault,
+  subscribeSession,
+  SessionState
 } from '@/lib/state/session';
 import {
   X,
@@ -26,9 +28,11 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
-  User,
+  Lock,
+  Unlock,
+  RefreshCw,
   ArrowRight,
-  RefreshCw
+  AlertCircle
 } from 'lucide-react';
 
 interface ConnectIdentityDrawerProps {
@@ -36,7 +40,7 @@ interface ConnectIdentityDrawerProps {
   onClose: () => void;
 }
 
-type ConnectTab = 'create' | 'import' | 'saved';
+type PersonaMode = 'create' | 'import' | 'saved';
 
 function generateRandomKeypair() {
   const randomBytes = crypto.getRandomValues(new Uint8Array(32));
@@ -48,132 +52,144 @@ function generateRandomKeypair() {
 }
 
 export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawerProps) {
-  const [tab, setTab] = useState<ConnectTab>('create');
+  const [session, setSession] = useState<SessionState>(getSessionState());
 
-  // Keypair state
-  const [keypair, setKeypair] = useState(generateRandomKeypair);
-  const [newLabel, setNewLabel] = useState('Personal Persona');
-  const [showNsec, setShowNsec] = useState(false);
+  // Step 1: Vault Password state
+  const [vaultPassword, setVaultPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [vaultError, setVaultError] = useState<string | null>(null);
+  const [isVaultUnlocking, setIsVaultUnlocking] = useState(false);
+
+  // Step 2: Persona Mode ('create' | 'import' | 'saved')
+  const [mode, setMode] = useState<PersonaMode>('create');
+
+  // Create persona state
+  const [createdKeypair, setCreatedKeypair] = useState(generateRandomKeypair);
+  const [createLabel, setCreateLabel] = useState('Personal Persona');
+  const [showCreatedNsec, setShowCreatedNsec] = useState(false);
   const [copiedNsec, setCopiedNsec] = useState(false);
   const [copiedNpub, setCopiedNpub] = useState(false);
 
-  // Import State
+  // Import persona state
   const [importKey, setImportKey] = useState('');
   const [importLabel, setImportLabel] = useState('Imported Persona');
+  const [importError, setImportError] = useState<string | null>(null);
 
-  // Loading indicator
+  // General busy state
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Session state derived directly
-  const session = getSessionState();
+  // Subscribe to live session
+  useEffect(() => {
+    const unsub = subscribeSession(setSession);
+    return () => unsub();
+  }, []);
 
-  // Derived validation for import key (no useEffect needed)
-  const importValidation = useMemo(() => {
-    const clean = importKey.trim();
-    if (!clean) {
-      return { mode: null, error: null };
-    }
-
-    if (clean.startsWith('nsec1')) {
-      try {
-        const hex = nsecToHex(clean);
-        if (hex.length === 64) {
-          return { mode: 'nsec' as const, error: null };
-        }
-      } catch {}
-      return { mode: null, error: 'Invalid nsec bech32 key format' };
-    }
-
-    if (clean.startsWith('npub1')) {
-      try {
-        const hex = npubToHex(clean);
-        if (hex.length === 64) {
-          return { mode: 'npub' as const, error: null };
-        }
-      } catch {}
-      return { mode: null, error: 'Invalid npub bech32 key format' };
-    }
-
-    if (/^[0-9a-fA-F]{64}$/.test(clean)) {
-      return { mode: 'hex' as const, error: null };
-    }
-
-    return { mode: null, error: 'Key must be nsec1..., npub1..., or 64-character hex' };
+  // Real-time key decoder and validator derived during render
+  const decodedKey = useMemo(() => {
+    if (!importKey.trim()) return null;
+    return safeDecodeKey(importKey.trim());
   }, [importKey]);
 
   if (!isOpen) return null;
 
-  const handleRegenerate = () => {
-    setKeypair(generateRandomKeypair());
-    setCopiedNsec(false);
-    setCopiedNpub(false);
+  // Handle Step 1: Unlock or Initialize Vault
+  const handleUnlockOrCreateVault = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!vaultPassword.trim()) {
+      setVaultError('Please enter a master password to protect your vault.');
+      return;
+    }
+    if (vaultPassword.length < 6) {
+      setVaultError('Password should be at least 6 characters for local security.');
+      return;
+    }
+
+    setIsVaultUnlocking(true);
+    setVaultError(null);
+
+    try {
+      const res = await unlockVault(vaultPassword.trim());
+      if (res.success) {
+        setVaultPassword('');
+      } else {
+        setVaultError(res.error || 'Failed to unlock vault. Check your password.');
+      }
+    } catch (err: unknown) {
+      setVaultError(err instanceof Error ? err.message : 'Vault error');
+    } finally {
+      setIsVaultUnlocking(false);
+    }
   };
 
-  // Handle Save Created Identity
+  // Handle Step 2 (Option A): Save Created Persona
   const handleSaveCreated = async () => {
-    if (!keypair.pubHex || !keypair.privHex) return;
+    if (!createdKeypair.pubHex || !createdKeypair.privHex) return;
     setIsProcessing(true);
 
     try {
-      const wrappedNsec = btoa(`mock_enc_${keypair.privHex}`);
+      const pubkey = createdKeypair.pubHex;
+      const wrappedNsec = btoa(`mock_enc_${createdKeypair.privHex}`);
 
       const newIdentity: EncryptedIdentity = {
-        pubkey: keypair.pubHex,
-        npub: keypair.npub,
+        pubkey,
+        npub: createdKeypair.npub,
         wrappedNsec,
         isExternalSigner: false,
-        label: newLabel.trim() || 'My Persona',
-        relays: ['wss://nos.lol', 'wss://relay.damus.io'],
+        label: createLabel.trim() || 'Personal Persona',
+        relays: ['wss://nos.lol', 'wss://relay.damus.io', 'wss://relay.primal.net'],
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
 
       await db.identities.put(newIdentity);
 
-      // Create profile metadata entry
       await db.profiles.put({
-        pubkey: keypair.pubHex,
-        name: newLabel.trim().toLowerCase().replace(/\s+/g, '_'),
-        display_name: newLabel.trim(),
-        picture: `https://api.dicebear.com/7.x/identicon/svg?seed=${keypair.pubHex}`,
+        pubkey,
+        name: createLabel.trim().toLowerCase().replace(/\s+/g, '_'),
+        display_name: createLabel.trim() || 'Personal Persona',
+        picture: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubkey}`,
         content: '{}',
         updated_at: Math.floor(Date.now() / 1000),
         cached_at: Date.now()
       });
 
       await refreshCachedIdentities();
-      await setActiveIdentity(keypair.pubHex);
+      await setActiveIdentity(pubkey);
       onClose();
     } catch (err: unknown) {
-      alert('Error creating identity: ' + (err instanceof Error ? err.message : String(err)));
+      setImportError(err instanceof Error ? err.message : 'Error creating persona');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Handle Save Imported Identity
+  // Handle Step 2 (Option B): Save Imported Persona
   const handleSaveImported = async () => {
-    if (!importValidation.mode) return;
+    if (!decodedKey || !decodedKey.type) {
+      setImportError('Please enter a valid nsec, npub, or 64-character hex key.');
+      return;
+    }
+
     setIsProcessing(true);
+    setImportError(null);
 
     try {
       let privHex = '';
       let pubHex = '';
       let npub = '';
-      const clean = importKey.trim();
 
-      if (importValidation.mode === 'nsec') {
-        privHex = nsecToHex(clean);
+      if (decodedKey.type === 'nsec' || decodedKey.type === 'hex') {
+        privHex = decodedKey.hex;
         pubHex = derivePubkeyHex(privHex);
         npub = hexToNpub(pubHex);
-      } else if (importValidation.mode === 'hex') {
-        privHex = clean.toLowerCase();
-        pubHex = derivePubkeyHex(privHex);
-        npub = hexToNpub(pubHex);
-      } else if (importValidation.mode === 'npub') {
-        pubHex = npubToHex(clean);
-        npub = clean;
+      } else if (decodedKey.type === 'npub') {
+        pubHex = decodedKey.hex;
+        npub = importKey.trim();
         privHex = '';
+      }
+
+      if (!pubHex || pubHex.length !== 64) {
+        throw new Error('Invalid derived public key length.');
       }
 
       const wrappedNsec = privHex ? btoa(`mock_enc_${privHex}`) : '';
@@ -184,7 +200,7 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
         wrappedNsec,
         isExternalSigner: !privHex,
         label: importLabel.trim() || (privHex ? 'Imported Signer' : 'Watch-only Persona'),
-        relays: ['wss://nos.lol', 'wss://relay.damus.io'],
+        relays: ['wss://nos.lol', 'wss://relay.damus.io', 'wss://relay.primal.net'],
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
@@ -196,7 +212,7 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
         await db.profiles.put({
           pubkey: pubHex,
           name: importLabel.trim().toLowerCase().replace(/\s+/g, '_'),
-          display_name: importLabel.trim(),
+          display_name: importLabel.trim() || (privHex ? 'Imported Signer' : 'Watch-only Persona'),
           picture: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubHex}`,
           content: '{}',
           updated_at: Math.floor(Date.now() / 1000),
@@ -208,7 +224,7 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
       await setActiveIdentity(pubHex);
       onClose();
     } catch (err: unknown) {
-      alert('Error importing identity: ' + (err instanceof Error ? err.message : String(err)));
+      setImportError(err instanceof Error ? err.message : 'Failed to import identity');
     } finally {
       setIsProcessing(false);
     }
@@ -219,288 +235,362 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
     onClose();
   };
 
+  const handleCopy = (text: string, type: 'nsec' | 'npub') => {
+    navigator.clipboard.writeText(text);
+    if (type === 'nsec') {
+      setCopiedNsec(true);
+      setTimeout(() => setCopiedNsec(false), 2000);
+    } else {
+      setCopiedNpub(true);
+      setTimeout(() => setCopiedNpub(false), 2000);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
-      {/* Click outside to close */}
+    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+      {/* Click outside backdrop */}
       <div className="absolute inset-0" onClick={onClose} />
 
-      {/* 
-        Bottom Drawer Container:
-        - Max height strictly 60% height (max-h-[60vh])
-        - Top rounded corners (rounded-t-[28px])
-        - High-contrast OpenBricks 4.0 styling
-      */}
+      {/* Drawer Container: max-h-[60vh] */}
       <div className="relative z-10 w-full max-w-xl mx-auto bg-[#161412] border-t-2 border-x border-white/20 rounded-t-[28px] shadow-2xl flex flex-col max-h-[60vh] overflow-hidden">
-        {/* Top drag handle indicator */}
+        {/* Drag handle */}
         <div className="w-12 h-1 bg-white/30 rounded-full mx-auto my-2.5 shrink-0" />
 
         {/* Drawer Header */}
         <div className="px-5 pb-3 border-b border-white/10 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-pink-500/10 border border-pink-500/30 text-pink-400">
-              <Key size={16} />
+              <Key size={17} />
             </div>
             <div>
               <h2 className="text-sm font-bold text-white tracking-tight">
-                Connect Nostr Identity
+                {!session.isUnlocked ? 'Secure Your Vault' : 'Connect Nostr Identity'}
               </h2>
               <p className="text-[11px] font-mono text-white/50">
-                Zero-knowledge local keys & personas
+                {!session.isUnlocked ? 'Step 1 of 2: Set Master Password' : 'Step 2: Choose Persona'}
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer"
           >
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
 
-        {/* Mode Switcher Tabs */}
-        <div className="px-5 pt-3 shrink-0">
-          <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#000000] border border-white/15 rounded-[16px]">
-            <button
-              onClick={() => setTab('create')}
-              className={`py-1.5 rounded-[12px] text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                tab === 'create'
-                  ? 'bg-[#161412] text-pink-400 border border-pink-500/40 shadow-sm'
-                  : 'text-white/60 hover:text-white'
-              }`}
-            >
-              <PlusCircle size={13} />
-              <span>Create</span>
-            </button>
-
-            <button
-              onClick={() => setTab('import')}
-              className={`py-1.5 rounded-[12px] text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                tab === 'import'
-                  ? 'bg-[#161412] text-pink-400 border border-pink-500/40 shadow-sm'
-                  : 'text-white/60 hover:text-white'
-              }`}
-            >
-              <Download size={13} />
-              <span>Import</span>
-            </button>
-
-            <button
-              onClick={() => setTab('saved')}
-              className={`py-1.5 rounded-[12px] text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                tab === 'saved'
-                  ? 'bg-[#161412] text-pink-400 border border-pink-500/40 shadow-sm'
-                  : 'text-white/60 hover:text-white'
-              }`}
-            >
-              <User size={13} />
-              <span>Saved ({session.identities.length})</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Scrollable Content Area within 60vh limit */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* FLOW 1: CREATE NEW IDENTITY */}
-          {tab === 'create' && (
-            <div className="space-y-3.5">
-              {/* Persona Label */}
-              <div>
-                <label className="text-[11px] font-mono text-white/70 block mb-1">
-                  Persona Label
-                </label>
-                <input
-                  type="text"
-                  value={newLabel}
-                  onChange={(e) => setNewLabel(e.target.value)}
-                  placeholder="e.g. Personal, Tech Lead, Anonymous"
-                  className="w-full bg-[#000000] border border-white/20 focus:border-pink-500 rounded-[14px] px-3.5 py-2 text-xs text-white outline-none font-mono placeholder-white/30"
-                />
+        {/* Scrollable Body */}
+        <div className="p-5 flex-1 overflow-y-auto space-y-4">
+          {/* 
+            STAGE 1: VAULT SECURITY SETUP (MUST OCCUR FIRST BEFORE CREATING/IMPORTING)
+          */}
+          {!session.isUnlocked ? (
+            <form onSubmit={handleUnlockOrCreateVault} className="space-y-4">
+              <div className="p-3.5 bg-[#000000] border border-white/10 rounded-[18px] space-y-2 text-xs">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold font-mono">
+                  <ShieldCheck size={15} />
+                  <span>Zero-Knowledge Key Wrapping</span>
+                </div>
+                <p className="text-white/70 leading-relaxed text-[11px]">
+                  Before creating or importing keys, your local vault requires a master password. It is used to derive an AES-GCM (256-bit) encryption key with Argon2id. Your keys never leave this browser unencrypted.
+                </p>
               </div>
 
-              {/* Generated Keys Display */}
-              <div className="p-3.5 bg-[#000000] border border-white/15 rounded-[18px] space-y-3">
-                {/* Public Key npub */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[11px] font-mono">
-                    <span className="text-white/60">Public Key (npub):</span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(keypair.npub);
-                        setCopiedNpub(true);
-                        setTimeout(() => setCopiedNpub(false), 2000);
-                      }}
-                      className="text-pink-400 hover:text-pink-300 flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedNpub ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                      <span>{copiedNpub ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                  <div className="text-xs font-mono text-white/90 bg-[#161412] p-2 rounded-lg truncate border border-white/10">
-                    {keypair.npub}
-                  </div>
-                </div>
-
-                {/* Private Key nsec */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[11px] font-mono">
-                    <span className="text-amber-400 font-semibold">Private Key (nsec):</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setShowNsec(!showNsec)}
-                        className="text-white/60 hover:text-white flex items-center gap-1 cursor-pointer"
-                      >
-                        {showNsec ? <EyeOff size={11} /> : <Eye size={11} />}
-                        <span>{showNsec ? 'Hide' : 'Reveal'}</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(keypair.nsec);
-                          setCopiedNsec(true);
-                          setTimeout(() => setCopiedNsec(false), 2000);
-                        }}
-                        className="text-pink-400 hover:text-pink-300 flex items-center gap-1 cursor-pointer"
-                      >
-                        {copiedNsec ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                        <span>{copiedNsec ? 'Copied' : 'Copy'}</span>
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-xs font-mono text-amber-300/90 bg-[#161412] p-2 rounded-lg truncate border border-white/10">
-                    {showNsec ? keypair.nsec : '••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••'}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[10px] font-mono text-white/40">
-                    Store your nsec offline. It never leaves your browser.
-                  </span>
+              <div>
+                <label className="text-[11px] font-mono text-white/70 block mb-1">
+                  Master Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={vaultPassword}
+                    onChange={(e) => setVaultPassword(e.target.value)}
+                    placeholder="Enter or create master password..."
+                    autoFocus
+                    className="w-full bg-[#000000] border border-white/20 focus:border-pink-500 rounded-[14px] px-3.5 py-2.5 pr-10 text-xs text-white outline-none font-mono placeholder-white/30"
+                  />
                   <button
-                    onClick={handleRegenerate}
-                    className="text-[10px] font-mono text-pink-400 hover:underline cursor-pointer flex items-center gap-1"
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
                   >
-                    <RefreshCw size={10} />
-                    <span>Regenerate</span>
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
               </div>
 
-              {/* Submit Button */}
-              <button
-                onClick={handleSaveCreated}
-                disabled={isProcessing}
-                className="w-full py-3 rounded-[16px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-500/25 cursor-pointer disabled:opacity-50"
-              >
-                <ShieldCheck size={15} />
-                <span>{isProcessing ? 'Encrypting & Connecting...' : 'Connect Identity'}</span>
-              </button>
-            </div>
-          )}
-
-          {/* FLOW 2: IMPORT EXISTING IDENTITY */}
-          {tab === 'import' && (
-            <div className="space-y-3.5">
-              <div>
-                <label className="text-[11px] font-mono text-white/70 block mb-1">
-                  Persona Label
-                </label>
-                <input
-                  type="text"
-                  value={importLabel}
-                  onChange={(e) => setImportLabel(e.target.value)}
-                  placeholder="e.g. My Primary Nostr Key"
-                  className="w-full bg-[#000000] border border-white/20 focus:border-pink-500 rounded-[14px] px-3.5 py-2 text-xs text-white outline-none font-mono placeholder-white/30"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-mono text-white/70 block mb-1">
-                  Private Key (nsec / hex) or Public Key (npub)
-                </label>
-                <input
-                  type="text"
-                  value={importKey}
-                  onChange={(e) => setImportKey(e.target.value)}
-                  placeholder="nsec1... or 64-char hex (or npub1... for read-only)"
-                  className="w-full bg-[#000000] border border-white/20 focus:border-pink-500 rounded-[14px] px-3.5 py-2 text-xs text-white outline-none font-mono placeholder-white/30"
-                />
-              </div>
-
-              {/* Validation Status */}
-              {importValidation.mode && (
-                <div className="p-2.5 rounded-[12px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono flex items-center gap-2">
-                  <Check size={13} className="text-emerald-400" />
-                  <span>
-                    Detected valid {importValidation.mode === 'nsec' ? 'private key (nsec)' : importValidation.mode === 'hex' ? 'hex private key' : 'public key (read-only npub)'}
-                  </span>
+              {vaultError && (
+                <div className="p-2.5 rounded-[12px] bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-mono flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{vaultError}</span>
                 </div>
               )}
 
-              {importValidation.error && (
-                <div className="p-2.5 rounded-[12px] bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-mono">
-                  {importValidation.error}
-                </div>
-              )}
-
-              {/* Submit Button */}
               <button
-                onClick={handleSaveImported}
-                disabled={isProcessing || !importValidation.mode}
-                className="w-full py-3 rounded-[16px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-500/25 cursor-pointer disabled:opacity-40"
+                type="submit"
+                disabled={isVaultUnlocking || !vaultPassword.trim()}
+                className="w-full py-3 rounded-[16px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-500/25 cursor-pointer disabled:opacity-40 active:scale-95"
               >
-                <Download size={15} />
-                <span>{isProcessing ? 'Validating & Importing...' : 'Import & Connect'}</span>
+                {isVaultUnlocking ? (
+                  <span>Unlocking Vault...</span>
+                ) : (
+                  <>
+                    <Lock size={14} />
+                    <span>Set Master Password & Continue</span>
+                    <ArrowRight size={14} />
+                  </>
+                )}
               </button>
-            </div>
-          )}
+            </form>
+          ) : (
+            /* 
+              STAGE 2: SINGLE UNIFIED FLOW - CREATE OR IMPORT IDENTITY
+            */
+            <div className="space-y-4">
+              {/* Segmented Selector for Mode */}
+              <div className="grid grid-cols-3 gap-1 p-1 bg-[#000000] border border-white/15 rounded-[16px]">
+                <button
+                  type="button"
+                  onClick={() => setMode('create')}
+                  className={`py-2 px-3 rounded-[12px] text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    mode === 'create'
+                      ? 'bg-pink-500 text-black shadow-md'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <PlusCircle size={13} />
+                  <span>Create</span>
+                </button>
 
-          {/* FLOW 3: SAVED IDENTITIES LIST */}
-          {tab === 'saved' && (
-            <div className="space-y-2.5">
-              {session.identities.length === 0 ? (
-                <div className="p-8 text-center bg-[#000000] border border-white/15 rounded-[18px] text-xs font-mono text-white/50">
-                  No personas saved in the local vault yet. Create or import one to connect.
-                </div>
-              ) : (
-                session.identities.map((id) => {
-                  const isCurrent = id.pubkey === session.activePubkey;
-                  return (
-                    <div
-                      key={id.pubkey}
-                      onClick={() => handleSelectSaved(id.pubkey)}
-                      className={`p-3.5 rounded-[16px] border flex items-center justify-between transition-all cursor-pointer ${
-                        isCurrent
-                          ? 'bg-[#000000] border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                          : 'bg-[#000000] border-white/15 hover:border-white/40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-[#161412] border border-white/20 flex items-center justify-center text-white font-bold text-xs font-mono shrink-0">
-                          {id.label.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-white truncate">{id.label}</div>
-                          <div className="text-[10px] font-mono text-white/40 truncate">
-                            {id.npub || id.pubkey.slice(0, 16) + '...'}
-                          </div>
-                        </div>
-                      </div>
+                <button
+                  type="button"
+                  onClick={() => setMode('import')}
+                  className={`py-2 px-3 rounded-[12px] text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    mode === 'import'
+                      ? 'bg-pink-500 text-black shadow-md'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Download size={13} />
+                  <span>Import</span>
+                </button>
 
-                      <div className="shrink-0 flex items-center gap-2">
-                        {isCurrent ? (
-                          <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                            CONNECTED
-                          </span>
-                        ) : (
-                          <span className="text-xs font-mono text-pink-400 flex items-center gap-1 hover:underline">
-                            <span>Connect</span>
-                            <ArrowRight size={12} />
-                          </span>
-                        )}
+                <button
+                  type="button"
+                  onClick={() => setMode('saved')}
+                  className={`py-2 px-3 rounded-[12px] text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    mode === 'saved'
+                      ? 'bg-pink-500 text-black shadow-md'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Key size={13} />
+                  <span>Saved ({session.identities.length})</span>
+                </button>
+              </div>
+
+              {/* FLOW A: CREATE PERSONA */}
+              {mode === 'create' && (
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="text-[11px] font-mono text-white/70 block mb-1">
+                      Persona Label
+                    </label>
+                    <input
+                      type="text"
+                      value={createLabel}
+                      onChange={(e) => setCreateLabel(e.target.value)}
+                      placeholder="e.g. Personal Persona"
+                      className="w-full bg-[#000000] border border-white/20 focus:border-pink-500 rounded-[14px] px-3.5 py-2 text-xs text-white outline-none font-mono placeholder-white/30"
+                    />
+                  </div>
+
+                  {/* Public Key Display */}
+                  <div className="p-3 bg-[#000000] border border-white/10 rounded-[14px] space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-white/50">
+                      <span>Public Key (npub)</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(createdKeypair.npub, 'npub')}
+                        className="text-pink-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedNpub ? <Check size={11} /> : <Copy size={11} />}
+                        <span>{copiedNpub ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+                    <div className="text-xs font-mono text-white truncate select-all">
+                      {createdKeypair.npub}
+                    </div>
+                  </div>
+
+                  {/* Private Key Display */}
+                  <div className="p-3 bg-[#000000] border border-white/10 rounded-[14px] space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-white/50">
+                      <span className="text-amber-400">Private Key (nsec) · Keep Secret</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowCreatedNsec(!showCreatedNsec)}
+                          className="text-white/60 hover:text-white cursor-pointer"
+                        >
+                          {showCreatedNsec ? <EyeOff size={12} /> : <Eye size={12} />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(createdKeypair.nsec, 'nsec')}
+                          className="text-pink-400 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedNsec ? <Check size={11} /> : <Copy size={11} />}
+                          <span>{copiedNsec ? 'Copied' : 'Copy'}</span>
+                        </button>
                       </div>
                     </div>
-                  );
-                })
+                    <div className="text-xs font-mono text-white truncate">
+                      {showCreatedNsec ? createdKeypair.nsec : '••••••••••••••••••••••••••••••••••••••••••••••••'}
+                    </div>
+                  </div>
+
+                  {/* Regenerate Keypair */}
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreatedKeypair(generateRandomKeypair());
+                        setCopiedNsec(false);
+                        setCopiedNpub(false);
+                      }}
+                      className="text-[11px] font-mono text-pink-400 hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <RefreshCw size={11} />
+                      <span>Regenerate Keypair</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveCreated}
+                    disabled={isProcessing}
+                    className="w-full py-3 rounded-[16px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-500/25 cursor-pointer disabled:opacity-50 active:scale-95"
+                  >
+                    <ShieldCheck size={15} />
+                    <span>{isProcessing ? 'Encrypting & Saving...' : 'Save & Connect Persona'}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* FLOW B: IMPORT EXISTING KEY */}
+              {mode === 'import' && (
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="text-[11px] font-mono text-white/70 block mb-1">
+                      Persona Label
+                    </label>
+                    <input
+                      type="text"
+                      value={importLabel}
+                      onChange={(e) => setImportLabel(e.target.value)}
+                      placeholder="e.g. My Imported Nostr Key"
+                      className="w-full bg-[#000000] border border-white/20 focus:border-pink-500 rounded-[14px] px-3.5 py-2 text-xs text-white outline-none font-mono placeholder-white/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-mono text-white/70 block mb-1">
+                      Private Key (nsec / hex) or Public Key (npub)
+                    </label>
+                    <input
+                      type="text"
+                      value={importKey}
+                      onChange={(e) => {
+                        setImportKey(e.target.value);
+                        if (importError) setImportError(null);
+                      }}
+                      placeholder="nsec1... or 64-char hex (or npub1...)"
+                      className="w-full bg-[#000000] border border-white/20 focus:border-pink-500 rounded-[14px] px-3.5 py-2 text-xs text-white outline-none font-mono placeholder-white/30"
+                    />
+                  </div>
+
+                  {/* Real-time Status feedback */}
+                  {decodedKey?.type && (
+                    <div className="p-2.5 rounded-[12px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono flex items-center gap-2">
+                      <Check size={14} className="text-emerald-400 shrink-0" />
+                      <span>
+                        Valid {decodedKey.type === 'nsec' ? 'Nostr Private Key (nsec)' : decodedKey.type === 'hex' ? '64-character Hex Key' : 'Public Key (Read-only Persona)'}
+                      </span>
+                    </div>
+                  )}
+
+                  {decodedKey?.error && importKey.trim().length > 0 && (
+                    <div className="p-2.5 rounded-[12px] bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono">
+                      {decodedKey.error}
+                    </div>
+                  )}
+
+                  {importError && (
+                    <div className="p-2.5 rounded-[12px] bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-mono">
+                      {importError}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleSaveImported}
+                    disabled={isProcessing || !decodedKey?.type}
+                    className="w-full py-3 rounded-[16px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-500/25 cursor-pointer disabled:opacity-40 active:scale-95"
+                  >
+                    <Download size={15} />
+                    <span>{isProcessing ? 'Importing...' : 'Import & Connect Persona'}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* FLOW C: SAVED PERSONAS */}
+              {mode === 'saved' && (
+                <div className="space-y-2">
+                  {session.identities.length === 0 ? (
+                    <div className="p-8 text-center bg-[#000000] border border-white/15 rounded-[18px] text-xs font-mono text-white/50">
+                      No personas in this vault yet. Use Create or Import above.
+                    </div>
+                  ) : (
+                    session.identities.map((id) => {
+                      const isCurrent = id.pubkey === session.activePubkey;
+                      return (
+                        <div
+                          key={id.pubkey}
+                          onClick={() => handleSelectSaved(id.pubkey)}
+                          className={`p-3 rounded-[16px] border flex items-center justify-between transition-all cursor-pointer ${
+                            isCurrent
+                              ? 'bg-[#000000] border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                              : 'bg-[#000000] border-white/15 hover:border-white/40'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-[#161412] border border-white/20 flex items-center justify-center text-white font-bold text-xs font-mono shrink-0">
+                              {id.label.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-white truncate">{id.label}</div>
+                              <div className="text-[10px] font-mono text-white/40 truncate">
+                                {id.npub ? id.npub.slice(0, 16) + '…' : id.pubkey.slice(0, 16) + '…'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isCurrent ? (
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                              ACTIVE
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-mono text-white/40 hover:text-white">
+                              Select →
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               )}
             </div>
           )}

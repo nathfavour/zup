@@ -127,6 +127,58 @@ export function nsecToHex(nsec: string): string {
   return hex;
 }
 
+/**
+ * Safely parses and validates any Nostr key format (nsec, npub, or 64-char hex)
+ * without throwing unhandled exceptions.
+ */
+export function safeDecodeKey(rawInput: string): {
+  type: 'nsec' | 'npub' | 'hex' | null;
+  hex: string;
+  error?: string;
+} {
+  const clean = rawInput.trim();
+  if (!clean) return { type: null, hex: '' };
+
+  // Hex format check (64 hex characters)
+  if (/^[0-9a-fA-F]{64}$/.test(clean)) {
+    return { type: 'hex', hex: clean.toLowerCase() };
+  }
+
+  // nsec format
+  if (clean.toLowerCase().startsWith('nsec1')) {
+    try {
+      const { hrp, hex } = decodeBech32(clean);
+      if (hrp === 'nsec') {
+        if (hex.length === 64) {
+          return { type: 'nsec', hex };
+        }
+        return { type: null, hex: '', error: 'Decoded nsec key must be 32 bytes (64 hex characters)' };
+      }
+      return { type: null, hex: '', error: `Expected nsec prefix but found ${hrp}` };
+    } catch (err: unknown) {
+      return { type: null, hex: '', error: err instanceof Error ? err.message : 'Invalid nsec format' };
+    }
+  }
+
+  // npub format
+  if (clean.toLowerCase().startsWith('npub1')) {
+    try {
+      const { hrp, hex } = decodeBech32(clean);
+      if (hrp === 'npub') {
+        if (hex.length === 64) {
+          return { type: 'npub', hex };
+        }
+        return { type: null, hex: '', error: 'Decoded npub key must be 32 bytes (64 hex characters)' };
+      }
+      return { type: null, hex: '', error: `Expected npub prefix but found ${hrp}` };
+    } catch (err: unknown) {
+      return { type: null, hex: '', error: err instanceof Error ? err.message : 'Invalid npub format' };
+    }
+  }
+
+  return { type: null, hex: '', error: 'Key must start with nsec1, npub1, or be a 64-character hex string' };
+}
+
 // --- SHA-256 Hashing ---
 export async function sha256Hex(data: string | Uint8Array): Promise<string> {
   const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;

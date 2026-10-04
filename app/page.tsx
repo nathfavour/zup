@@ -273,6 +273,7 @@ export default function Home() {
             <FeedView
               onInspectEvent={(event) => setInspectEvent(event)}
               onOpenComposer={() => setActiveTab('new')}
+              onOpenConnectDrawer={() => setIsConnectDrawerOpen(true)}
             />
           )}
 

@@ -28,6 +28,31 @@ interface FeedViewProps {
   onOpenConnectDrawer: () => void;
 }
 
+/**
+ * Truncates feed post content to a compact, clean snippet with an ellipsis (…)
+ * so post cards remain short, uniform, and bounded in the stream.
+ */
+function formatFeedSnippet(text: string, maxChars = 160): { snippet: string; isTruncated: boolean } {
+  // Collapse markdown headers, code blocks, repeated linebreaks for the compact card view
+  const clean = text
+    .replace(/^#+\s+/gm, '') // Remove markdown headers like ##
+    .replace(/```[\s\S]*?```/g, '[code snippet]') // Replace multi-line code blocks
+    .replace(/`([^`]+)`/g, '$1') // Strip inline code backticks
+    .replace(/\r?\n+/g, ' ') // Collapse all line breaks into a single space
+    .replace(/\s+/g, ' ') // Collapse whitespace
+    .trim();
+
+  if (clean.length <= maxChars) {
+    return { snippet: clean, isTruncated: false };
+  }
+
+  // Find natural word boundary before maxChars
+  const cut = clean.slice(0, maxChars);
+  const lastSpace = cut.lastIndexOf(' ');
+  const safeCut = lastSpace > maxChars * 0.7 ? cut.slice(0, lastSpace) : cut;
+  return { snippet: safeCut.trim() + '…', isTruncated: true };
+}
+
 export function FeedView({
   onInspectEvent,
   onOpenComposer,
@@ -543,13 +568,14 @@ export function FeedView({
             const mediaUrl = mediaMatch ? mediaMatch[1] : null;
             const textContent = mediaUrl ? event.content.replace(mediaUrl, '').trim() : event.content;
             const tags = extractEventTags(event.tags);
+            const { snippet, isTruncated } = formatFeedSnippet(textContent, 160);
 
             return (
               <article
                 key={event.id}
                 data-event-id={event.id}
                 onClick={() => setSelectedPost(event)}
-                className="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors flex items-start gap-3.5 cursor-pointer group"
+                className="p-3.5 sm:p-4 hover:bg-white/[0.02] transition-colors flex items-start gap-3 cursor-pointer group max-h-60 overflow-hidden"
               >
                 {/* Left: User Profile Picture */}
                 <div
@@ -567,23 +593,23 @@ export function FeedView({
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${event.pubkey}`;
                     }}
-                    className="w-10 h-10 rounded-full border border-white/20 bg-[#161412] object-cover hover:opacity-90 transition-opacity"
+                    className="w-9 h-9 rounded-full border border-white/20 bg-[#161412] object-cover hover:opacity-90 transition-opacity"
                   />
                 </div>
 
                 {/* Right: Author line, content, media, Twitter-style actions */}
-                <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="flex-1 min-w-0 space-y-1">
                   {/* User line */}
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-bold text-sm text-white truncate group-hover:text-pink-300 transition-colors">
+                      <span className="font-bold text-xs sm:text-sm text-white truncate group-hover:text-pink-300 transition-colors">
                         {authorName}
                       </span>
-                      <span className="text-xs font-mono text-white/50 truncate">
+                      <span className="text-[11px] font-mono text-white/50 truncate">
                         {handle}
                       </span>
                       <span className="text-white/30 text-xs">·</span>
-                      <span className="text-xs font-mono text-white/40 shrink-0">
+                      <span className="text-[11px] font-mono text-white/40 shrink-0">
                         {dateStr}
                       </span>
                     </div>
@@ -601,38 +627,49 @@ export function FeedView({
                     </button>
                   </div>
 
-                  {/* Post Content */}
-                  <div className="text-sm text-white leading-relaxed whitespace-pre-wrap break-words font-normal">
-                    {textContent}
+                  {/* Compact Post Content Snippet (Short, Line-clamped, Ellipsis) */}
+                  <div className="text-xs sm:text-sm text-white/90 leading-snug break-words font-normal line-clamp-3">
+                    {snippet}
                   </div>
 
-                  {/* Hashtags */}
+                  {isTruncated && (
+                    <span className="text-[11px] font-mono text-pink-400 group-hover:underline inline-block">
+                      Show full dispatch →
+                    </span>
+                  )}
+
+                  {/* Hashtags (Max 3) */}
                   {tags.length > 0 && (
                     <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                      {tags.map((tag, idx) => (
+                      {tags.slice(0, 3).map((tag, idx) => (
                         <span
                           key={`${event.id}-tag-${tag}-${idx}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedTag(tag);
                           }}
-                          className="text-xs font-mono text-pink-400 hover:underline cursor-pointer"
+                          className="text-[11px] font-mono text-pink-400 hover:underline cursor-pointer"
                         >
                           #{tag}
                         </span>
                       ))}
+                      {tags.length > 3 && (
+                        <span className="text-[10px] font-mono text-white/40">
+                          +{tags.length - 3}
+                        </span>
+                      )}
                     </div>
                   )}
 
-                  {/* Click-to-load media */}
+                  {/* Click-to-load media (Bounded) */}
                   {mediaUrl && (
-                    <div className="pt-1.5" onClick={(e) => e.stopPropagation()}>
+                    <div className="pt-1 max-h-32 overflow-hidden rounded-[12px]" onClick={(e) => e.stopPropagation()}>
                       <ClickToLoadMedia url={mediaUrl} byteEstimate="64 KB" />
                     </div>
                   )}
 
                   {/* Twitter / X Style Action Row (Comment, Repost, Like, Zap, Share) */}
-                  <div className="pt-2 flex items-center justify-between text-white/50 max-w-md text-xs select-none">
+                  <div className="pt-1.5 flex items-center justify-between text-white/50 max-w-md text-xs select-none">
                     {/* Reply / Comment */}
                     <button
                       onClick={(e) => handleOpenComment(event, e)}

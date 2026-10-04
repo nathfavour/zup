@@ -73,10 +73,16 @@ export function PostDetailView({
   const textContent = mediaUrl ? post.content.replace(mediaUrl, '').trim() : post.content;
   const tags = extractEventTags(post.tags);
 
-  // Fetch comments referencing this event
+  // Fetch live comments referencing this event from Dexie and query relays
   useEffect(() => {
     let active = true;
-    const fetchComments = async () => {
+
+    // Send on-chain query to connected relays for real thread events
+    import('@/lib/workers/relay-manager').then(({ relayManager }) => {
+      relayManager.queryThread(post.id);
+    });
+
+    const fetchLiveComments = async () => {
       try {
         const allEvents = await db.events.toArray();
         const allProfiles = await db.profiles.toArray();
@@ -87,57 +93,30 @@ export function PostDetailView({
         allProfiles.forEach((p) => pMap.set(p.pubkey, p));
         setCommentProfiles(pMap);
 
-        // Find events that reference this event in tags: ['e', post.id]
-        const replies = allEvents.filter((ev) =>
-          ev.tags.some(([tagType, tagVal]) => tagType === 'e' && tagVal === post.id)
+        // Find genuine live events that reference this event in tags: ['e', post.id]
+        const replies = allEvents.filter(
+          (ev) =>
+            (ev.kind === 1 || ev.kind === 30023) &&
+            ev.tags.some(([tagType, tagVal]) => tagType === 'e' && tagVal === post.id)
         );
 
-        // If local database has no replies yet for this event, provide realistic discussion replies
-        if (replies.length === 0) {
-          const samplePubkeys = Array.from(pMap.keys()).filter((pk) => pk !== post.pubkey);
-          const fallbackPub1 = samplePubkeys[0] || '1111111111111111111111111111111111111111111111111111111111111111';
-          const fallbackPub2 = samplePubkeys[1] || '2222222222222222222222222222222222222222222222222222222222222222';
-
-          const seededReplies: LocalEvent[] = [
-            {
-              id: 'seed_reply_1_' + post.id.slice(0, 8),
-              pubkey: fallbackPub1,
-              kind: 1,
-              created_at: post.created_at + 120,
-              tags: [['e', post.id, '', 'reply']],
-              content: 'Spot on analysis. Single-socket multiplexing drastically cuts resource contention on high-frequency Nostr relays.',
-              sig: 'mock_sig_1',
-              first_seen_at: Date.now(),
-              relay_source: 'local'
-            },
-            {
-              id: 'seed_reply_2_' + post.id.slice(0, 8),
-              pubkey: fallbackPub2,
-              kind: 1,
-              created_at: post.created_at + 340,
-              tags: [['e', post.id, '', 'reply']],
-              content: 'Tested this on our cluster node. Schnorr signature validation overhead remains under 1.2ms with precomputed nonces.',
-              sig: 'mock_sig_2',
-              first_seen_at: Date.now(),
-              relay_source: 'local'
-            }
-          ];
-          setDbComments(seededReplies);
-        } else {
-          setDbComments(replies.sort((a, b) => a.created_at - b.created_at));
-        }
-
+        setDbComments(replies.sort((a, b) => a.created_at - b.created_at));
         setLoadingComments(false);
       } catch {
-        setLoadingComments(false);
+        if (active) setLoadingComments(false);
       }
     };
 
-    fetchComments();
+    fetchLiveComments();
+
+    // Re-check periodically as relays stream back results
+    const pollInterval = setInterval(fetchLiveComments, 1500);
+
     return () => {
       active = false;
+      clearInterval(pollInterval);
     };
-  }, [post.id, post.created_at, post.pubkey]);
+  }, [post.id]);
 
   // Combine fetched comments with newly added comments in current session
   const allComments = [

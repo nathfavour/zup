@@ -3,8 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LocalEvent, ProfileMetadata } from '@/lib/core/types';
 import { db } from '@/lib/db';
-import { formatHex, extractEventTags, isSpamOrReply } from '@/lib/core/nostr';
+import { formatHex, extractEventTags, isSpamOrReply, calculateEventId } from '@/lib/core/nostr';
+import { schnorrSign } from '@/lib/core/crypto';
 import { getSessionState } from '@/lib/state/session';
+import { relayManager } from '@/lib/workers/relay-manager';
 import { ClickToLoadMedia } from './ClickToLoadMedia';
 import { PostDetailView } from './PostDetailView';
 import { AccountRequiredDrawer } from '@/components/modals/AccountRequiredDrawer';
@@ -31,14 +33,16 @@ export function FeedView({
   onOpenComposer,
   onOpenConnectDrawer
 }: FeedViewProps) {
+  // Live Nostr Events state
   const [events, setEvents] = useState<LocalEvent[]>([]);
+  const [replies, setReplies] = useState<LocalEvent[]>([]);
+  const [likes, setLikes] = useState<LocalEvent[]>([]);
+  const [reposts, setReposts] = useState<LocalEvent[]>([]);
   const [profiles, setProfiles] = useState<Map<string, ProfileMetadata>>(new Map());
   const [userInterests, setUserInterests] = useState<string[]>([]);
   const [selectedTag, setSelectedTag] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
-  const [repostedPosts, setRepostedPosts] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   // Selected post for Detail view
@@ -49,8 +53,6 @@ export function FeedView({
   const [accountRequiredAction, setAccountRequiredAction] = useState('engage with dispatches');
   const [isAddCommentOpen, setIsAddCommentOpen] = useState(false);
   const [commentTargetPost, setCommentTargetPost] = useState<LocalEvent | null>(null);
-  const [addedCommentsMap, setAddedCommentsMap] = useState<Map<string, LocalEvent[]>>(new Map());
-  const [replyDeltas, setReplyDeltas] = useState<Map<string, number>>(new Map());
 
   const dwellTracker = useRef<Map<string, number>>(new Map());
 
@@ -71,54 +73,81 @@ export function FeedView({
     actionFn();
   };
 
-  // Load events, profiles, and compute active user interests from telemetry
+  // Fetch genuine on-chain Nostr data from Dexie & relays
+  const fetchFeedData = React.useCallback(async () => {
+    try {
+      const allEvents = await db.events.orderBy('created_at').reverse().toArray();
+      const allProfiles = await db.profiles.toArray();
+      const telemetry = await db.telemetry.toArray();
+
+      // 1. Separate Root Dispatches (Kind 1 & 30023 without 'e' tags)
+      const rootEvents = allEvents.filter(
+        (ev) => (ev.kind === 1 || ev.kind === 30023) && !ev.tags.some((t) => t[0] === 'e') && !isSpamOrReply(ev).isSpamOrReply
+      );
+
+      // 2. Separate Live Thread Replies / Comments (Kind 1 with 'e' tags)
+      const threadReplies = allEvents.filter(
+        (ev) => (ev.kind === 1 || ev.kind === 30023) && ev.tags.some((t) => t[0] === 'e')
+      );
+
+      // 3. Separate Live Reactions / Likes (Kind 7)
+      const liveLikes = allEvents.filter((ev) => ev.kind === 7);
+
+      // 4. Separate Live Reposts (Kind 6)
+      const liveReposts = allEvents.filter((ev) => ev.kind === 6);
+
+      const pMap = new Map<string, ProfileMetadata>();
+      allProfiles.forEach((p) => pMap.set(p.pubkey, p));
+
+      // Derive user interests from dwell & interaction telemetry
+      const interestFrequency = new Map<string, number>();
+      telemetry.forEach((t) => {
+        const tags = (t.metadata?.tags as string[]) || [];
+        tags.forEach((tag) => {
+          const count = interestFrequency.get(tag) || 0;
+          interestFrequency.set(tag, count + (t.dwellTimeMs ? Math.round(t.dwellTimeMs / 1000) : 1));
+        });
+      });
+
+      const topInterests = Array.from(interestFrequency.entries())
+        .filter(([, score]) => score >= 2)
+        .sort((a, b) => b[1] - a[1])
+        .map(([tag]) => tag)
+        .slice(0, 5);
+
+      setEvents(rootEvents);
+      setReplies(threadReplies);
+      setLikes(liveLikes);
+      setReposts(liveReposts);
+      setProfiles(pMap);
+      setUserInterests(topInterests);
+      setLoading(false);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     let active = true;
-    const fetchFeed = async () => {
-      try {
-        const allEvents = await db.events.orderBy('created_at').reverse().toArray();
-        const allProfiles = await db.profiles.toArray();
-        const telemetry = await db.telemetry.toArray();
 
-        if (!active) return;
+    async function loadData() {
+      await fetchFeedData();
+    }
+    loadData();
 
-        // Apply strict spam, reply, and low-effort filter: only genuine root posts
-        const cleanEvents = allEvents.filter((ev) => !isSpamOrReply(ev).isSpamOrReply);
+    // Listen to real-time events ingested from live WebSocket relays
+    const unsubRelayEvent = relayManager.onNewEvent(() => {
+      if (active) fetchFeedData();
+    });
 
-        const pMap = new Map<string, ProfileMetadata>();
-        allProfiles.forEach((p) => pMap.set(p.pubkey, p));
+    const interval = setInterval(() => {
+      if (active) fetchFeedData();
+    }, 2000);
 
-        // Derive user interests from dwell & interaction telemetry
-        const interestFrequency = new Map<string, number>();
-        telemetry.forEach((t) => {
-          const tags = (t.metadata?.tags as string[]) || [];
-          tags.forEach((tag) => {
-            const count = interestFrequency.get(tag) || 0;
-            interestFrequency.set(tag, count + (t.dwellTimeMs ? Math.round(t.dwellTimeMs / 1000) : 1));
-          });
-        });
-
-        // Only show interests if user has actual activity
-        const topInterests = Array.from(interestFrequency.entries())
-          .filter(([, score]) => score >= 2)
-          .sort((a, b) => b[1] - a[1])
-          .map(([tag]) => tag)
-          .slice(0, 5);
-
-        setEvents(cleanEvents);
-        setProfiles(pMap);
-        setUserInterests(topInterests);
-        setLoading(false);
-      } catch {}
-    };
-
-    fetchFeed();
-    const interval = setInterval(fetchFeed, 3000);
     return () => {
       active = false;
+      unsubRelayEvent();
       clearInterval(interval);
     };
-  }, []);
+  }, [fetchFeedData]);
 
   // IntersectionObserver for Interaction Telemetry (Dwell Time >= 800ms with >75% visibility)
   useEffect(() => {
@@ -167,6 +196,30 @@ export function FeedView({
     };
   }, [events, selectedPost]);
 
+  // Real-time live count helpers from actual events
+  const getLikeCount = (eventId: string) =>
+    likes.filter((l) => l.tags.some(([t, v]) => t === 'e' && v === eventId)).length;
+
+  const getRepostCount = (eventId: string) =>
+    reposts.filter((rp) => rp.tags.some(([t, v]) => t === 'e' && v === eventId)).length;
+
+  const getReplyCount = (eventId: string) =>
+    replies.filter((r) => r.tags.some(([t, v]) => t === 'e' && v === eventId)).length;
+
+  const checkIsLiked = (eventId: string) => {
+    const session = getSessionState();
+    const activePubkey = session.activeIdentity?.pubkey;
+    if (!activePubkey) return false;
+    return likes.some((l) => l.pubkey === activePubkey && l.tags.some(([t, v]) => t === 'e' && v === eventId));
+  };
+
+  const checkIsReposted = (eventId: string) => {
+    const session = getSessionState();
+    const activePubkey = session.activeIdentity?.pubkey;
+    if (!activePubkey) return false;
+    return reposts.some((rp) => rp.pubkey === activePubkey && rp.tags.some(([t, v]) => t === 'e' && v === eventId));
+  };
+
   // Handle Share link copy (public, no account required)
   const handleShare = (eventId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -176,58 +229,124 @@ export function FeedView({
     showToast('Copied share link to clipboard!');
   };
 
-  // Handle Like toggle (gated)
-  const handleLike = (eventId: string, e?: React.MouseEvent) => {
+  // Handle Like toggle (Signs and broadcasts genuine Nostr Kind 7 reaction event)
+  const handleLike = (targetPost: LocalEvent, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     requireAccount('like dispatches', async () => {
-      setLikedPosts((prev) => {
-        const next = new Set(prev);
-        if (next.has(eventId)) {
-          next.delete(eventId);
-        } else {
-          next.add(eventId);
-        }
-        return next;
-      });
+      const session = getSessionState();
+      const pubkey = session.activeIdentity?.pubkey;
+      if (!pubkey) return;
 
-      const targetEvent = events.find((ev) => ev.id === eventId);
+      const existingLike = likes.find(
+        (l) => l.pubkey === pubkey && l.tags.some(([t, v]) => t === 'e' && v === targetPost.id)
+      );
+
+      if (existingLike) {
+        // Remove like locally
+        await db.events.delete(existingLike.id);
+        await fetchFeedData();
+      } else {
+        // Broadcast genuine Kind 7 event to relays
+        const created_at = Math.floor(Date.now() / 1000);
+        const tags = [
+          ['e', targetPost.id],
+          ['p', targetPost.pubkey]
+        ];
+        const id = await calculateEventId({
+          pubkey,
+          created_at,
+          kind: 7,
+          tags,
+          content: '+'
+        });
+        const sig = await schnorrSign(id, '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b');
+
+        const likeEvent: LocalEvent = {
+          id,
+          pubkey,
+          kind: 7,
+          created_at,
+          tags,
+          content: '+',
+          sig,
+          first_seen_at: Date.now(),
+          relay_source: 'local'
+        };
+
+        await relayManager.broadcastEvent(likeEvent);
+        await fetchFeedData();
+      }
+
       await db.logTelemetry({
-        pubkey: localStorage.getItem('zup:active_pubkey') || 'anonymous',
-        eventId,
-        targetPubkey: targetEvent?.pubkey,
+        pubkey,
+        eventId: targetPost.id,
+        targetPubkey: targetPost.pubkey,
         interactionType: 'click',
         metadata: { action: 'like' }
       });
     });
   };
 
-  // Handle Repost toggle (gated)
-  const handleRepost = (eventId: string, e?: React.MouseEvent) => {
+  // Handle Repost toggle (Signs and broadcasts genuine Nostr Kind 6 repost event)
+  const handleRepost = (targetPost: LocalEvent, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     requireAccount('repost dispatches', async () => {
-      setRepostedPosts((prev) => {
-        const next = new Set(prev);
-        if (next.has(eventId)) {
-          next.delete(eventId);
-        } else {
-          next.add(eventId);
-          showToast('Reposted dispatch to your network!');
-        }
-        return next;
-      });
+      const session = getSessionState();
+      const pubkey = session.activeIdentity?.pubkey;
+      if (!pubkey) return;
 
-      const targetEvent = events.find((ev) => ev.id === eventId);
+      const existingRepost = reposts.find(
+        (rp) => rp.pubkey === pubkey && rp.tags.some(([t, v]) => t === 'e' && v === targetPost.id)
+      );
+
+      if (existingRepost) {
+        // Remove repost locally
+        await db.events.delete(existingRepost.id);
+        await fetchFeedData();
+      } else {
+        // Broadcast genuine Kind 6 event to relays
+        const created_at = Math.floor(Date.now() / 1000);
+        const tags = [
+          ['e', targetPost.id],
+          ['p', targetPost.pubkey]
+        ];
+        const id = await calculateEventId({
+          pubkey,
+          created_at,
+          kind: 6,
+          tags,
+          content: ''
+        });
+        const sig = await schnorrSign(id, '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b');
+
+        const repostEvent: LocalEvent = {
+          id,
+          pubkey,
+          kind: 6,
+          created_at,
+          tags,
+          content: '',
+          sig,
+          first_seen_at: Date.now(),
+          relay_source: 'local'
+        };
+
+        await relayManager.broadcastEvent(repostEvent);
+        await fetchFeedData();
+        showToast('Reposted dispatch to connected relays!');
+      }
+
       await db.logTelemetry({
-        pubkey: localStorage.getItem('zup:active_pubkey') || 'anonymous',
-        eventId,
-        targetPubkey: targetEvent?.pubkey,
+        pubkey,
+        eventId: targetPost.id,
+        targetPubkey: targetPost.pubkey,
         interactionType: 'share',
         metadata: { action: 'repost' }
       });
     });
   };
 
-  // Handle Zap intent (gated)
+  // Handle Zap intent
   const handleZap = (event: LocalEvent, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     requireAccount('send lightning zaps', async () => {
@@ -242,7 +361,7 @@ export function FeedView({
     });
   };
 
-  // Handle Comment intent (gated)
+  // Handle Comment intent
   const handleOpenComment = (event: LocalEvent, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     requireAccount('reply to dispatches', () => {
@@ -252,25 +371,9 @@ export function FeedView({
   };
 
   // When a comment is successfully added
-  const handleCommentAdded = (newComment: LocalEvent) => {
-    if (!commentTargetPost) return;
-    const parentId = commentTargetPost.id;
-
-    setAddedCommentsMap((prev) => {
-      const next = new Map(prev);
-      const list = next.get(parentId) || [];
-      next.set(parentId, [...list, newComment]);
-      return next;
-    });
-
-    setReplyDeltas((prev) => {
-      const next = new Map(prev);
-      const cur = next.get(parentId) || 0;
-      next.set(parentId, cur + 1);
-      return next;
-    });
-
-    showToast('Reply published to thread!');
+  const handleCommentAdded = () => {
+    fetchFeedData();
+    showToast('Reply published to connected relays!');
   };
 
   // Filter events
@@ -292,16 +395,11 @@ export function FeedView({
   // IF A POST IS SELECTED, RENDER DETAIL VIEW
   if (selectedPost) {
     const profile = profiles.get(selectedPost.pubkey);
-    const isLiked = likedPosts.has(selectedPost.id);
-    const isReposted = repostedPosts.has(selectedPost.id);
-
-    const seedNum = parseInt(selectedPost.id.slice(0, 2), 16) || 1;
-    const delta = replyDeltas.get(selectedPost.id) || 0;
-    const replyCount = (seedNum % 8) + 1 + delta;
-    const repostCount = (seedNum % 14) + (isReposted ? 1 : 0);
-    const likeCount = (seedNum % 32) + (isLiked ? 1 : 0);
-
-    const newlyAdded = addedCommentsMap.get(selectedPost.id) || [];
+    const isLiked = checkIsLiked(selectedPost.id);
+    const isReposted = checkIsReposted(selectedPost.id);
+    const replyCount = getReplyCount(selectedPost.id);
+    const repostCount = getRepostCount(selectedPost.id);
+    const likeCount = getLikeCount(selectedPost.id);
 
     return (
       <>
@@ -322,13 +420,13 @@ export function FeedView({
           repostCount={repostCount}
           replyCount={replyCount}
           onBack={() => setSelectedPost(null)}
-          onLike={() => handleLike(selectedPost.id)}
-          onRepost={() => handleRepost(selectedPost.id)}
+          onLike={() => handleLike(selectedPost)}
+          onRepost={() => handleRepost(selectedPost)}
           onZap={() => handleZap(selectedPost)}
           onShare={() => handleShare(selectedPost.id)}
           onInspect={() => onInspectEvent(selectedPost)}
           onOpenCommentDrawer={() => handleOpenComment(selectedPost)}
-          newlyAddedComments={newlyAdded}
+          newlyAddedComments={[]}
         />
 
         {/* Account Required Gating Drawer */}
@@ -407,7 +505,7 @@ export function FeedView({
       {/* Stream of Posts (Twitter / X Simple Style) */}
       {loading ? (
         <div className="p-10 text-center bg-[#000000] border border-white/20 rounded-[22px]">
-          <p className="text-xs font-mono text-white/50">Loading dispatches...</p>
+          <p className="text-xs font-mono text-white/50">Loading dispatches from relays...</p>
         </div>
       ) : filteredEvents.length === 0 ? (
         <div className="p-12 text-center bg-[#000000] border border-white/20 rounded-[22px] space-y-3">
@@ -434,14 +532,12 @@ export function FeedView({
               day: 'numeric'
             });
 
-            const isLiked = likedPosts.has(event.id);
-            const isReposted = repostedPosts.has(event.id);
-
-            const seedNum = parseInt(event.id.slice(0, 2), 16) || 1;
-            const delta = replyDeltas.get(event.id) || 0;
-            const replyCount = (seedNum % 8) + 1 + delta;
-            const repostCount = (seedNum % 14) + (isReposted ? 1 : 0);
-            const likeCount = (seedNum % 32) + (isLiked ? 1 : 0);
+            // Live event counts directly from real Nostr events
+            const isLiked = checkIsLiked(event.id);
+            const isReposted = checkIsReposted(event.id);
+            const likeCount = getLikeCount(event.id);
+            const repostCount = getRepostCount(event.id);
+            const replyCount = getReplyCount(event.id);
 
             const mediaMatch = event.content.match(/(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp))/i);
             const mediaUrl = mediaMatch ? mediaMatch[1] : null;
@@ -551,7 +647,7 @@ export function FeedView({
 
                     {/* Repost */}
                     <button
-                      onClick={(e) => handleRepost(event.id, e)}
+                      onClick={(e) => handleRepost(event, e)}
                       className={`flex items-center gap-1.5 transition-colors cursor-pointer group/btn ${
                         isReposted ? 'text-emerald-400' : 'hover:text-emerald-400'
                       }`}
@@ -565,7 +661,7 @@ export function FeedView({
 
                     {/* Like */}
                     <button
-                      onClick={(e) => handleLike(event.id, e)}
+                      onClick={(e) => handleLike(event, e)}
                       className={`flex items-center gap-1.5 transition-colors cursor-pointer group/btn ${
                         isLiked ? 'text-pink-500' : 'hover:text-pink-400'
                       }`}

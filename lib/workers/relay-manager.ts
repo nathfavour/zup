@@ -135,14 +135,14 @@ class RelayManager {
         state.reconnectAttempts = 0;
         this.notify();
 
-        // Subscribe to technical kinds (Kind 1 & Kind 30023) and Profile Metadata (Kind 0)
-        const subId = 'zup_sub_' + Math.random().toString(36).substring(2, 8);
+        // Subscribe to technical kinds (Kind 1 & Kind 30023), Reposts (Kind 6), Reactions (Kind 7), and Profiles (Kind 0)
+        const subId = 'zup_feed_' + Math.random().toString(36).substring(2, 8);
         const reqMsg = JSON.stringify([
           'REQ',
           subId,
           {
-            kinds: [0, 1, 30023],
-            limit: 30
+            kinds: [0, 1, 6, 7, 30023],
+            limit: 60
           }
         ]);
         try {
@@ -215,13 +215,29 @@ class RelayManager {
       return;
     }
 
-    // Handle Kind 1 & 30023: Dispatches
+    // Handle Kind 6 (Reposts) & Kind 7 (Reactions / Likes)
+    if (raw.kind === 6 || raw.kind === 7) {
+      const localEv: LocalEvent = {
+        id: raw.id,
+        pubkey: raw.pubkey,
+        kind: raw.kind,
+        created_at: raw.created_at || Math.floor(Date.now() / 1000),
+        tags: raw.tags || [],
+        content: raw.content || '',
+        sig: raw.sig || '',
+        first_seen_at: Date.now(),
+        relay_source: relayUrl
+      };
+      this.batchBuffer.push(localEv);
+      this.eventListeners.forEach((fn) => fn(localEv));
+      return;
+    }
+
+    // Handle Kind 1 (Dispatches & Comments) & Kind 30023 (Long-form)
     if (raw.kind === 1 || raw.kind === 30023) {
-      // Robust Spam & Reply Filter: reject replies, empty junk, link spam
-      const spamCheck = isSpamOrReply(raw);
-      if (spamCheck.isSpamOrReply) {
-        return; // Exclude replies and spam
-      }
+      // Ensure basic length and discard pure gibberish
+      const content = (raw.content || '').trim();
+      if (content.length === 0) return;
 
       // Check profile cache; if uncached, save deterministic avatar
       const existingProfile = await db.profiles.get(raw.pubkey);
@@ -253,6 +269,26 @@ class RelayManager {
       this.batchBuffer.push(localEv);
       this.eventListeners.forEach((fn) => fn(localEv));
     }
+  }
+
+  public queryThread(eventId: string) {
+    const subId = 'thread_' + eventId.slice(0, 8);
+    const reqMsg = JSON.stringify([
+      'REQ',
+      subId,
+      {
+        kinds: [1, 6, 7],
+        '#e': [eventId],
+        limit: 50
+      }
+    ]);
+    this.relays.forEach((state) => {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        try {
+          state.ws.send(reqMsg);
+        } catch {}
+      }
+    });
   }
 
   private startBatchLoop() {

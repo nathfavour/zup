@@ -6,6 +6,7 @@ import { db } from '@/lib/db';
 import { getSessionState } from '@/lib/state/session';
 import { calculateEventId, formatHex } from '@/lib/core/nostr';
 import { schnorrSign } from '@/lib/core/crypto';
+import { relayManager } from '@/lib/workers/relay-manager';
 import { X, Send, MessageCircle, ShieldCheck } from 'lucide-react';
 
 interface AddCommentDrawerProps {
@@ -68,7 +69,8 @@ export function AddCommentDrawer({
         relay_source: 'local_dispatch'
       };
 
-      await db.events.put(commentEvent);
+      // Broadcast live to all connected Nostr relays and commit locally to Dexie
+      await relayManager.broadcastEvent(commentEvent);
 
       // Log interaction telemetry
       await db.logTelemetry({

@@ -23,6 +23,7 @@ import { SettingsView } from '@/components/settings/SettingsView';
 import { InspectRawSidebar } from '@/components/modals/InspectRawSidebar';
 import { NotificationsDrawer } from '@/components/notifications/NotificationsDrawer';
 import { CommandPalette } from '@/components/modals/CommandPalette';
+import { ConnectIdentityDrawer } from '@/components/modals/ConnectIdentityDrawer';
 
 // Icons
 import {
@@ -34,7 +35,8 @@ import {
   Lock,
   Unlock,
   Radio,
-  Command
+  Key,
+  ShieldCheck
 } from 'lucide-react';
 
 type TabType = 'feed' | 'new' | 'profile' | 'settings';
@@ -45,6 +47,7 @@ export default function Home() {
   const [inspectEvent, setInspectEvent] = useState<LocalEvent | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isConnectDrawerOpen, setIsConnectDrawerOpen] = useState(false);
   const [relaysList, setRelaysList] = useState<RelayStatus[]>(relayManager.getStatusList());
 
   useEffect(() => {
@@ -62,7 +65,7 @@ export default function Home() {
     };
   }, []);
 
-  // Keyboard shortcut listener (Cmd+K, 1-3, etc.)
+  // Keyboard shortcut listener (Cmd+K, 1-4, etc.)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -100,7 +103,7 @@ export default function Home() {
     <div className="min-h-screen bg-[#161412] text-white flex flex-col font-sans selection:bg-pink-500/30 selection:text-white">
       {/* 
         Topbar: Anchored to the top, but with two bottom rounded corners (rounded-b-[20px])
-        Edge-anchored, clean, human-first: 'zup' on left, notification icon + profile circle on top right
+        Shows 'Connect' when client has no active Nostr identity, or avatar circle when connected.
       */}
       <header className="sticky top-0 z-40 bg-[#000000] border-b border-white/20 rounded-b-[20px] px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-xl">
         {/* Left: Brand mark */}
@@ -114,8 +117,8 @@ export default function Home() {
           <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
         </button>
 
-        {/* Right: Notifications + Profile circle */}
-        <div className="flex items-center gap-3">
+        {/* Right: Relays count + Notifications + Connect / Profile */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
           {/* Relay status pill */}
           <button
             onClick={() => setActiveTab('settings')}
@@ -136,16 +139,27 @@ export default function Home() {
             <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-pink-500 shadow-[0_0_6px_rgba(236,72,153,0.8)]" />
           </button>
 
-          {/* Profile Avatar Circle */}
-          <button
-            onClick={() => setActiveTab('profile')}
-            title="Go to Profile"
-            className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-indigo-600 p-0.5 shadow-md cursor-pointer hover:scale-105 transition-transform"
-          >
-            <div className="w-full h-full rounded-full bg-[#161412] flex items-center justify-center text-white font-bold text-xs font-mono">
-              {session.activeIdentity?.label.slice(0, 2).toUpperCase() || 'OP'}
-            </div>
-          </button>
+          {/* Active Identity Avatar OR 'Connect' Trigger */}
+          {session.activeIdentity ? (
+            <button
+              onClick={() => setActiveTab('profile')}
+              title={`Logged in as ${session.activeIdentity.label}. Click to view Profile`}
+              className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-indigo-600 p-0.5 shadow-md cursor-pointer hover:scale-105 transition-transform"
+            >
+              <div className="w-full h-full rounded-full bg-[#161412] flex items-center justify-center text-white font-bold text-xs font-mono">
+                {session.activeIdentity.label.slice(0, 2).toUpperCase()}
+              </div>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsConnectDrawerOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[14px] bg-pink-500 hover:bg-pink-400 text-black text-xs font-bold font-mono transition-all shadow-[0_0_12px_rgba(236,72,153,0.3)] active:scale-95 cursor-pointer"
+              title="Connect or create Nostr identity"
+            >
+              <Key size={13} className="stroke-[2.5]" />
+              <span>Connect</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -218,35 +232,48 @@ export default function Home() {
             </nav>
           </div>
 
-          {/* Sidebar Footer: Active Persona & Vault Lock Toggle */}
+          {/* Sidebar Footer: Active Persona OR Connect Button */}
           <div className="pt-4 border-t border-white/10 space-y-2">
-            <div className="p-3 bg-[#000000] border border-white/15 rounded-[16px] space-y-1">
-              <div className="flex items-center justify-between text-[11px] font-mono text-white/50">
-                <span>Persona</span>
+            {session.activeIdentity ? (
+              <div className="p-3 bg-[#000000] border border-white/15 rounded-[16px] space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-mono text-white/50">
+                  <span>Persona</span>
+                  <button
+                    onClick={() => {
+                      if (session.isUnlocked) {
+                        lockVault();
+                      } else {
+                        setActiveTab('settings');
+                      }
+                    }}
+                    className={`flex items-center gap-1 font-bold ${
+                      session.isUnlocked ? 'text-emerald-400 hover:text-red-300' : 'text-amber-400'
+                    }`}
+                    title={session.isUnlocked ? 'Vault unlocked. Click to lock RAM' : 'Vault locked. Click to unlock'}
+                  >
+                    {session.isUnlocked ? <Unlock size={11} /> : <Lock size={11} />}
+                    <span>{session.isUnlocked ? 'Lock' : 'Unlock'}</span>
+                  </button>
+                </div>
+                <div className="text-xs font-bold text-white truncate">
+                  {session.activeIdentity.label}
+                </div>
+                <div className="text-[10px] font-mono text-white/40 truncate">
+                  {formatHex(session.activeIdentity.pubkey, 8, 4)}
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-[#000000] border border-white/15 rounded-[16px] space-y-2 text-center">
+                <div className="text-xs font-mono text-white/60">No Persona Connected</div>
                 <button
-                  onClick={() => {
-                    if (session.isUnlocked) {
-                      lockVault();
-                    } else {
-                      setActiveTab('settings');
-                    }
-                  }}
-                  className={`flex items-center gap-1 font-bold ${
-                    session.isUnlocked ? 'text-emerald-400 hover:text-red-300' : 'text-amber-400'
-                  }`}
-                  title={session.isUnlocked ? 'Vault unlocked. Click to lock RAM' : 'Vault locked. Click to unlock'}
+                  onClick={() => setIsConnectDrawerOpen(true)}
+                  className="w-full py-2 rounded-[12px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  {session.isUnlocked ? <Unlock size={11} /> : <Lock size={11} />}
-                  <span>{session.isUnlocked ? 'Lock' : 'Unlock'}</span>
+                  <Key size={13} />
+                  <span>Connect Identity</span>
                 </button>
               </div>
-              <div className="text-xs font-bold text-white truncate">
-                {session.activeIdentity?.label || 'Personal'}
-              </div>
-              <div className="text-[10px] font-mono text-white/40 truncate">
-                {session.activeIdentity ? formatHex(session.activeIdentity.pubkey, 8, 4) : '—'}
-              </div>
-            </div>
+            )}
 
             <div className="text-[11px] font-mono text-white/40 text-center">
               Shortcuts: <kbd className="text-white/60">Cmd+K</kbd>
@@ -273,6 +300,7 @@ export default function Home() {
             <ProfileView
               onOpenSettings={() => setActiveTab('settings')}
               onInspectEvent={(event) => setInspectEvent(event)}
+              onConnect={() => setIsConnectDrawerOpen(true)}
             />
           )}
 
@@ -346,6 +374,12 @@ export default function Home() {
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
         relaysOnlineCount={connectedRelaysCount}
+      />
+
+      {/* Connect Identity Bottom Drawer (Max 60% height) */}
+      <ConnectIdentityDrawer
+        isOpen={isConnectDrawerOpen}
+        onClose={() => setIsConnectDrawerOpen(false)}
       />
 
       {/* Global Command Palette (Cmd+K) */}

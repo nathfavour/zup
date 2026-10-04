@@ -126,10 +126,10 @@ export function TelemetryView() {
           </p>
         ) : (
           <div className="space-y-2.5">
-            {sortedAffinities.map(([tag, score]) => {
+            {sortedAffinities.map(([tag, score], idx) => {
               const pct = Math.round((score / maxAffinity) * 100);
               return (
-                <div key={tag} className="space-y-1">
+                <div key={`affinity-${tag}-${idx}`} className="space-y-1">
                   <div className="flex items-center justify-between text-xs font-mono">
                     <span className="text-white font-bold">#{tag}</span>
                     <span className="text-indigo-400 tabular-nums font-bold">{score} pts ({pct}%)</span>

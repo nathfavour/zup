@@ -118,13 +118,23 @@ export async function validateEvent(event: LocalEvent): Promise<{
 }
 
 /**
- * Extracts hashtags (#tags) from event tags
+ * Extracts unique hashtags (#tags) from event tags, preserving original casing while preventing duplicates
  */
 export function extractEventTags(tags: string[][]): string[] {
-  return tags
-    .filter(([t]) => t === 't')
-    .map(([, val]) => val)
-    .filter(Boolean);
+  if (!Array.isArray(tags)) return [];
+  const seen = new Set<string>();
+  const uniqueTags: string[] = [];
+  for (const tagArr of tags) {
+    if (Array.isArray(tagArr) && tagArr[0] === 't' && tagArr[1]) {
+      const cleaned = tagArr[1].trim();
+      const lower = cleaned.toLowerCase();
+      if (cleaned && !seen.has(lower)) {
+        seen.add(lower);
+        uniqueTags.push(cleaned);
+      }
+    }
+  }
+  return uniqueTags;
 }
 
 /**

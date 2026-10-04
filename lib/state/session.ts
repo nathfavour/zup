@@ -56,7 +56,9 @@ export function getActivePubkey(): string | null {
 
 export function getSessionState(): SessionState {
   const activePubkey = getActivePubkey();
-  const activeIdentity = cachedIdentities.find((i) => i.pubkey === activePubkey) || cachedIdentities[0] || null;
+  const activeIdentity = activePubkey
+    ? cachedIdentities.find((i) => i.pubkey === activePubkey) || null
+    : null;
 
   return {
     isUnlocked: volatileMasterKey !== null,
@@ -171,17 +173,27 @@ export function lockVault(): void {
 }
 
 /**
- * Switch active persona pointer
+ * Switch active persona pointer or disconnect (null)
  */
-export async function setActiveIdentity(pubkey: string): Promise<void> {
-  const exists = cachedIdentities.some((i) => i.pubkey === pubkey);
-  if (!exists) {
-    await refreshCachedIdentities();
+export async function setActiveIdentity(pubkey: string | null): Promise<void> {
+  if (pubkey) {
+    const exists = cachedIdentities.some((i) => i.pubkey === pubkey);
+    if (!exists) {
+      await refreshCachedIdentities();
+    }
   }
   if (typeof window !== 'undefined') {
-    localStorage.setItem('zup:active_pubkey', pubkey);
+    if (pubkey) {
+      localStorage.setItem('zup:active_pubkey', pubkey);
+    } else {
+      localStorage.removeItem('zup:active_pubkey');
+    }
   }
   notify();
+}
+
+export function disconnectIdentity(): void {
+  setActiveIdentity(null);
 }
 
 /**

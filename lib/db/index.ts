@@ -103,11 +103,6 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
 
   await db.identities.bulkAdd([personalIdentity, agentIdentity]);
 
-  // Set default active identity in localStorage if not set
-  if (typeof window !== 'undefined' && !localStorage.getItem('zup:active_pubkey')) {
-    localStorage.setItem('zup:active_pubkey', personalIdentity.pubkey);
-  }
-
   // 3. Seed Profiles (Kind 0)
   const seedProfiles: ProfileMetadata[] = [
     {

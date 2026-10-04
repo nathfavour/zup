@@ -1,10 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { getSessionState, setActiveIdentity, SessionState, subscribeSession } from '@/lib/state/session';
+import {
+  getSessionState,
+  setActiveIdentity,
+  disconnectIdentity,
+  SessionState,
+  subscribeSession
+} from '@/lib/state/session';
 import { db } from '@/lib/db';
 import { LocalEvent, UserTelemetry } from '@/lib/core/types';
-import { formatHex, extractEventTags } from '@/lib/core/nostr';
+import { formatHex } from '@/lib/core/nostr';
 import {
   User,
   Settings,
@@ -16,16 +22,17 @@ import {
   Key,
   Layers,
   Activity,
-  Radio,
-  ExternalLink
+  LogOut,
+  PlusCircle
 } from 'lucide-react';
 
 interface ProfileViewProps {
   onOpenSettings: () => void;
   onInspectEvent: (event: LocalEvent) => void;
+  onConnect: () => void;
 }
 
-export function ProfileView({ onOpenSettings, onInspectEvent }: ProfileViewProps) {
+export function ProfileView({ onOpenSettings, onInspectEvent, onConnect }: ProfileViewProps) {
   const [session, setSession] = useState<SessionState>(getSessionState());
   const [userEvents, setUserEvents] = useState<LocalEvent[]>([]);
   const [telemetry, setTelemetry] = useState<UserTelemetry[]>([]);
@@ -39,7 +46,7 @@ export function ProfileView({ onOpenSettings, onInspectEvent }: ProfileViewProps
       const allEvents = await db.events.toArray();
       const myEvents = activePub
         ? allEvents.filter((e) => e.pubkey === activePub)
-        : allEvents.slice(0, 3);
+        : [];
 
       const tel = await db.telemetry.toArray();
       setUserEvents(myEvents);
@@ -51,9 +58,10 @@ export function ProfileView({ onOpenSettings, onInspectEvent }: ProfileViewProps
   }, []);
 
   const active = session.activeIdentity;
-  const npub = active?.npub || 'npub1zup090...';
+  const npub = active?.npub || '';
 
   const handleCopyNpub = () => {
+    if (!npub) return;
     navigator.clipboard.writeText(npub);
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
@@ -70,6 +78,36 @@ export function ProfileView({ onOpenSettings, onInspectEvent }: ProfileViewProps
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4);
 
+  // If client is not connected to any identity
+  if (!active) {
+    return (
+      <div className="space-y-6 max-w-xl mx-auto py-8">
+        <div className="p-8 bg-[#000000] border border-white/20 rounded-[28px] text-center space-y-5 shadow-2xl">
+          <div className="w-16 h-16 rounded-full bg-pink-500/10 border-2 border-pink-500/30 flex items-center justify-center mx-auto text-pink-400">
+            <Key size={28} />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold text-white tracking-tight">
+              No Nostr Identity Connected
+            </h2>
+            <p className="text-xs text-white/60 max-w-sm mx-auto leading-relaxed">
+              Connect or generate a local Nostr persona to sign dispatches, calibrate topic affinities, and access your profile.
+            </p>
+          </div>
+
+          <button
+            onClick={onConnect}
+            className="px-6 py-3 rounded-[16px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-all shadow-[0_0_16px_rgba(236,72,153,0.3)] cursor-pointer inline-flex items-center gap-2 active:scale-95"
+          >
+            <PlusCircle size={15} />
+            <span>Connect or Create Identity</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Profile Header Card */}
@@ -79,14 +117,14 @@ export function ProfileView({ onOpenSettings, onInspectEvent }: ProfileViewProps
             {/* Avatar Circle */}
             <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-pink-500 to-indigo-600 p-0.5 shadow-lg">
               <div className="w-full h-full rounded-full bg-[#161412] flex items-center justify-center text-white font-bold text-lg font-mono">
-                {active?.label.slice(0, 2).toUpperCase() || 'OP'}
+                {active.label.slice(0, 2).toUpperCase()}
               </div>
             </div>
 
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-white tracking-tight">
-                  {active?.label || 'Systems Operator'}
+                  {active.label}
                 </h2>
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
               </div>
@@ -96,14 +134,25 @@ export function ProfileView({ onOpenSettings, onInspectEvent }: ProfileViewProps
             </div>
           </div>
 
-          {/* Quick Settings Button */}
-          <button
-            onClick={onOpenSettings}
-            className="flex items-center gap-2 px-4 py-2 bg-[#161412] hover:bg-[#1E1C1A] border border-white/20 hover:border-pink-500 rounded-[14px] text-xs font-bold font-mono text-white transition-all shadow-md cursor-pointer"
-          >
-            <Settings size={14} className="text-pink-400" />
-            <span>Settings</span>
-          </button>
+          {/* Actions: Settings & Disconnect */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => disconnectIdentity()}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#161412] hover:bg-red-950/40 border border-white/20 hover:border-red-400 rounded-[14px] text-xs font-bold font-mono text-white transition-all cursor-pointer"
+              title="Disconnect active identity"
+            >
+              <LogOut size={13} className="text-red-400" />
+              <span>Disconnect</span>
+            </button>
+
+            <button
+              onClick={onOpenSettings}
+              className="flex items-center gap-2 px-3.5 py-2 bg-[#161412] hover:bg-[#1E1C1A] border border-white/20 hover:border-pink-500 rounded-[14px] text-xs font-bold font-mono text-white transition-all shadow-md cursor-pointer"
+            >
+              <Settings size={14} className="text-pink-400" />
+              <span>Settings</span>
+            </button>
+          </div>
         </div>
 
         {/* Public Key Bar */}
@@ -123,7 +172,16 @@ export function ProfileView({ onOpenSettings, onInspectEvent }: ProfileViewProps
 
         {/* Persona Switcher Quick Row */}
         <div className="space-y-2 pt-2 border-t border-white/10">
-          <div className="text-xs font-mono text-white/50">Switch Active Persona:</div>
+          <div className="flex items-center justify-between text-xs font-mono text-white/50">
+            <span>Switch Active Persona:</span>
+            <button
+              onClick={onConnect}
+              className="text-pink-400 hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <PlusCircle size={12} />
+              <span>Add / Import</span>
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {session.identities.map((id) => {
               const isSelected = id.pubkey === session.activePubkey;
@@ -163,9 +221,9 @@ export function ProfileView({ onOpenSettings, onInspectEvent }: ProfileViewProps
             Calibrated Topic Interests (Local Telemetry)
           </h3>
           <div className="flex items-center gap-2 flex-wrap">
-            {topTopics.map(([topic, count]) => (
+            {topTopics.map(([topic, count], idx) => (
               <span
-                key={topic}
+                key={`profile-topic-${topic}-${idx}`}
                 className="px-3 py-1 rounded-[12px] bg-[#161412] border border-white/15 text-xs font-mono text-white"
               >
                 #{topic} <span className="text-pink-400 ml-1">· {count} reads</span>

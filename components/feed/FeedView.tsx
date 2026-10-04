@@ -258,9 +258,9 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
             All
           </button>
 
-          {userInterests.map((interest) => (
+          {userInterests.map((interest, idx) => (
             <button
-              key={interest}
+              key={`interest-${interest}-${idx}`}
               onClick={() => setSelectedTag(interest)}
               className={`px-3 py-1 rounded-[12px] font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 selectedTag === interest
@@ -375,8 +375,11 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
                   {/* Hashtags */}
                   {tags.length > 0 && (
                     <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                      {tags.map((tag) => (
-                        <span key={tag} className="text-xs font-mono text-pink-400 hover:underline cursor-pointer">
+                      {tags.map((tag, idx) => (
+                        <span
+                          key={`${event.id}-tag-${tag}-${idx}`}
+                          className="text-xs font-mono text-pink-400 hover:underline cursor-pointer"
+                        >
                           #{tag}
                         </span>
                       ))}

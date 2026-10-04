@@ -29,14 +29,12 @@ import { ConnectIdentityDrawer } from '@/components/modals/ConnectIdentityDrawer
 import {
   Layers,
   Plus,
-  User,
   Settings,
   Bell,
   Lock,
   Unlock,
   Radio,
-  Key,
-  ShieldCheck
+  Key
 } from 'lucide-react';
 
 type TabType = 'feed' | 'new' | 'profile' | 'settings';
@@ -207,18 +205,6 @@ export default function Home() {
               </button>
 
               <button
-                onClick={() => setActiveTab('profile')}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[16px] text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'profile'
-                    ? 'bg-[#000000] text-pink-400 border border-pink-500 shadow-md'
-                    : 'text-white/70 hover:text-white hover:bg-white/[0.04] border border-transparent'
-                }`}
-              >
-                <User size={17} />
-                <span>Profile</span>
-              </button>
-
-              <button
                 onClick={() => setActiveTab('settings')}
                 className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[16px] text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'settings'
@@ -336,17 +322,6 @@ export default function Home() {
           className="w-13 h-13 -mt-6 rounded-full bg-pink-500 hover:bg-pink-400 text-black flex items-center justify-center font-bold shadow-[0_0_18px_rgba(236,72,153,0.6)] border-2 border-[#161412] active:scale-95 transition-transform cursor-pointer shrink-0"
         >
           <Plus size={24} className="stroke-[3]" />
-        </button>
-
-        {/* Profile Tab */}
-        <button
-          onClick={() => setActiveTab('profile')}
-          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
-            activeTab === 'profile' ? 'text-pink-400 font-bold' : 'text-white/60 hover:text-white'
-          }`}
-        >
-          <User size={20} />
-          <span className="text-[10px] font-mono">Profile</span>
         </button>
 
         {/* Settings Tab */}

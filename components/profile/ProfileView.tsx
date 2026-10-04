@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import {
   getSessionState,
   setActiveIdentity,
-  disconnectIdentity,
   SessionState,
   subscribeSession
 } from '@/lib/state/session';
@@ -22,7 +21,6 @@ import {
   Key,
   Layers,
   Activity,
-  LogOut,
   PlusCircle
 } from 'lucide-react';
 
@@ -134,17 +132,8 @@ export function ProfileView({ onOpenSettings, onInspectEvent, onConnect }: Profi
             </div>
           </div>
 
-          {/* Actions: Settings & Disconnect */}
+          {/* Actions: Settings */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => disconnectIdentity()}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#161412] hover:bg-red-950/40 border border-white/20 hover:border-red-400 rounded-[14px] text-xs font-bold font-mono text-white transition-all cursor-pointer"
-              title="Disconnect active identity"
-            >
-              <LogOut size={13} className="text-red-400" />
-              <span>Disconnect</span>
-            </button>
-
             <button
               onClick={onOpenSettings}
               className="flex items-center gap-2 px-3.5 py-2 bg-[#161412] hover:bg-[#1E1C1A] border border-white/20 hover:border-pink-500 rounded-[14px] text-xs font-bold font-mono text-white transition-all shadow-md cursor-pointer"

@@ -1,6 +1,6 @@
-import { RelayStatus, LocalEvent } from '../core/types';
+import { RelayStatus, LocalEvent, ProfileMetadata } from '../core/types';
 import { db } from '../db';
-import { validateEvent } from '../core/nostr';
+import { validateEvent, isSpamOrReply } from '../core/nostr';
 
 export const DEFAULT_RELAYS = [
   'wss://nos.lol',
@@ -135,14 +135,14 @@ class RelayManager {
         state.reconnectAttempts = 0;
         this.notify();
 
-        // Subscribe to technical kinds (Kind 1 & Kind 30023) with strict limit for bandwidth zero-waste
+        // Subscribe to technical kinds (Kind 1 & Kind 30023) and Profile Metadata (Kind 0)
         const subId = 'zup_sub_' + Math.random().toString(36).substring(2, 8);
         const reqMsg = JSON.stringify([
           'REQ',
           subId,
           {
-            kinds: [1, 30023],
-            limit: 25
+            kinds: [0, 1, 30023],
+            limit: 30
           }
         ]);
         try {
@@ -195,21 +195,64 @@ class RelayManager {
       firstItems.forEach((id) => this.seenEventIds.delete(id));
     }
 
-    const localEv: LocalEvent = {
-      id: raw.id,
-      pubkey: raw.pubkey,
-      kind: raw.kind,
-      created_at: raw.created_at,
-      tags: raw.tags || [],
-      content: raw.content || '',
-      sig: raw.sig || '',
-      first_seen_at: Date.now(),
-      relay_source: relayUrl
-    };
+    // Handle Kind 0: Profile Metadata
+    if (raw.kind === 0 && raw.content) {
+      try {
+        const metadata = JSON.parse(raw.content);
+        const profile: ProfileMetadata = {
+          pubkey: raw.pubkey,
+          content: raw.content,
+          name: metadata.name,
+          display_name: metadata.display_name || metadata.name,
+          picture: metadata.picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${raw.pubkey}`,
+          nip05: metadata.nip05,
+          about: metadata.about,
+          updated_at: raw.created_at || Math.floor(Date.now() / 1000),
+          cached_at: Date.now()
+        };
+        await db.profiles.put(profile);
+      } catch {}
+      return;
+    }
 
-    // Buffer for batch ingestion
-    this.batchBuffer.push(localEv);
-    this.eventListeners.forEach((fn) => fn(localEv));
+    // Handle Kind 1 & 30023: Dispatches
+    if (raw.kind === 1 || raw.kind === 30023) {
+      // Robust Spam & Reply Filter: reject replies, empty junk, link spam
+      const spamCheck = isSpamOrReply(raw);
+      if (spamCheck.isSpamOrReply) {
+        return; // Exclude replies and spam
+      }
+
+      // Check profile cache; if uncached, save deterministic avatar
+      const existingProfile = await db.profiles.get(raw.pubkey);
+      if (!existingProfile) {
+        await db.profiles.put({
+          pubkey: raw.pubkey,
+          content: '{}',
+          name: raw.pubkey.slice(0, 8),
+          display_name: raw.pubkey.slice(0, 8),
+          picture: `https://api.dicebear.com/7.x/identicon/svg?seed=${raw.pubkey}`,
+          updated_at: raw.created_at,
+          cached_at: Date.now()
+        });
+      }
+
+      const localEv: LocalEvent = {
+        id: raw.id,
+        pubkey: raw.pubkey,
+        kind: raw.kind,
+        created_at: raw.created_at,
+        tags: raw.tags || [],
+        content: raw.content || '',
+        sig: raw.sig || '',
+        first_seen_at: Date.now(),
+        relay_source: relayUrl
+      };
+
+      // Buffer for batch ingestion
+      this.batchBuffer.push(localEv);
+      this.eventListeners.forEach((fn) => fn(localEv));
+    }
   }
 
   private startBatchLoop() {

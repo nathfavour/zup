@@ -3,9 +3,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LocalEvent, ProfileMetadata } from '@/lib/core/types';
 import { db } from '@/lib/db';
-import { formatHex, extractEventTags } from '@/lib/core/nostr';
+import { formatHex, extractEventTags, isSpamOrReply } from '@/lib/core/nostr';
 import { ClickToLoadMedia } from './ClickToLoadMedia';
-import { Search, Code2, Zap, Copy, Check, Sparkles, MessageSquare } from 'lucide-react';
+import {
+  Search,
+  MessageCircle,
+  Repeat2,
+  Heart,
+  Zap,
+  Share2,
+  Check,
+  Code2,
+  Sparkles
+} from 'lucide-react';
 
 interface FeedViewProps {
   onInspectEvent: (event: LocalEvent) => void;
@@ -18,11 +28,18 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
   const [userInterests, setUserInterests] = useState<string[]>([]);
   const [selectedTag, setSelectedTag] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
+  const [repostedPosts, setRepostedPosts] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
-  // Dwell timer tracker map: eventId -> startTime
   const dwellTracker = useRef<Map<string, number>>(new Map());
+
+  // Show a temporary toast
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
 
   // Load events, profiles, and compute active user interests from telemetry
   useEffect(() => {
@@ -35,10 +52,13 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
 
         if (!active) return;
 
+        // Apply strict spam & reply filter: only genuine root posts
+        const cleanEvents = allEvents.filter((ev) => !isSpamOrReply(ev).isSpamOrReply);
+
         const pMap = new Map<string, ProfileMetadata>();
         allProfiles.forEach((p) => pMap.set(p.pubkey, p));
 
-        // Derive user interests from local dwell & interaction telemetry
+        // Derive user interests from dwell & interaction telemetry
         const interestFrequency = new Map<string, number>();
         telemetry.forEach((t) => {
           const tags = (t.metadata?.tags as string[]) || [];
@@ -55,7 +75,7 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
           .map(([tag]) => tag)
           .slice(0, 5);
 
-        setEvents(allEvents);
+        setEvents(cleanEvents);
         setProfiles(pMap);
         setUserInterests(topInterests);
         setLoading(false);
@@ -63,7 +83,7 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
     };
 
     fetchFeed();
-    const interval = setInterval(fetchFeed, 2500);
+    const interval = setInterval(fetchFeed, 3000);
     return () => {
       active = false;
       clearInterval(interval);
@@ -117,14 +137,64 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
     };
   }, [events]);
 
-  const handleCopyId = (id: string, e: React.MouseEvent) => {
+  // Handle Share link copy
+  const handleShare = (eventId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(id);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1800);
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://getzup.vercel.app';
+    const shareUrl = `${origin}/zup/${eventId}`;
+    navigator.clipboard.writeText(shareUrl);
+    showToast('Copied share link to clipboard!');
   };
 
-  const handleZapIntent = async (event: LocalEvent, e: React.MouseEvent) => {
+  // Handle Like toggle
+  const handleLike = async (eventId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLikedPosts((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) {
+        next.delete(eventId);
+      } else {
+        next.add(eventId);
+      }
+      return next;
+    });
+
+    const targetEvent = events.find((ev) => ev.id === eventId);
+    await db.logTelemetry({
+      pubkey: localStorage.getItem('zup:active_pubkey') || 'anonymous',
+      eventId,
+      targetPubkey: targetEvent?.pubkey,
+      interactionType: 'click',
+      metadata: { action: 'like' }
+    });
+  };
+
+  // Handle Repost toggle
+  const handleRepost = async (eventId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRepostedPosts((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) {
+        next.delete(eventId);
+      } else {
+        next.add(eventId);
+        showToast('Reposted dispatch to your network!');
+      }
+      return next;
+    });
+
+    const targetEvent = events.find((ev) => ev.id === eventId);
+    await db.logTelemetry({
+      pubkey: localStorage.getItem('zup:active_pubkey') || 'anonymous',
+      eventId,
+      targetPubkey: targetEvent?.pubkey,
+      interactionType: 'share',
+      metadata: { action: 'repost' }
+    });
+  };
+
+  // Handle Zap intent
+  const handleZap = async (event: LocalEvent, e: React.MouseEvent) => {
     e.stopPropagation();
     await db.logTelemetry({
       pubkey: localStorage.getItem('zup:active_pubkey') || 'anonymous',
@@ -133,10 +203,10 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
       interactionType: 'zap_intent',
       metadata: { targetKind: event.kind }
     });
-    alert(`Zap recorded locally. Lightning intent logged for ${formatHex(event.id)}.`);
+    showToast(`⚡ Zap intent logged for @${formatHex(event.pubkey, 6, 0)}!`);
   };
 
-  // Filter logic
+  // Filter events
   const filteredEvents = events.filter((ev) => {
     if (selectedTag !== 'all') {
       const tags = extractEventTags(ev.tags);
@@ -153,31 +223,39 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
   });
 
   return (
-    <div className="space-y-4 max-w-3xl mx-auto">
-      {/* Search Bar (Replaces all cluttered toggle rows) */}
+    <div className="space-y-4 max-w-2xl mx-auto">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-pink-500 text-black text-xs font-bold rounded-full shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+          <Check size={14} className="stroke-[3]" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Clean Edge-to-Edge Search Bar */}
       <div className="space-y-2.5">
         <div className="relative w-full">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search dispatches, authors, or topics..."
-            className="w-full bg-[#000000] border border-white/20 focus:border-pink-500 rounded-[18px] pl-10 pr-4 py-2.5 text-xs text-white placeholder-white/40 outline-none transition-colors"
+            placeholder="Search dispatches, people, or topics..."
+            className="w-full bg-[#000000] border border-white/20 focus:border-pink-500 rounded-[20px] pl-11 pr-4 py-2.5 text-xs text-white placeholder-white/40 outline-none transition-colors"
           />
         </div>
 
-        {/* Interests Row (Shows "All", plus actual interest tags if user activity exists) */}
+        {/* Interests Bar (Shows "All" by default; displays topics if user has activity) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
           <button
             onClick={() => setSelectedTag('all')}
             className={`px-3 py-1 rounded-[12px] font-semibold transition-all whitespace-nowrap cursor-pointer ${
               selectedTag === 'all'
-                ? 'bg-pink-500 text-black shadow-md font-bold'
+                ? 'bg-pink-500 text-black font-bold'
                 : 'bg-[#000000] text-white/70 hover:text-white border border-white/15'
             }`}
           >
-            All Dispatches
+            All
           </button>
 
           {userInterests.map((interest) => (
@@ -186,7 +264,7 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
               onClick={() => setSelectedTag(interest)}
               className={`px-3 py-1 rounded-[12px] font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 selectedTag === interest
-                  ? 'bg-pink-500 text-black shadow-md font-bold'
+                  ? 'bg-pink-500 text-black font-bold'
                   : 'bg-[#000000] text-white/70 hover:text-white border border-white/15'
               }`}
             >
@@ -196,140 +274,189 @@ export function FeedView({ onInspectEvent, onOpenComposer }: FeedViewProps) {
         </div>
       </div>
 
-      {/* Events Stream */}
+      {/* Stream of Posts (Twitter / X Simple Style) */}
       {loading ? (
         <div className="p-10 text-center bg-[#000000] border border-white/20 rounded-[22px]">
-          <p className="text-xs font-mono text-white/60">Loading local cache...</p>
+          <p className="text-xs font-mono text-white/50">Loading dispatches...</p>
         </div>
       ) : filteredEvents.length === 0 ? (
         <div className="p-12 text-center bg-[#000000] border border-white/20 rounded-[22px] space-y-3">
-          <MessageSquare size={28} className="mx-auto text-white/30" />
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider">No Dispatches Found</h3>
-          <p className="text-xs text-white opacity-70 max-w-sm mx-auto">
-            {searchQuery
-              ? `No dispatches match "${searchQuery}". Try a different keyword.`
-              : 'Your feed is ready. Tap the + icon below to post your first dispatch.'}
+          <p className="text-sm font-bold text-white">No Dispatches Found</p>
+          <p className="text-xs text-white/60 max-w-sm mx-auto">
+            {searchQuery ? `No posts matched "${searchQuery}".` : 'No posts in feed yet.'}
           </p>
           <button
             onClick={onOpenComposer}
-            className="mt-2 px-4 py-2 bg-pink-500 hover:bg-pink-400 text-black rounded-[14px] text-xs font-bold transition-all"
+            className="px-4 py-2 bg-pink-500 hover:bg-pink-400 text-black font-bold text-xs rounded-[14px] transition-colors cursor-pointer"
           >
-            Write a Dispatch
+            Post a Dispatch
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="divide-y divide-white/10 bg-[#000000] border border-white/20 rounded-[24px] overflow-hidden">
           {filteredEvents.map((event) => {
             const profile = profiles.get(event.pubkey);
-            const authorName = profile?.display_name || profile?.name || formatHex(event.pubkey, 8, 6);
-            const nip05 = profile?.nip05;
+            const authorName = profile?.display_name || profile?.name || `user_${event.pubkey.slice(0, 6)}`;
+            const handle = profile?.nip05 || `@${formatHex(event.pubkey, 6, 0)}`;
+            const avatarUrl = profile?.picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${event.pubkey}`;
             const dateStr = new Date(event.created_at * 1000).toLocaleDateString([], {
               month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
+              day: 'numeric'
             });
-            const isLongForm = event.kind === 30023;
-            const tags = extractEventTags(event.tags);
 
-            // Check for media links in content
+            const isLiked = likedPosts.has(event.id);
+            const isReposted = repostedPosts.has(event.id);
+
+            // Deterministic mock seed counts based on event id
+            const seedNum = parseInt(event.id.slice(0, 2), 16) || 1;
+            const replyCount = (seedNum % 8) + 1;
+            const repostCount = (seedNum % 14) + (isReposted ? 1 : 0);
+            const likeCount = (seedNum % 32) + (isLiked ? 1 : 0);
+
+            // Media link detection
             const mediaMatch = event.content.match(/(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp))/i);
             const mediaUrl = mediaMatch ? mediaMatch[1] : null;
             const textContent = mediaUrl ? event.content.replace(mediaUrl, '').trim() : event.content;
+            const tags = extractEventTags(event.tags);
 
             return (
               <article
                 key={event.id}
                 data-event-id={event.id}
-                onClick={() => onInspectEvent(event)}
-                className="p-4 sm:p-5 bg-[#000000] border border-white/20 hover:border-white/50 rounded-[22px] transition-all cursor-pointer group relative overflow-hidden text-left"
+                className="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors flex items-start gap-3.5"
               >
-                {/* Header: Author + Clean Unboxed Metadata */}
-                <div className="flex items-center justify-between gap-3 mb-2 pb-2 border-b border-white/10">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-[#161412] border border-white/20 flex items-center justify-center font-mono font-bold text-xs text-white shrink-0">
-                      {authorName.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-white truncate group-hover:text-pink-300 transition-colors">
-                          {authorName}
-                        </span>
-                        {nip05 && (
-                          <span className="text-[11px] font-mono text-white/50 hidden sm:inline truncate">
-                            {nip05}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-white/60">
-                        <span>{dateStr}</span>
-                        {isLongForm && (
-                          <>
-                            <span>·</span>
-                            <span className="text-pink-400 font-bold">Article</span>
-                          </>
-                        )}
-                        <span>·</span>
-                        <span className="truncate max-w-[120px]">{event.relay_source}</span>
-                      </div>
-                    </div>
-                  </div>
+                {/* Left: User Profile Picture (from Nostr kind 0 with cache fallback) */}
+                <div className="shrink-0 pt-0.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={avatarUrl}
+                    alt={authorName}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      // Fallback to deterministic Dicebear if remote avatar fails to load
+                      (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${event.pubkey}`;
+                    }}
+                    className="w-10 h-10 rounded-full border border-white/20 bg-[#161412] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                  />
+                </div>
 
-                  {/* Actions: Copy ID & Inspect */}
-                  <div className="flex items-center gap-1.5 shrink-0">
+                {/* Right: Author line, content, media, Twitter-style actions */}
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  {/* User line */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-bold text-sm text-white truncate hover:underline cursor-pointer">
+                        {authorName}
+                      </span>
+                      <span className="text-xs font-mono text-white/50 truncate">
+                        {handle}
+                      </span>
+                      <span className="text-white/30 text-xs">·</span>
+                      <span className="text-xs font-mono text-white/40 shrink-0">
+                        {dateStr}
+                      </span>
+                    </div>
+
+                    {/* Subtle Inspect Button */}
                     <button
-                      onClick={(e) => handleCopyId(event.id, e)}
-                      title="Copy Event ID"
-                      className="p-1.5 rounded-lg bg-[#161412] border border-white/15 hover:border-white/40 text-white transition-colors"
-                    >
-                      {copiedId === event.id ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onInspectEvent(event);
-                      }}
-                      title="Inspect Raw Event"
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#161412] border border-white/20 hover:border-pink-500 text-white text-xs font-mono font-bold transition-all"
+                      onClick={() => onInspectEvent(event)}
+                      title="Inspect Raw Event Hash & Schnorr Sig"
+                      className="text-[11px] font-mono text-white/40 hover:text-pink-400 p-1 rounded-md transition-colors"
                     >
                       <Code2 size={13} />
-                      <span className="hidden sm:inline">Inspect</span>
                     </button>
                   </div>
-                </div>
 
-                {/* Content */}
-                <div className="text-sm font-normal leading-relaxed text-white whitespace-pre-wrap break-words">
-                  {textContent}
-                </div>
-
-                {/* Media Interception: Click-to-load Bandwidth Gate */}
-                {mediaUrl && (
-                  <div className="mt-2.5">
-                    <ClickToLoadMedia url={mediaUrl} byteEstimate="64 KB" />
-                  </div>
-                )}
-
-                {/* Footer: Tags & Zap Intent */}
-                <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between gap-3 text-xs font-mono">
-                  <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    {tags.map((t) => (
-                      <span key={t} className="text-pink-400 font-semibold hover:underline">
-                        #{t}
-                      </span>
-                    ))}
-                    <span className="text-[11px] text-white/40 truncate">
-                      {formatHex(event.id, 8, 4)}
-                    </span>
+                  {/* Post Content */}
+                  <div className="text-sm text-white leading-relaxed whitespace-pre-wrap break-words font-normal">
+                    {textContent}
                   </div>
 
-                  <button
-                    onClick={(e) => handleZapIntent(event, e)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:border-amber-400 text-amber-300 font-bold text-[11px] transition-colors"
-                  >
-                    <Zap size={12} />
-                    <span>Zap</span>
-                  </button>
+                  {/* Hashtags */}
+                  {tags.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      {tags.map((tag) => (
+                        <span key={tag} className="text-xs font-mono text-pink-400 hover:underline cursor-pointer">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Click-to-load media */}
+                  {mediaUrl && (
+                    <div className="pt-1.5">
+                      <ClickToLoadMedia url={mediaUrl} byteEstimate="64 KB" />
+                    </div>
+                  )}
+
+                  {/* Twitter / X Style Action Row (Comment, Repost, Like, Zap, Share) */}
+                  <div className="pt-2 flex items-center justify-between text-white/50 max-w-md text-xs select-none">
+                    {/* Reply / Comment */}
+                    <button
+                      onClick={() => showToast('Replies are currently hidden by spam protection.')}
+                      className="flex items-center gap-1.5 hover:text-sky-400 transition-colors cursor-pointer group"
+                      title="Reply"
+                    >
+                      <div className="p-1.5 rounded-full group-hover:bg-sky-500/10">
+                        <MessageCircle size={15} />
+                      </div>
+                      <span className="tabular-nums font-mono text-[11px]">{replyCount}</span>
+                    </button>
+
+                    {/* Repost */}
+                    <button
+                      onClick={(e) => handleRepost(event.id, e)}
+                      className={`flex items-center gap-1.5 transition-colors cursor-pointer group ${
+                        isReposted ? 'text-emerald-400' : 'hover:text-emerald-400'
+                      }`}
+                      title="Repost"
+                    >
+                      <div className="p-1.5 rounded-full group-hover:bg-emerald-500/10">
+                        <Repeat2 size={15} />
+                      </div>
+                      <span className="tabular-nums font-mono text-[11px]">{repostCount}</span>
+                    </button>
+
+                    {/* Like */}
+                    <button
+                      onClick={(e) => handleLike(event.id, e)}
+                      className={`flex items-center gap-1.5 transition-colors cursor-pointer group ${
+                        isLiked ? 'text-pink-500' : 'hover:text-pink-400'
+                      }`}
+                      title="Like"
+                    >
+                      <div className="p-1.5 rounded-full group-hover:bg-pink-500/10">
+                        <Heart
+                          size={15}
+                          className={isLiked ? 'fill-pink-500 text-pink-500' : ''}
+                        />
+                      </div>
+                      <span className="tabular-nums font-mono text-[11px]">{likeCount}</span>
+                    </button>
+
+                    {/* Lightning Zap */}
+                    <button
+                      onClick={(e) => handleZap(event, e)}
+                      className="flex items-center gap-1.5 hover:text-amber-400 transition-colors cursor-pointer group"
+                      title="Send Lightning Zap"
+                    >
+                      <div className="p-1.5 rounded-full group-hover:bg-amber-500/10">
+                        <Zap size={15} />
+                      </div>
+                    </button>
+
+                    {/* Share Button (Instant Copy of [base uri]/zup/[id]) */}
+                    <button
+                      onClick={(e) => handleShare(event.id, e)}
+                      className="flex items-center gap-1.5 hover:text-pink-400 transition-colors cursor-pointer group"
+                      title="Share link"
+                    >
+                      <div className="p-1.5 rounded-full group-hover:bg-pink-500/10">
+                        <Share2 size={15} />
+                      </div>
+                    </button>
+                  </div>
                 </div>
               </article>
             );

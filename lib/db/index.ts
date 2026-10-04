@@ -115,10 +115,12 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       name: 'operator',
       display_name: 'Operator // Sys64',
       about: 'Systems engineer & protocol architect. Low-overhead computing and local-first cryptographic state.',
+      picture: 'https://api.dicebear.com/7.x/identicon/svg?seed=operator64',
       nip05: 'operator@getzup.app',
       content: JSON.stringify({
         name: 'operator',
         display_name: 'Operator // Sys64',
+        picture: 'https://api.dicebear.com/7.x/identicon/svg?seed=operator64',
         about: 'Systems engineer & protocol architect. Low-overhead computing and local-first cryptographic state.',
         nip05: 'operator@getzup.app'
       }),
@@ -130,10 +132,12 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       name: 'dist_systems',
       display_name: 'Distributed Systems WG',
       about: 'Research group focused on zero-knowledge consensus, Byzantine fault tolerance, and gossip protocols.',
+      picture: 'https://api.dicebear.com/7.x/identicon/svg?seed=dist_systems',
       nip05: 'research@dslab.org',
       content: JSON.stringify({
         name: 'dist_systems',
         display_name: 'Distributed Systems WG',
+        picture: 'https://api.dicebear.com/7.x/identicon/svg?seed=dist_systems',
         about: 'Research group focused on zero-knowledge consensus, Byzantine fault tolerance, and gossip protocols.'
       }),
       updated_at: created_at - 20000,
@@ -144,9 +148,11 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       name: 'kernel_core',
       display_name: 'Linux Kernel Telemetry',
       about: 'Automated dispatches on eBPF runtime performance, socket multiplexing, and memory barrier benchmarks.',
+      picture: 'https://api.dicebear.com/7.x/identicon/svg?seed=kernel_core',
       content: JSON.stringify({
         name: 'kernel_core',
-        display_name: 'Linux Kernel Telemetry'
+        display_name: 'Linux Kernel Telemetry',
+        picture: 'https://api.dicebear.com/7.x/identicon/svg?seed=kernel_core'
       }),
       updated_at: created_at - 30000,
       cached_at: now

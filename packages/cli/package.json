@@ -1,0 +1,37 @@
+{
+  "name": "@zup/cli",
+  "version": "1.0.0",
+  "description": "Companion CLI for zup: ultra-lean, low-bandwidth Nostr client and workspace",
+  "bin": {
+    "zup": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "nostr",
+    "cli",
+    "zero-knowledge",
+    "decentralized",
+    "low-bandwidth",
+    "schnorr",
+    "argon2id"
+  ],
+  "author": "zup team",
+  "license": "MIT",
+  "dependencies": {
+    "@zup/core": "workspace:*",
+    "@zup/db-sync": "workspace:*",
+    "commander": "^12.0.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.4.0"
+  }
+}

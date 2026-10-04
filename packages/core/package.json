@@ -1,0 +1,11 @@
+{
+  "name": "@zup/core",
+  "version": "1.0.0",
+  "description": "Headless protocol & crypto primitives for zup",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "license": "MIT"
+}

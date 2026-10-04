@@ -10,55 +10,43 @@ import {
   unlockVault,
   SessionState
 } from '@/lib/state/session';
-import { tursoSync } from '@/lib/sync/turso-sync';
 import { LocalEvent, RelayStatus } from '@/lib/core/types';
 import { formatHex } from '@/lib/core/nostr';
 
 // View Components
 import { FeedView } from '@/components/feed/FeedView';
-import { VaultView } from '@/components/vault/VaultView';
-import { RelaysView } from '@/components/relays/RelaysView';
-import { TelemetryView } from '@/components/telemetry/TelemetryView';
-import { SyncView } from '@/components/sync/SyncView';
-import { CliView } from '@/components/cli/CliView';
+import { NewDispatchView } from '@/components/feed/NewDispatchView';
+import { ProfileView } from '@/components/profile/ProfileView';
+import { SettingsView } from '@/components/settings/SettingsView';
 
 // Modals / Drawers
 import { InspectRawSidebar } from '@/components/modals/InspectRawSidebar';
-import { ComposeDispatchModal } from '@/components/modals/ComposeDispatchModal';
+import { NotificationsDrawer } from '@/components/notifications/NotificationsDrawer';
 import { CommandPalette } from '@/components/modals/CommandPalette';
 
 // Icons
 import {
   Layers,
-  Key,
-  Radio,
-  Activity,
-  Cloud,
-  Terminal,
-  Send,
   Plus,
+  User,
+  Settings,
+  Bell,
   Lock,
   Unlock,
-  Command,
-  ShieldCheck,
-  UserCheck,
-  Wifi,
-  MoreHorizontal,
-  X
+  Radio,
+  Command
 } from 'lucide-react';
 
-type TabType = 'feed' | 'vault' | 'relays' | 'telemetry' | 'sync' | 'cli';
+type TabType = 'feed' | 'new' | 'profile' | 'settings';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
   const [session, setSession] = useState<SessionState>(getSessionState());
   const [inspectEvent, setInspectEvent] = useState<LocalEvent | null>(null);
-  const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
   const [relaysList, setRelaysList] = useState<RelayStatus[]>(relayManager.getStatusList());
 
-  // Initialize DB and background relay manager
   useEffect(() => {
     async function initApp() {
       await seedDatabaseIfEmpty();
@@ -74,7 +62,7 @@ export default function Home() {
     };
   }, []);
 
-  // Global Keyboard Navigation (1-6, n, l, Cmd+K)
+  // Keyboard shortcut listener (Cmd+K, 1-3, etc.)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -93,16 +81,9 @@ export default function Home() {
       }
 
       if (e.key === '1') setActiveTab('feed');
-      if (e.key === '2') setActiveTab('vault');
-      if (e.key === '3') setActiveTab('relays');
-      if (e.key === '4') setActiveTab('telemetry');
-      if (e.key === '5') setActiveTab('sync');
-      if (e.key === '6') setActiveTab('cli');
-
-      if (e.key.toLowerCase() === 'n') {
-        e.preventDefault();
-        setIsComposeOpen(true);
-      }
+      if (e.key === '2' || e.key.toLowerCase() === 'n') setActiveTab('new');
+      if (e.key === '3') setActiveTab('profile');
+      if (e.key === '4') setActiveTab('settings');
       if (e.key.toLowerCase() === 'l') {
         e.preventDefault();
         lockVault();
@@ -115,305 +96,244 @@ export default function Home() {
 
   const connectedRelaysCount = relaysList.filter((r) => r.status === 'connected').length;
 
-  const sidebarItems: { id: TabType; label: string; shortcut: string; icon: React.ReactNode; color: string }[] = [
-    { id: 'feed', label: 'Feeds', shortcut: '1', icon: <Layers size={16} />, color: '#EC4899' },
-    { id: 'vault', label: 'Vault & Keys', shortcut: '2', icon: <Key size={16} />, color: '#10B981' },
-    { id: 'relays', label: 'Relays Pool', shortcut: '3', icon: <Radio size={16} />, color: '#F59E0B' },
-    { id: 'telemetry', label: 'Telemetry', shortcut: '4', icon: <Activity size={16} />, color: '#6366F1' },
-    { id: 'sync', label: 'Cloud Sync', shortcut: '5', icon: <Cloud size={16} />, color: '#6366F1' },
-    { id: 'cli', label: 'CLI Terminal', shortcut: '6', icon: <Terminal size={16} />, color: '#6366F1' }
-  ];
-
-  const getActiveTabTitle = () => {
-    switch (activeTab) {
-      case 'feed':
-        return 'Technical Dispatches';
-      case 'vault':
-        return 'Singular Vault & Personas';
-      case 'relays':
-        return 'Relay Connection Pool';
-      case 'telemetry':
-        return 'Interaction Telemetry & Affinities';
-      case 'sync':
-        return 'Turso Edge Replication';
-      case 'cli':
-        return '@zup/cli Terminal';
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#161412] text-white flex flex-col font-sans selection:bg-pink-500/30 selection:text-white">
       {/* 
-        Standard Topbar (OpenBricks 4.0 Standard: Single Clean Row, No redundant sub-rows)
-        borderBottom: 1px solid rgba(255, 255, 255, 0.18) with pitch black #000000 surface
+        Topbar: Anchored to the top, but with two bottom rounded corners (rounded-b-[20px])
+        Edge-anchored, clean, human-first: 'zup' on left, notification icon + profile circle on top right
       */}
-      <header className="sticky top-0 z-40 bg-[#000000] border-b border-white/20 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
-        {/* Left: Brand & Context Title */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-black tracking-tight text-white">
-              zup
-            </span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
-          </div>
-          <span className="text-white/30 hidden sm:inline">/</span>
-          <span className="text-xs font-mono font-bold text-white/80 hidden sm:inline">
-            {getActiveTabTitle()}
+      <header className="sticky top-0 z-40 bg-[#000000] border-b border-white/20 rounded-b-[20px] px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-xl">
+        {/* Left: Brand mark */}
+        <button
+          onClick={() => setActiveTab('feed')}
+          className="flex items-center gap-2 group cursor-pointer"
+        >
+          <span className="text-xl font-black tracking-tight text-white group-hover:text-pink-400 transition-colors">
+            zup
           </span>
-        </div>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
+        </button>
 
-        {/* Right: Live Connection Indicator + Vault Badge + Cmd+K */}
-        <div className="flex items-center gap-2.5">
-          {/* Live Relays Count */}
+        {/* Right: Notifications + Profile circle */}
+        <div className="flex items-center gap-3">
+          {/* Relay status pill */}
           <button
-            onClick={() => setActiveTab('relays')}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] bg-[#161412] border border-white/15 text-[11px] font-mono text-white/80 hover:border-amber-400 hover:text-white transition-colors"
-            title="Click to view relay connection pool"
+            onClick={() => setActiveTab('settings')}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] bg-[#161412] border border-white/15 text-[11px] font-mono text-white/70 hover:border-amber-400 hover:text-white transition-colors cursor-pointer"
+            title="Relay Connection Pool"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <Radio size={12} className="text-amber-400" />
             <span className="tabular-nums font-semibold">{connectedRelaysCount}/{relaysList.length} Relays</span>
           </button>
 
-          {/* Vault Lock / Unlock Badge */}
+          {/* Notifications Bell */}
           <button
-            onClick={() => {
-              if (session.isUnlocked) {
-                lockVault();
-              } else {
-                setActiveTab('vault');
-              }
-            }}
-            title={session.isUnlocked ? 'Vault Unlocked: Click to Lock RAM' : 'Vault Locked: Click to Unlock'}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[12px] text-[11px] font-mono font-bold border transition-colors ${
-              session.isUnlocked
-                ? 'bg-[#161412] border-emerald-500/40 text-emerald-400 hover:border-red-400 hover:text-red-300'
-                : 'bg-[#161412] border-amber-500/40 text-amber-300 hover:border-emerald-400'
-            }`}
+            onClick={() => setIsNotificationsOpen(true)}
+            title="Notifications"
+            className="p-2 rounded-full bg-[#161412] border border-white/20 hover:border-pink-500 text-white transition-colors relative cursor-pointer"
           >
-            {session.isUnlocked ? <Unlock size={12} /> : <Lock size={12} />}
-            <span className="truncate max-w-[100px] sm:max-w-[130px]">
-              {session.isUnlocked ? session.activeIdentity?.label || 'Unlocked' : 'Vault Locked'}
-            </span>
+            <Bell size={15} />
+            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-pink-500 shadow-[0_0_6px_rgba(236,72,153,0.8)]" />
           </button>
 
-          {/* Command Palette Button */}
+          {/* Profile Avatar Circle */}
           <button
-            onClick={() => setIsCommandPaletteOpen(true)}
-            title="Command Palette (Cmd+K)"
-            className="p-1.5 rounded-[12px] bg-[#161412] border border-white/20 hover:border-white/50 text-white transition-colors"
+            onClick={() => setActiveTab('profile')}
+            title="Go to Profile"
+            className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-indigo-600 p-0.5 shadow-md cursor-pointer hover:scale-105 transition-transform"
           >
-            <Command size={14} />
+            <div className="w-full h-full rounded-full bg-[#161412] flex items-center justify-center text-white font-bold text-xs font-mono">
+              {session.activeIdentity?.label.slice(0, 2).toUpperCase() || 'OP'}
+            </div>
           </button>
         </div>
       </header>
 
-      {/* Main Layout Area: Desktop Left Sidebar + Central Viewport */}
-      <div className="flex-1 flex max-w-[1600px] w-full mx-auto">
+      {/* Main Container: Desktop Left Sidebar + Central Viewport */}
+      <div className="flex-1 flex max-w-[1500px] w-full mx-auto">
         {/* 
-          Desktop Left Sidebar (OpenBricks 4.0 Standard:
-          borderRight: 1px solid rgba(255, 255, 255, 0.18), width ~240px-260px, opaque #161412)
+          Desktop Left Sidebar (Desktop Only: hidden md:flex)
+          Anchored to the left edge, with two right rounded corners (rounded-r-[24px])
         */}
-        <aside className="hidden md:flex flex-col w-60 lg:w-64 shrink-0 bg-[#161412] border-r border-white/20 p-4 space-y-4">
-          {/* Prominent Create Action in Sidebar */}
-          <button
-            onClick={() => setIsComposeOpen(true)}
-            className="w-full py-2.5 px-4 rounded-[16px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-all flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(236,72,153,0.3)] cursor-pointer"
-          >
-            <Plus size={16} className="stroke-[2.5]" />
-            <span>New Dispatch</span>
-            <span className="text-[10px] opacity-75 font-mono ml-auto">[N]</span>
-          </button>
+        <aside className="hidden md:flex flex-col justify-between w-60 lg:w-64 shrink-0 bg-[#161412] border-r border-white/20 rounded-r-[24px] p-5 my-3 shadow-xl">
+          <div className="space-y-4">
+            {/* New Dispatch Primary Button */}
+            <button
+              onClick={() => setActiveTab('new')}
+              className="w-full py-2.5 px-4 rounded-[16px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-all flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(236,72,153,0.3)] cursor-pointer"
+            >
+              <Plus size={16} className="stroke-[2.5]" />
+              <span>New Dispatch</span>
+            </button>
 
-          {/* Navigation Items */}
-          <nav className="space-y-1.5 flex-1">
-            {sidebarItems.map((item) => {
-              const isActive = activeTab === item.id;
-              return (
+            {/* Navigation Links: Feed, New, Profile, Settings */}
+            <nav className="space-y-1.5 pt-2">
+              <button
+                onClick={() => setActiveTab('feed')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[16px] text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'feed'
+                    ? 'bg-[#000000] text-pink-400 border border-pink-500 shadow-md'
+                    : 'text-white/70 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                }`}
+              >
+                <Layers size={17} />
+                <span>Feed</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('new')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[16px] text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'new'
+                    ? 'bg-[#000000] text-pink-400 border border-pink-500 shadow-md'
+                    : 'text-white/70 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                }`}
+              >
+                <Plus size={17} />
+                <span>New</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[16px] text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'profile'
+                    ? 'bg-[#000000] text-pink-400 border border-pink-500 shadow-md'
+                    : 'text-white/70 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                }`}
+              >
+                <User size={17} />
+                <span>Profile</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[16px] text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'settings'
+                    ? 'bg-[#000000] text-pink-400 border border-pink-500 shadow-md'
+                    : 'text-white/70 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                }`}
+              >
+                <Settings size={17} />
+                <span>Settings</span>
+              </button>
+            </nav>
+          </div>
+
+          {/* Sidebar Footer: Active Persona & Vault Lock Toggle */}
+          <div className="pt-4 border-t border-white/10 space-y-2">
+            <div className="p-3 bg-[#000000] border border-white/15 rounded-[16px] space-y-1">
+              <div className="flex items-center justify-between text-[11px] font-mono text-white/50">
+                <span>Persona</span>
                 <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-[14px] text-xs font-bold transition-all cursor-pointer text-left ${
-                    isActive
-                      ? 'bg-[#000000] text-white shadow-md'
-                      : 'text-white/70 hover:text-white hover:bg-white/[0.04]'
+                  onClick={() => {
+                    if (session.isUnlocked) {
+                      lockVault();
+                    } else {
+                      setActiveTab('settings');
+                    }
+                  }}
+                  className={`flex items-center gap-1 font-bold ${
+                    session.isUnlocked ? 'text-emerald-400 hover:text-red-300' : 'text-amber-400'
                   }`}
-                  style={
-                    isActive
-                      ? {
-                          border: `2px solid ${item.color}`,
-                          boxShadow: `0 0 12px ${item.color}33`
-                        }
-                      : { border: '1px solid transparent' }
-                  }
+                  title={session.isUnlocked ? 'Vault unlocked. Click to lock RAM' : 'Vault locked. Click to unlock'}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="shrink-0" style={{ color: isActive ? item.color : 'inherit' }}>
-                      {item.icon}
-                    </span>
-                    <span className="truncate">{item.label}</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-white/40">[{item.shortcut}]</span>
+                  {session.isUnlocked ? <Unlock size={11} /> : <Lock size={11} />}
+                  <span>{session.isUnlocked ? 'Lock' : 'Unlock'}</span>
                 </button>
-              );
-            })}
-          </nav>
+              </div>
+              <div className="text-xs font-bold text-white truncate">
+                {session.activeIdentity?.label || 'Personal'}
+              </div>
+              <div className="text-[10px] font-mono text-white/40 truncate">
+                {session.activeIdentity ? formatHex(session.activeIdentity.pubkey, 8, 4) : '—'}
+              </div>
+            </div>
 
-          {/* Bottom Card in Sidebar: Active Persona / Memory Status */}
-          <div className="p-3 bg-[#000000] border border-white/20 rounded-[16px] space-y-1 text-xs font-mono">
-            <div className="flex items-center justify-between text-[11px] text-white/50">
-              <span>Persona</span>
-              <span className={session.isUnlocked ? 'text-emerald-400' : 'text-amber-400'}>
-                {session.isUnlocked ? 'RAM Live' : 'Evicted'}
-              </span>
-            </div>
-            <div className="font-bold text-white truncate">
-              {session.activeIdentity?.label || 'Personal'}
-            </div>
-            <div className="text-[10px] text-white/40 truncate">
-              {session.activeIdentity ? formatHex(session.activeIdentity.pubkey, 8, 4) : '—'}
+            <div className="text-[11px] font-mono text-white/40 text-center">
+              Shortcuts: <kbd className="text-white/60">Cmd+K</kbd>
             </div>
           </div>
         </aside>
 
-        {/* Central Scrollable Workspace Content */}
+        {/* Central Content Area */}
         <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-5 pb-28 md:pb-8">
           {activeTab === 'feed' && (
             <FeedView
               onInspectEvent={(event) => setInspectEvent(event)}
-              onOpenComposer={() => setIsComposeOpen(true)}
+              onOpenComposer={() => setActiveTab('new')}
             />
           )}
-          {activeTab === 'vault' && <VaultView />}
-          {activeTab === 'relays' && <RelaysView />}
-          {activeTab === 'telemetry' && <TelemetryView />}
-          {activeTab === 'sync' && <SyncView />}
-          {activeTab === 'cli' && <CliView />}
+
+          {activeTab === 'new' && (
+            <NewDispatchView
+              onPublished={() => setActiveTab('feed')}
+            />
+          )}
+
+          {activeTab === 'profile' && (
+            <ProfileView
+              onOpenSettings={() => setActiveTab('settings')}
+              onInspectEvent={(event) => setInspectEvent(event)}
+            />
+          )}
+
+          {activeTab === 'settings' && (
+            <SettingsView
+              onBack={() => setActiveTab('profile')}
+            />
+          )}
         </main>
       </div>
 
       {/* 
-        Mobile Fixed Bottom Navigation Bar (OpenBricks 4.0 Standard:
-        border-t-2 border-white/20, pitch-black #000000 surface, centralized plus button for create)
+        Mobile Fixed Bottom Navigation Bar (Mobile Only: md:hidden)
+        Anchored to the bottom edge, with two top rounded corners (rounded-t-[24px])
+        Contains: Feed, centralized '+' button for create, Profile, Settings
       */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t-2 border-white/20 px-3 py-1.5 flex items-center justify-around shadow-2xl">
-        {/* Slot 1: Feeds */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t-2 border-white/20 rounded-t-[24px] px-8 py-2 flex items-center justify-between shadow-2xl">
+        {/* Feed Tab */}
         <button
           onClick={() => setActiveTab('feed')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-[12px] transition-colors ${
-            activeTab === 'feed' ? 'text-pink-400' : 'text-white/60 hover:text-white'
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            activeTab === 'feed' ? 'text-pink-400 font-bold' : 'text-white/60 hover:text-white'
           }`}
         >
-          <Layers size={18} />
-          <span className="text-[10px] font-mono font-bold">Feed</span>
+          <Layers size={20} />
+          <span className="text-[10px] font-mono">Feed</span>
         </button>
 
-        {/* Slot 2: Vault */}
+        {/* Centralized Plus Button for New Dispatch */}
         <button
-          onClick={() => setActiveTab('vault')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-[12px] transition-colors ${
-            activeTab === 'vault' ? 'text-emerald-400' : 'text-white/60 hover:text-white'
+          onClick={() => setActiveTab('new')}
+          title="New Dispatch"
+          className="w-13 h-13 -mt-6 rounded-full bg-pink-500 hover:bg-pink-400 text-black flex items-center justify-center font-bold shadow-[0_0_18px_rgba(236,72,153,0.6)] border-2 border-[#161412] active:scale-95 transition-transform cursor-pointer shrink-0"
+        >
+          <Plus size={24} className="stroke-[3]" />
+        </button>
+
+        {/* Profile Tab */}
+        <button
+          onClick={() => setActiveTab('profile')}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            activeTab === 'profile' ? 'text-pink-400 font-bold' : 'text-white/60 hover:text-white'
           }`}
         >
-          <Key size={18} />
-          <span className="text-[10px] font-mono font-bold">Vault</span>
+          <User size={20} />
+          <span className="text-[10px] font-mono">Profile</span>
         </button>
 
-        {/* Slot 3: Centralized Floating Plus Button for Create */}
+        {/* Settings Tab */}
         <button
-          onClick={() => setIsComposeOpen(true)}
-          title="Create New Dispatch"
-          className="w-12 h-12 -mt-5 rounded-full bg-pink-500 hover:bg-pink-400 text-black flex items-center justify-center font-bold shadow-[0_0_18px_rgba(236,72,153,0.6)] border-2 border-[#161412] active:scale-95 transition-transform shrink-0"
-        >
-          <Plus size={22} className="stroke-[3]" />
-        </button>
-
-        {/* Slot 4: Relays */}
-        <button
-          onClick={() => setActiveTab('relays')}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-[12px] transition-colors ${
-            activeTab === 'relays' ? 'text-amber-400' : 'text-white/60 hover:text-white'
+          onClick={() => setActiveTab('settings')}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            activeTab === 'settings' ? 'text-pink-400 font-bold' : 'text-white/60 hover:text-white'
           }`}
         >
-          <Radio size={18} />
-          <span className="text-[10px] font-mono font-bold">Relays</span>
+          <Settings size={20} />
+          <span className="text-[10px] font-mono">Settings</span>
         </button>
+      </nav>
 
-        {/* Slot 5: Terminal / More Drawer */}
-        <button
-          onClick={() => setIsMobileMoreOpen(true)}
-          className={`flex flex-col items-center gap-1 p-1.5 rounded-[12px] transition-colors ${
-            activeTab === 'cli' || activeTab === 'sync' || activeTab === 'telemetry'
-              ? 'text-indigo-400'
-              : 'text-white/60 hover:text-white'
-          }`}
-        >
-          <MoreHorizontal size={18} />
-          <span className="text-[10px] font-mono font-bold">More</span>
-        </button>
-      </div>
-
-      {/* Mobile "More" Drawer for CLI, Telemetry, and Cloud Sync */}
-      {isMobileMoreOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/70 backdrop-blur-xs">
-          <div className="absolute inset-0" onClick={() => setIsMobileMoreOpen(false)} />
-          <div className="relative z-10 bg-[#161412] border-t-2 border-white/20 rounded-t-[24px] p-5 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-                Workspaces & Tools
-              </span>
-              <button
-                onClick={() => setIsMobileMoreOpen(false)}
-                className="p-1 rounded-lg bg-white/10 text-white/70"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2.5">
-              <button
-                onClick={() => {
-                  setActiveTab('cli');
-                  setIsMobileMoreOpen(false);
-                }}
-                className={`p-3 bg-[#000000] border rounded-[16px] flex flex-col items-center gap-1 text-center transition-colors ${
-                  activeTab === 'cli' ? 'border-indigo-400 text-indigo-400' : 'border-white/15 text-white'
-                }`}
-              >
-                <Terminal size={18} />
-                <span className="text-[11px] font-mono font-bold">CLI Shell</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveTab('telemetry');
-                  setIsMobileMoreOpen(false);
-                }}
-                className={`p-3 bg-[#000000] border rounded-[16px] flex flex-col items-center gap-1 text-center transition-colors ${
-                  activeTab === 'telemetry' ? 'border-indigo-400 text-indigo-400' : 'border-white/15 text-white'
-                }`}
-              >
-                <Activity size={18} />
-                <span className="text-[11px] font-mono font-bold">Telemetry</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveTab('sync');
-                  setIsMobileMoreOpen(false);
-                }}
-                className={`p-3 bg-[#000000] border rounded-[16px] flex flex-col items-center gap-1 text-center transition-colors ${
-                  activeTab === 'sync' ? 'border-indigo-400 text-indigo-400' : 'border-white/15 text-white'
-                }`}
-              >
-                <Cloud size={18} />
-                <span className="text-[11px] font-mono font-bold">Cloud Sync</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tactical Right Sidebar: Cryptographic Inspector */}
+      {/* Cryptographic Inspector Sidebar (Opens on Inspect click) */}
       {inspectEvent && (
         <InspectRawSidebar
           event={inspectEvent}
@@ -421,24 +341,28 @@ export default function Home() {
         />
       )}
 
-      {/* Compose Dispatch Modal / Drawer */}
-      <ComposeDispatchModal
-        isOpen={isComposeOpen}
-        onClose={() => setIsComposeOpen(false)}
-        onPublished={() => {}}
+      {/* Notifications Drawer (Opens on Bell click) */}
+      <NotificationsDrawer
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        relaysOnlineCount={connectedRelaysCount}
       />
 
-      {/* Cmd+K Global Command Palette */}
+      {/* Global Command Palette (Cmd+K) */}
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
-        onNavigate={(tab) => setActiveTab(tab)}
-        onCompose={() => setIsComposeOpen(true)}
-        onLockVault={() => lockVault()}
-        onSync={async () => {
-          await tursoSync.executeDeltaSync();
-          setActiveTab('sync');
+        onNavigate={(tab) => {
+          if (tab === 'feed' || tab === 'vault' || tab === 'relays' || tab === 'telemetry' || tab === 'sync') {
+            if (tab === 'feed') setActiveTab('feed');
+            else setActiveTab('settings');
+          } else {
+            setActiveTab('feed');
+          }
         }}
+        onCompose={() => setActiveTab('new')}
+        onLockVault={() => lockVault()}
+        onSync={() => setActiveTab('settings')}
       />
     </div>
   );

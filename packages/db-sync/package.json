@@ -1,0 +1,15 @@
+{
+  "name": "@zup/db-sync",
+  "version": "1.0.0",
+  "description": "Local-first DB schema & cloud synchronization for zup",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@zup/core": "workspace:*",
+    "dexie": "^4.0.0"
+  },
+  "license": "MIT"
+}

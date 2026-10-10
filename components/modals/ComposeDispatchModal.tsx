@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { getActiveSigner, getSessionState, unlockVault } from '@/lib/state/session';
-import { createAndSignEvent, formatHex } from '@/lib/core/nostr';
+import { getActiveSigner, getSessionState } from '@/lib/state/session';
+import { createAndSignEvent } from '@/lib/core/nostr';
 import { relayManager } from '@/lib/workers/relay-manager';
 import { SegmentedControl } from '../ui/SegmentedControl';
-import { X, Send, Key, Radio, Terminal, FileText, Check, AlertTriangle } from 'lucide-react';
+import { X, Send, Terminal, FileText, Check } from 'lucide-react';
 
 interface ComposeDispatchModalProps {
   isOpen: boolean;
@@ -33,15 +33,8 @@ export function ComposeDispatchModal({ isOpen, onClose, onPublished }: ComposeDi
       return;
     }
 
-    let activeSigner = signer;
-    if (!activeSigner) {
-      // Auto-unlock with operator password if vault locked
-      await unlockVault('zup-operator-2026');
-      activeSigner = getActiveSigner();
-    }
-
-    if (!activeSigner) {
-      alert('Signer unavailable. Please unlock the Master Vault first.');
+    if (!signer) {
+      alert('Signer unavailable. Please unlock your Master Vault in Settings or Connect.');
       return;
     }
 
@@ -59,7 +52,7 @@ export function ComposeDispatchModal({ isOpen, onClose, onPublished }: ComposeDi
       }
 
       const signedEvent = await createAndSignEvent(
-        activeSigner,
+        signer,
         parseInt(kind, 10),
         parsedTags,
         content.trim()
@@ -106,7 +99,7 @@ export function ComposeDispatchModal({ isOpen, onClose, onPublished }: ComposeDi
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors cursor-pointer"
           >
             <X size={15} />
           </button>
@@ -123,7 +116,7 @@ export function ComposeDispatchModal({ isOpen, onClose, onPublished }: ComposeDi
                 { value: '30023', label: 'Kind 30023 (RFC / Long-form)', icon: <FileText size={13} /> }
               ]}
               value={kind}
-              onChange={(val) => setKind(val as any)}
+              onChange={(val) => setKind(val as '1' | '30023')}
               accentColor="#EC4899"
             />
           </div>
@@ -190,13 +183,13 @@ export function ComposeDispatchModal({ isOpen, onClose, onPublished }: ComposeDi
         {/* Fixed Non-Scrolling Action Footer */}
         <div className="shrink-0 border-t border-white/10 bg-[#161412] px-5 py-3 flex items-center justify-between gap-3">
           <div className="text-[11px] font-mono text-white/50 truncate">
-            Signer: {signer ? 'Unlocked (RAM)' : 'Auto-derive Key'}
+            Signer: {signer ? 'Unlocked (RAM)' : 'Locked'}
           </div>
           <button
             type="submit"
             form="compose-form"
             disabled={isPublishing}
-            className="px-6 py-2.5 rounded-[14px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-colors flex items-center gap-2 shadow-lg shadow-pink-500/20 disabled:opacity-50"
+            className="px-6 py-2.5 rounded-[14px] bg-pink-500 hover:bg-pink-400 text-black font-bold font-mono text-xs transition-colors flex items-center gap-2 shadow-lg shadow-pink-500/20 disabled:opacity-50 cursor-pointer"
           >
             <Send size={13} />
             <span>{isPublishing ? 'Signing...' : 'Sign & Broadcast'}</span>

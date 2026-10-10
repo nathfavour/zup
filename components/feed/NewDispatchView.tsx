@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { getActiveSigner, getSessionState, unlockVault } from '@/lib/state/session';
+import { getActiveSigner, getSessionState } from '@/lib/state/session';
 import { createAndSignEvent } from '@/lib/core/nostr';
 import { relayManager } from '@/lib/workers/relay-manager';
-import { Send, FileText, Check, Plus, Tag } from 'lucide-react';
+import { Send, Check, Tag } from 'lucide-react';
 
 interface NewDispatchViewProps {
   onPublished: () => void;
@@ -25,14 +25,8 @@ export function NewDispatchView({ onPublished }: NewDispatchViewProps) {
     e.preventDefault();
     if (!content.trim()) return;
 
-    let activeSigner = signer;
-    if (!activeSigner) {
-      await unlockVault('zup-operator-2026');
-      activeSigner = getActiveSigner();
-    }
-
-    if (!activeSigner) {
-      alert('Signer unavailable. Please unlock your Vault in Settings.');
+    if (!signer) {
+      alert('Signer unavailable. Please unlock your Master Vault in Settings or Connect.');
       return;
     }
 
@@ -53,7 +47,7 @@ export function NewDispatchView({ onPublished }: NewDispatchViewProps) {
       }
 
       const signedEvent = await createAndSignEvent(
-        activeSigner,
+        signer,
         kind,
         parsedTags,
         content.trim()

@@ -5,7 +5,7 @@ import { LocalEvent, ProfileMetadata } from '@/lib/core/types';
 import { db } from '@/lib/db';
 import { formatHex, extractEventTags, isSpamOrReply, calculateEventId } from '@/lib/core/nostr';
 import { schnorrSign } from '@/lib/core/crypto';
-import { getSessionState } from '@/lib/state/session';
+import { getSessionState, getActiveSigner } from '@/lib/state/session';
 import { relayManager } from '@/lib/workers/relay-manager';
 import { ClickToLoadMedia } from './ClickToLoadMedia';
 import { PostDetailView } from './PostDetailView';
@@ -33,7 +33,6 @@ interface FeedViewProps {
  * so post cards remain short, uniform, and bounded in the stream.
  */
 function formatFeedSnippet(text: string, maxChars = 160): { snippet: string; isTruncated: boolean } {
-  // Collapse markdown headers, code blocks, repeated linebreaks for the compact card view
   const clean = text
     .replace(/^#+\s+/gm, '') // Remove markdown headers like ##
     .replace(/```[\s\S]*?```/g, '[code snippet]') // Replace multi-line code blocks
@@ -46,7 +45,6 @@ function formatFeedSnippet(text: string, maxChars = 160): { snippet: string; isT
     return { snippet: clean, isTruncated: false };
   }
 
-  // Find natural word boundary before maxChars
   const cut = clean.slice(0, maxChars);
   const lastSpace = cut.lastIndexOf(' ');
   const safeCut = lastSpace > maxChars * 0.7 ? cut.slice(0, lastSpace) : cut;
@@ -258,20 +256,21 @@ export function FeedView({
   const handleLike = (targetPost: LocalEvent, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     requireAccount('like dispatches', async () => {
-      const session = getSessionState();
-      const pubkey = session.activeIdentity?.pubkey;
-      if (!pubkey) return;
+      const signer = getActiveSigner();
+      if (!signer) {
+        alert('Vault is locked. Please unlock your Vault to sign likes.');
+        return;
+      }
 
+      const pubkey = signer.pubkey;
       const existingLike = likes.find(
         (l) => l.pubkey === pubkey && l.tags.some(([t, v]) => t === 'e' && v === targetPost.id)
       );
 
       if (existingLike) {
-        // Remove like locally
         await db.events.delete(existingLike.id);
         await fetchFeedData();
       } else {
-        // Broadcast genuine Kind 7 event to relays
         const created_at = Math.floor(Date.now() / 1000);
         const tags = [
           ['e', targetPost.id],
@@ -284,7 +283,7 @@ export function FeedView({
           tags,
           content: '+'
         });
-        const sig = await schnorrSign(id, '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b');
+        const sig = await schnorrSign(id, signer.privkey);
 
         const likeEvent: LocalEvent = {
           id,
@@ -316,20 +315,21 @@ export function FeedView({
   const handleRepost = (targetPost: LocalEvent, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     requireAccount('repost dispatches', async () => {
-      const session = getSessionState();
-      const pubkey = session.activeIdentity?.pubkey;
-      if (!pubkey) return;
+      const signer = getActiveSigner();
+      if (!signer) {
+        alert('Vault is locked. Please unlock your Vault to sign reposts.');
+        return;
+      }
 
+      const pubkey = signer.pubkey;
       const existingRepost = reposts.find(
         (rp) => rp.pubkey === pubkey && rp.tags.some(([t, v]) => t === 'e' && v === targetPost.id)
       );
 
       if (existingRepost) {
-        // Remove repost locally
         await db.events.delete(existingRepost.id);
         await fetchFeedData();
       } else {
-        // Broadcast genuine Kind 6 event to relays
         const created_at = Math.floor(Date.now() / 1000);
         const tags = [
           ['e', targetPost.id],
@@ -342,7 +342,7 @@ export function FeedView({
           tags,
           content: ''
         });
-        const sig = await schnorrSign(id, '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b');
+        const sig = await schnorrSign(id, signer.privkey);
 
         const repostEvent: LocalEvent = {
           id,

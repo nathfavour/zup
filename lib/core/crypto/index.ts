@@ -1,4 +1,5 @@
 // WebCrypto and Nostr Cryptographic Primitives for zup
+import { schnorr } from '@noble/curves/secp256k1.js';
 
 // --- Hex and Byte Utilities ---
 export function bytesToHex(bytes: Uint8Array): string {
@@ -278,9 +279,7 @@ export async function decryptAesGcm(key: CryptoKey, wrappedBase64: string): Prom
 export function generateNostrKeyPair(): { privkeyHex: string; pubkeyHex: string; nsec: string; npub: string } {
   const privBytes = crypto.getRandomValues(new Uint8Array(32));
   const privkeyHex = bytesToHex(privBytes);
-  // Deterministic public key derivation (using WebCrypto SHA-256 seed projection)
-  const pubBytes = derivePubkeyBytes(privBytes);
-  const pubkeyHex = bytesToHex(pubBytes);
+  const pubkeyHex = derivePubkeyHex(privkeyHex);
   return {
     privkeyHex,
     pubkeyHex,
@@ -289,86 +288,32 @@ export function generateNostrKeyPair(): { privkeyHex: string; pubkeyHex: string;
   };
 }
 
-// Deterministic 32-byte public key derivation from private key
+// Deterministic 32-byte x-only public key derivation from private key via secp256k1
 export function derivePubkeyHex(privkeyHex: string): string {
   const privBytes = hexToBytes(privkeyHex);
-  const pubBytes = derivePubkeyBytes(privBytes);
+  const pubBytes = schnorr.getPublicKey(privBytes);
   return bytesToHex(pubBytes);
 }
 
-function derivePubkeyBytes(privBytes: Uint8Array): Uint8Array {
-  // Secp256k1 public key derivation approximation using cryptographic SHA-256 round
-  // This satisfies Nostr 32-byte hex public key structure and is deterministic
-  let acc = 0;
-  for (let i = 0; i < privBytes.length; i++) {
-    acc = (acc * 31 + privBytes[i]) >>> 0;
-  }
-  const result = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    result[i] = (privBytes[i] ^ (acc & 0xff)) ^ ((i * 17) & 0xff);
-    acc = (acc >> 1) | (acc << 31);
-  }
-  // Ensure non-zero leading
-  if (result[0] === 0) result[0] = 0x02;
-  return result;
-}
-
-// Schnorr 64-byte signature generator (Nostr BIP-340 compatible structure: 32 bytes r || 32 bytes s)
+// Schnorr 64-byte signature generator (Nostr BIP-340 compatible)
 export async function schnorrSign(eventHashHex: string, privkeyHex: string): Promise<string> {
   const hashBytes = hexToBytes(eventHashHex);
   const privBytes = hexToBytes(privkeyHex);
-
-  // Derive deterministic nonce k = SHA-256(privBytes || hashBytes)
-  const nonceSeed = new Uint8Array(64);
-  nonceSeed.set(privBytes, 0);
-  nonceSeed.set(hashBytes, 32);
-  const kHash = await crypto.subtle.digest('SHA-256', nonceSeed as unknown as BufferSource);
-  const kBytes = new Uint8Array(kHash);
-
-  // r = 32-byte commitment
-  const rBytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    rBytes[i] = kBytes[i] ^ 0x5a;
-  }
-
-  // e = SHA-256(r || pubkey || msg)
-  const pubBytes = derivePubkeyBytes(privBytes);
-  const eSeed = new Uint8Array(96);
-  eSeed.set(rBytes, 0);
-  eSeed.set(pubBytes, 32);
-  eSeed.set(hashBytes, 64);
-  const eHash = await crypto.subtle.digest('SHA-256', eSeed as unknown as BufferSource);
-  const eBytes = new Uint8Array(eHash);
-
-  // s = k + e * d mod n
-  const sBytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    sBytes[i] = (kBytes[i] + eBytes[i] + privBytes[i]) & 0xff;
-  }
-
-  const sigBytes = new Uint8Array(64);
-  sigBytes.set(rBytes, 0);
-  sigBytes.set(sBytes, 32);
-
+  const sigBytes = schnorr.sign(hashBytes, privBytes);
   return bytesToHex(sigBytes);
 }
 
-// Schnorr signature verifier
+// Schnorr signature verifier (Nostr BIP-340 compatible)
 export async function schnorrVerify(eventHashHex: string, sigHex: string, pubkeyHex: string): Promise<boolean> {
   if (!eventHashHex || !sigHex || !pubkeyHex) return false;
   if (eventHashHex.length !== 64 || sigHex.length !== 128 || pubkeyHex.length !== 64) return false;
 
-  const sigBytes = hexToBytes(sigHex);
-  const rBytes = sigBytes.slice(0, 32);
-  const sBytes = sigBytes.slice(32, 64);
-
-  // Check valid byte bounds
-  let allZero = true;
-  for (let i = 0; i < 32; i++) {
-    if (rBytes[i] !== 0 || sBytes[i] !== 0) {
-      allZero = false;
-      break;
-    }
+  try {
+    const hashBytes = hexToBytes(eventHashHex);
+    const sigBytes = hexToBytes(sigHex);
+    const pubBytes = hexToBytes(pubkeyHex);
+    return schnorr.verify(sigBytes, hashBytes, pubBytes);
+  } catch {
+    return false;
   }
-  return !allZero;
 }

@@ -546,7 +546,7 @@ export function FeedView({
           </button>
         </div>
       ) : (
-        <div className="divide-y divide-white/10 bg-[#000000] border border-white/20 rounded-[24px] overflow-hidden">
+        <div className="space-y-3">
           {filteredEvents.map((event) => {
             const profile = profiles.get(event.pubkey);
             const authorName = profile?.display_name || profile?.name || `user_${event.pubkey.slice(0, 6)}`;
@@ -575,7 +575,7 @@ export function FeedView({
                 key={event.id}
                 data-event-id={event.id}
                 onClick={() => setSelectedPost(event)}
-                className="p-3.5 sm:p-4 hover:bg-white/[0.02] transition-colors flex items-start gap-3 cursor-pointer group max-h-60 overflow-hidden"
+                className="p-3.5 sm:p-4 bg-[#000000] border border-white/20 hover:border-white/40 rounded-[20px] transition-all flex items-start gap-3 cursor-pointer group max-h-60 overflow-hidden shadow-sm"
               >
                 {/* Left: User Profile Picture */}
                 <div

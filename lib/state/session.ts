@@ -6,11 +6,17 @@ import {
   importRawKey,
   exportRawKey,
   generateMasterKey,
-  encryptAesGcm
+  encryptAesGcm,
+  bytesToHex,
+  hexToBytes
 } from '../core/crypto';
 
 // In-memory volatile vault holder (isolated from window/disk)
 let volatileMasterKey: CryptoKey | null = null;
+
+export function getVolatileMasterKey(): CryptoKey | null {
+  return volatileMasterKey;
+}
 let volatilePrivkeyHex: string | null = null;
 let autoLockTimer: NodeJS.Timeout | null = null;
 const AUTO_LOCK_DURATION_MS = 10 * 60 * 1000; // 10 minutes
@@ -121,11 +127,12 @@ export async function unlockVault(password: string): Promise<{ success: boolean;
 
     if (!passwordSlot) {
       // First-time setup: generate MEK and initialize password slot
-      const newMek = await generateMasterKey();
+      const targetMek = volatileMasterKey || (await generateMasterKey());
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const kek = await deriveKeyFromPassword(password, salt);
-      const rawMek = await exportRawKey(newMek);
-      const wrappedMek = await encryptAesGcm(kek, rawMek);
+      const rawMekBytes = await exportRawKey(targetMek);
+      const rawMekHex = bytesToHex(rawMekBytes);
+      const wrappedMek = await encryptAesGcm(kek, rawMekHex);
 
       const slot: KeychainSlot = {
         id: 'kc_' + Math.random().toString(36).substring(2, 9),
@@ -141,7 +148,7 @@ export async function unlockVault(password: string): Promise<{ success: boolean;
         createdAt: Date.now()
       };
       await db.keychain.add(slot);
-      volatileMasterKey = newMek;
+      volatileMasterKey = targetMek;
       await refreshCachedIdentities();
       await deriveActivePrivkeyHex();
       touchSessionActivity();
@@ -162,12 +169,18 @@ export async function unlockVault(password: string): Promise<{ success: boolean;
       return { success: false, error: 'Incorrect Master Password.' };
     }
 
-    const rawMekBytes = new Uint8Array(unwrappedRawStr.length);
-    for (let i = 0; i < unwrappedRawStr.length; i++) {
-      rawMekBytes[i] = unwrappedRawStr.charCodeAt(i);
+    let rawMekBytes: Uint8Array;
+    if (/^[0-9a-fA-F]{64}$/.test(unwrappedRawStr)) {
+      rawMekBytes = hexToBytes(unwrappedRawStr);
+    } else {
+      rawMekBytes = new Uint8Array(unwrappedRawStr.length);
+      for (let i = 0; i < unwrappedRawStr.length; i++) {
+        rawMekBytes[i] = unwrappedRawStr.charCodeAt(i);
+      }
+      rawMekBytes = rawMekBytes.slice(0, 32);
     }
 
-    volatileMasterKey = await importRawKey(rawMekBytes.slice(0, 32));
+    volatileMasterKey = await importRawKey(rawMekBytes);
     await refreshCachedIdentities();
     await deriveActivePrivkeyHex();
     touchSessionActivity();
@@ -227,6 +240,24 @@ export async function setActiveIdentity(pubkey: string | null): Promise<void> {
 
 export function disconnectIdentity(): void {
   setActiveIdentity(null);
+}
+
+/**
+ * Deletes an identity from Dexie local database and updates active persona pointer if needed.
+ */
+export async function deleteIdentity(pubkey: string): Promise<void> {
+  await db.identities.delete(pubkey);
+  const activePubkey = getActivePubkey();
+  if (activePubkey === pubkey) {
+    const remaining = await db.identities.toArray();
+    if (remaining.length > 0) {
+      await setActiveIdentity(remaining[0].pubkey);
+    } else {
+      await setActiveIdentity(null);
+    }
+  } else {
+    await refreshCachedIdentities();
+  }
 }
 
 /**

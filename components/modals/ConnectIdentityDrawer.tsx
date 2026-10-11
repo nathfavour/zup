@@ -19,7 +19,8 @@ import {
   unlockVault,
   subscribeSession,
   SessionState,
-  encryptIdentityNsec
+  encryptIdentityNsec,
+  deleteIdentity
 } from '@/lib/state/session';
 import {
   X,
@@ -35,7 +36,8 @@ import {
   Unlock,
   RefreshCw,
   ArrowRight,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 
 interface ConnectIdentityDrawerProps {
@@ -236,6 +238,13 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
   const handleSelectSaved = async (pubkey: string) => {
     await setActiveIdentity(pubkey);
     onClose();
+  };
+
+  const handleDeleteSaved = async (e: React.MouseEvent, pubkey: string, label: string) => {
+    e.stopPropagation();
+    if (confirm(`Are you sure you want to delete persona "${label}"?`)) {
+      await deleteIdentity(pubkey);
+    }
   };
 
   const handleCopy = (text: string, type: 'nsec' | 'npub') => {
@@ -580,15 +589,25 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
                             </div>
                           </div>
 
-                          {isCurrent ? (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
-                              ACTIVE
-                            </span>
-                          ) : (
-                            <span className="text-[11px] font-mono text-white/40 hover:text-white">
-                              Select →
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {isCurrent ? (
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                                ACTIVE
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-mono text-white/40 hover:text-white">
+                                Select →
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteSaved(e, id.pubkey, id.label)}
+                              title="Delete Identity"
+                              className="p-1 rounded bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 opacity-80 hover:opacity-100 transition-all cursor-pointer"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </div>
                       );
                     })

@@ -10,7 +10,8 @@ import {
   SessionState,
   refreshCachedIdentities,
   testKeyWrappingRoundtrip,
-  encryptIdentityNsec
+  encryptIdentityNsec,
+  deleteIdentity
 } from '@/lib/state/session';
 import { db } from '@/lib/db';
 import { EncryptedIdentity } from '@/lib/core/types';
@@ -27,7 +28,8 @@ import {
   UserCheck,
   Plus,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Trash2
 } from 'lucide-react';
 
 export function VaultView() {
@@ -136,6 +138,12 @@ export function VaultView() {
     const valid = await testKeyWrappingRoundtrip(testSecret);
     setRoundtripStatus(valid ? 'Roundtrip Invariant Passed: AES-GCM-256 Verified' : 'Roundtrip Failed');
     setTimeout(() => setRoundtripStatus(null), 3000);
+  };
+
+  const handleDeleteIdentity = async (pubkey: string, label: string) => {
+    if (confirm(`Are you sure you want to delete identity "${label}"? This action cannot be undone.`)) {
+      await deleteIdentity(pubkey);
+    }
   };
 
   return (
@@ -369,19 +377,31 @@ export function VaultView() {
             {session.identities.map((identity) => {
               const isActive = identity.pubkey === session.activePubkey;
               return (
-                <ActionTile
-                  key={identity.pubkey}
-                  icon={<UserCheck size={18} />}
-                  title={identity.label}
-                  description={`npub: ${formatHex(identity.npub, 12, 6)}`}
-                  badge={isActive ? 'ACTIVE SIGNER' : 'PERSONA'}
-                  actionLabel={isActive ? 'Active Pointer' : 'Switch Persona'}
-                  accentColor="#10B981"
-                  active={isActive}
-                  onClick={async () => {
-                    await setActiveIdentity(identity.pubkey);
-                  }}
-                />
+                <div key={identity.pubkey} className="relative group">
+                  <ActionTile
+                    icon={<UserCheck size={18} />}
+                    title={identity.label}
+                    description={`npub: ${formatHex(identity.npub, 12, 6)}`}
+                    badge={isActive ? 'ACTIVE SIGNER' : 'PERSONA'}
+                    actionLabel={isActive ? 'Active Pointer' : 'Switch Persona'}
+                    accentColor="#10B981"
+                    active={isActive}
+                    onClick={async () => {
+                      await setActiveIdentity(identity.pubkey);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteIdentity(identity.pubkey, identity.label);
+                    }}
+                    title="Delete Identity"
+                    className="absolute top-3.5 right-3.5 p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 opacity-80 hover:opacity-100 transition-all cursor-pointer z-10"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               );
             })}
           </div>

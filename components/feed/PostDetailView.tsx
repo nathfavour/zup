@@ -304,7 +304,7 @@ export function PostDetailView({
             <p className="text-[11px] text-white/50">Be the first to join the technical discussion.</p>
           </div>
         ) : (
-          <div className="divide-y divide-white/10 bg-[#000000] border border-white/20 rounded-[22px] overflow-hidden">
+          <div className="space-y-2.5">
             {allComments.map((comment) => {
               const cProfile = commentProfiles.get(comment.pubkey);
               const cAuthor = cProfile?.display_name || cProfile?.name || `user_${comment.pubkey.slice(0, 6)}`;
@@ -316,7 +316,10 @@ export function PostDetailView({
               });
 
               return (
-                <div key={comment.id} className="p-4 flex items-start gap-3 hover:bg-white/[0.02] transition-colors">
+                <div
+                  key={comment.id}
+                  className="p-4 bg-[#000000] border border-white/20 hover:border-white/30 rounded-[20px] flex items-start gap-3 transition-colors shadow-sm"
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={cAvatar}

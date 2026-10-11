@@ -41,6 +41,7 @@ type TabType = 'feed' | 'new' | 'profile' | 'settings';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
+  const [viewProfilePubkey, setViewProfilePubkey] = useState<string | null>(null);
   const [session, setSession] = useState<SessionState>(getSessionState());
   const [inspectEvent, setInspectEvent] = useState<LocalEvent | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -97,6 +98,16 @@ export default function Home() {
 
   const connectedRelaysCount = relaysList.filter((r) => r.status === 'connected').length;
 
+  const handleViewProfile = (pubkey: string) => {
+    setViewProfilePubkey(pubkey);
+    setActiveTab('profile');
+  };
+
+  const handleGoToMyProfile = () => {
+    setViewProfilePubkey(null);
+    setActiveTab('profile');
+  };
+
   return (
     <div className="min-h-screen bg-[#161412] text-white flex flex-col font-sans selection:bg-pink-500/30 selection:text-white">
       {/* 
@@ -140,7 +151,7 @@ export default function Home() {
           {/* Active Identity Avatar OR 'Connect' Trigger */}
           {session.activeIdentity ? (
             <button
-              onClick={() => setActiveTab('profile')}
+              onClick={handleGoToMyProfile}
               title={`Logged in as ${session.activeIdentity.label}. Click to view Profile`}
               className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-indigo-600 p-0.5 shadow-md cursor-pointer hover:scale-105 transition-transform"
             >
@@ -274,6 +285,7 @@ export default function Home() {
               onInspectEvent={(event) => setInspectEvent(event)}
               onOpenComposer={() => setActiveTab('new')}
               onOpenConnectDrawer={() => setIsConnectDrawerOpen(true)}
+              onViewProfile={handleViewProfile}
             />
           )}
 
@@ -285,9 +297,12 @@ export default function Home() {
 
           {activeTab === 'profile' && (
             <ProfileView
+              targetPubkey={viewProfilePubkey}
+              onBackToOwnProfile={() => setViewProfilePubkey(null)}
               onOpenSettings={() => setActiveTab('settings')}
               onInspectEvent={(event) => setInspectEvent(event)}
               onConnect={() => setIsConnectDrawerOpen(true)}
+              onViewProfile={handleViewProfile}
             />
           )}
 

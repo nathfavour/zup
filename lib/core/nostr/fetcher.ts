@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
-import { generateLocalIdenticon } from './index';
+import { generateLocalIdenticon, formatHex } from './index';
+import { hexToNpub } from '../crypto';
 
 export interface FetchedNostrPost {
   id: string;
@@ -130,8 +131,10 @@ export async function fetchNostrEventAndProfile(eventId: string): Promise<Fetche
 }
 
 function buildFetchedPost(event: any, profile: any): FetchedNostrPost {
-  const author = profile?.display_name || profile?.name || `user_${event.pubkey.slice(0, 6)}`;
-  const handle = profile?.nip05 ? `@${profile.nip05}` : `@${event.pubkey.slice(0, 6)}…${event.pubkey.slice(-4)}`;
+  const npubStr = hexToNpub(event.pubkey);
+  const formattedNpub = formatHex(npubStr, 12, 6);
+  const author = profile?.display_name || profile?.name || formattedNpub;
+  const handle = profile?.nip05 ? `@${profile.nip05}` : `@${formatHex(npubStr, 10, 4)}`;
   const picture = profile?.picture || generateLocalIdenticon(event.pubkey);
   const created_at = event.created_at || Math.floor(Date.now() / 1000);
   const date = new Date(created_at * 1000).toLocaleString([], {

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { formatHex, extractEventTags, generateLocalIdenticon } from '@/lib/core/nostr';
+import { hexToNpub } from '@/lib/core/crypto';
 import { fetchNostrEventAndProfile, FetchedNostrPost } from '@/lib/core/nostr/fetcher';
 import { ClickToLoadMedia } from '@/components/feed/ClickToLoadMedia';
 
@@ -33,11 +34,12 @@ export function SharedPostClient({ id, initialPost }: SharedPostClientProps) {
     };
   }, [id, initialPost]);
 
+  const fallbackNpub = id ? hexToNpub(id) : '';
   const displayPost = post || {
     id,
     pubkey: id,
-    author: `Operator ${formatHex(id, 6, 4)}`,
-    handle: `@${formatHex(id, 6, 0)}`,
+    author: formatHex(fallbackNpub, 12, 6) || 'Nostr Author',
+    handle: `@${formatHex(fallbackNpub, 10, 4)}`,
     content: loading ? 'Loading dispatch from Nostr relays...' : 'Dispatch not found on connected relays.',
     picture: generateLocalIdenticon(id),
     created_at: 0,

@@ -70,14 +70,14 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
 
   // Create persona state
   const [createdKeypair, setCreatedKeypair] = useState(generateRandomKeypair);
-  const [createLabel, setCreateLabel] = useState('Personal Persona');
+  const [createLabel, setCreateLabel] = useState('');
   const [showCreatedNsec, setShowCreatedNsec] = useState(false);
   const [copiedNsec, setCopiedNsec] = useState(false);
   const [copiedNpub, setCopiedNpub] = useState(false);
 
   // Import persona state
   const [importKey, setImportKey] = useState('');
-  const [importLabel, setImportLabel] = useState('Imported Persona');
+  const [importLabel, setImportLabel] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
 
   // General busy state
@@ -135,12 +135,13 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
       const pubkey = createdKeypair.pubHex;
       const wrappedNsec = await encryptIdentityNsec(createdKeypair.privHex);
 
+      const effectiveLabel = createLabel.trim() || createdKeypair.npub;
       const newIdentity: EncryptedIdentity = {
         pubkey,
         npub: createdKeypair.npub,
         wrappedNsec,
         isExternalSigner: false,
-        label: createLabel.trim() || 'Personal Persona',
+        label: effectiveLabel,
         relays: ['wss://nos.lol', 'wss://relay.damus.io', 'wss://relay.primal.net'],
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -150,8 +151,8 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
 
       await db.profiles.put({
         pubkey,
-        name: createLabel.trim().toLowerCase().replace(/\s+/g, '_'),
-        display_name: createLabel.trim() || 'Personal Persona',
+        name: effectiveLabel.toLowerCase().replace(/\s+/g, '_'),
+        display_name: effectiveLabel,
         picture: '',
         content: '{}',
         updated_at: Math.floor(Date.now() / 1000),
@@ -199,12 +200,13 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
 
       const wrappedNsec = privHex ? await encryptIdentityNsec(privHex) : '';
 
+      const effectiveLabel = importLabel.trim() || npub;
       const importedIdentity: EncryptedIdentity = {
         pubkey: pubHex,
         npub,
         wrappedNsec,
         isExternalSigner: !privHex,
-        label: importLabel.trim() || (privHex ? 'Imported Signer' : 'Watch-only Persona'),
+        label: effectiveLabel,
         relays: ['wss://nos.lol', 'wss://relay.damus.io', 'wss://relay.primal.net'],
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -216,8 +218,8 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
       if (!existingProfile) {
         await db.profiles.put({
           pubkey: pubHex,
-          name: importLabel.trim().toLowerCase().replace(/\s+/g, '_'),
-          display_name: importLabel.trim() || (privHex ? 'Imported Signer' : 'Watch-only Persona'),
+          name: effectiveLabel.toLowerCase().replace(/\s+/g, '_'),
+          display_name: effectiveLabel,
           picture: '',
           content: '{}',
           updated_at: Math.floor(Date.now() / 1000),

@@ -110,7 +110,7 @@ export function VaultView() {
       return;
     }
     const key = generatedKey || generateNostrKeyPair();
-    const label = newLabel.trim() || `Persona #${session.identities.length + 1}`;
+    const label = newLabel.trim() || key.npub;
 
     const wrappedNsec = await encryptIdentityNsec(key.privkeyHex);
 

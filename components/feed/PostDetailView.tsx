@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { LocalEvent, ProfileMetadata } from '@/lib/core/types';
 import { db } from '@/lib/db';
 import { formatHex, extractEventTags, generateLocalIdenticon } from '@/lib/core/nostr';
+import { hexToNpub } from '@/lib/core/crypto';
 import { ClickToLoadMedia } from './ClickToLoadMedia';
 import {
   ArrowLeft,
@@ -33,6 +34,7 @@ interface PostDetailViewProps {
   onShare: () => void;
   onInspect: () => void;
   onOpenCommentDrawer: () => void;
+  onViewProfile?: (pubkey: string) => void;
   newlyAddedComments: LocalEvent[];
 }
 
@@ -51,14 +53,16 @@ export function PostDetailView({
   onShare,
   onInspect,
   onOpenCommentDrawer,
+  onViewProfile,
   newlyAddedComments
 }: PostDetailViewProps) {
   const [dbComments, setDbComments] = useState<LocalEvent[]>([]);
   const [commentProfiles, setCommentProfiles] = useState<Map<string, ProfileMetadata>>(new Map());
   const [loadingComments, setLoadingComments] = useState(true);
 
-  const authorName = profile?.display_name || profile?.name || `user_${post.pubkey.slice(0, 6)}`;
-  const handle = profile?.nip05 || `@${formatHex(post.pubkey, 6, 0)}`;
+  const postNpub = hexToNpub(post.pubkey);
+  const authorName = profile?.display_name || profile?.name || formatHex(postNpub, 12, 6);
+  const handle = profile?.nip05 ? `@${profile.nip05}` : `@${formatHex(postNpub, 10, 4)}`;
   const avatarUrl = profile?.picture || generateLocalIdenticon(post.pubkey);
   const dateStr = new Date(post.created_at * 1000).toLocaleString([], {
     month: 'short',
@@ -143,7 +147,13 @@ export function PostDetailView({
       <div className="p-5 sm:p-6 bg-[#000000] border border-white/20 rounded-[24px] space-y-4 shadow-xl">
         {/* Author Line */}
         <div className="flex items-center justify-between gap-3 pb-3 border-b border-white/10">
-          <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="flex items-center gap-3 min-w-0 cursor-pointer group/author hover:opacity-90 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onViewProfile) onViewProfile(post.pubkey);
+            }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={avatarUrl}
@@ -155,7 +165,7 @@ export function PostDetailView({
               className="w-12 h-12 rounded-full border border-white/20 bg-[#161412] object-cover shrink-0"
             />
             <div className="min-w-0">
-              <div className="font-bold text-sm text-white truncate">{authorName}</div>
+              <div className="font-bold text-sm text-white truncate group-hover/author:text-pink-400 transition-colors">{authorName}</div>
               <div className="text-xs font-mono text-white/50 truncate">{handle}</div>
             </div>
           </div>
@@ -307,8 +317,9 @@ export function PostDetailView({
           <div className="space-y-2.5">
             {allComments.map((comment) => {
               const cProfile = commentProfiles.get(comment.pubkey);
-              const cAuthor = cProfile?.display_name || cProfile?.name || `user_${comment.pubkey.slice(0, 6)}`;
-              const cHandle = cProfile?.nip05 || `@${formatHex(comment.pubkey, 6, 0)}`;
+              const cNpub = hexToNpub(comment.pubkey);
+              const cAuthor = cProfile?.display_name || cProfile?.name || formatHex(cNpub, 12, 6);
+              const cHandle = cProfile?.nip05 ? `@${cProfile.nip05}` : `@${formatHex(cNpub, 10, 4)}`;
               const cAvatar = cProfile?.picture || generateLocalIdenticon(comment.pubkey);
               const cDate = new Date(comment.created_at * 1000).toLocaleDateString([], {
                 month: 'short',
@@ -328,10 +339,20 @@ export function PostDetailView({
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = generateLocalIdenticon(comment.pubkey);
                     }}
-                    className="w-9 h-9 rounded-full border border-white/15 bg-[#161412] object-cover shrink-0 mt-0.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onViewProfile) onViewProfile(comment.pubkey);
+                    }}
+                    className="w-9 h-9 rounded-full border border-white/15 bg-[#161412] object-cover shrink-0 mt-0.5 cursor-pointer hover:opacity-80 transition-opacity"
                   />
                   <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center gap-1.5">
+                    <div
+                      className="flex items-center gap-1.5 cursor-pointer hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onViewProfile) onViewProfile(comment.pubkey);
+                      }}
+                    >
                       <span className="font-bold text-xs text-white truncate">{cAuthor}</span>
                       <span className="text-[11px] font-mono text-white/50 truncate">{cHandle}</span>
                       <span className="text-white/30 text-xs">·</span>

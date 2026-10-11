@@ -215,8 +215,8 @@ class RelayManager {
       return;
     }
 
-    // Handle Kind 6 (Reposts) & Kind 7 (Reactions / Likes)
-    if (raw.kind === 6 || raw.kind === 7) {
+    // Handle Kind 6 (Reposts), Kind 7 (Reactions / Likes), and Kind 9735 (Zaps)
+    if (raw.kind === 6 || raw.kind === 7 || raw.kind === 9735) {
       const localEv: LocalEvent = {
         id: raw.id,
         pubkey: raw.pubkey,
@@ -286,6 +286,40 @@ class RelayManager {
       if (state.ws && state.ws.readyState === WebSocket.OPEN) {
         try {
           state.ws.send(reqMsg);
+        } catch {}
+      }
+    });
+  }
+
+  public queryAuthorProfileAndActivity(pubkey: string) {
+    if (!pubkey) return;
+    const subIdAuthor = 'author_' + pubkey.slice(0, 8);
+    const reqMsgAuthor = JSON.stringify([
+      'REQ',
+      subIdAuthor,
+      {
+        kinds: [0, 1, 6, 7, 30023, 9735],
+        authors: [pubkey],
+        limit: 100
+      }
+    ]);
+
+    const subIdMention = 'p_mention_' + pubkey.slice(0, 8);
+    const reqMsgMention = JSON.stringify([
+      'REQ',
+      subIdMention,
+      {
+        kinds: [1, 6, 7, 9735],
+        '#p': [pubkey],
+        limit: 50
+      }
+    ]);
+
+    this.relays.forEach((state) => {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        try {
+          state.ws.send(reqMsgAuthor);
+          state.ws.send(reqMsgMention);
         } catch {}
       }
     });

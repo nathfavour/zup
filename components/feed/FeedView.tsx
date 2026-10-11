@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { LocalEvent, ProfileMetadata } from '@/lib/core/types';
 import { db } from '@/lib/db';
 import { formatHex, extractEventTags, isSpamOrReply, calculateEventId, generateLocalIdenticon } from '@/lib/core/nostr';
-import { schnorrSign } from '@/lib/core/crypto';
+import { schnorrSign, hexToNpub } from '@/lib/core/crypto';
 import { getSessionState, getActiveSigner } from '@/lib/state/session';
 import { relayManager } from '@/lib/workers/relay-manager';
 import { ClickToLoadMedia } from './ClickToLoadMedia';
@@ -26,6 +26,7 @@ interface FeedViewProps {
   onInspectEvent: (event: LocalEvent) => void;
   onOpenComposer: () => void;
   onOpenConnectDrawer: () => void;
+  onViewProfile?: (pubkey: string) => void;
 }
 
 /**
@@ -54,7 +55,8 @@ function formatFeedSnippet(text: string, maxChars = 160): { snippet: string; isT
 export function FeedView({
   onInspectEvent,
   onOpenComposer,
-  onOpenConnectDrawer
+  onOpenConnectDrawer,
+  onViewProfile
 }: FeedViewProps) {
   // Live Nostr Events state
   const [events, setEvents] = useState<LocalEvent[]>([]);
@@ -451,6 +453,7 @@ export function FeedView({
           onShare={() => handleShare(selectedPost.id)}
           onInspect={() => onInspectEvent(selectedPost)}
           onOpenCommentDrawer={() => handleOpenComment(selectedPost)}
+          onViewProfile={onViewProfile}
           newlyAddedComments={[]}
         />
 
@@ -549,8 +552,9 @@ export function FeedView({
         <div className="space-y-3">
           {filteredEvents.map((event) => {
             const profile = profiles.get(event.pubkey);
-            const authorName = profile?.display_name || profile?.name || `user_${event.pubkey.slice(0, 6)}`;
-            const handle = profile?.nip05 || `@${formatHex(event.pubkey, 6, 0)}`;
+            const npubStr = hexToNpub(event.pubkey);
+            const authorName = profile?.display_name || profile?.name || formatHex(npubStr, 12, 6);
+            const handle = profile?.nip05 ? `@${profile.nip05}` : `@${formatHex(npubStr, 10, 4)}`;
             const avatarUrl = profile?.picture || generateLocalIdenticon(event.pubkey);
             const dateStr = new Date(event.created_at * 1000).toLocaleDateString([], {
               month: 'short',
@@ -579,10 +583,11 @@ export function FeedView({
               >
                 {/* Left: User Profile Picture */}
                 <div
-                  className="shrink-0 pt-0.5"
+                  className="shrink-0 pt-0.5 cursor-pointer hover:opacity-80 transition-opacity"
+                  title="View Profile"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedPost(event);
+                    if (onViewProfile) onViewProfile(event.pubkey);
                   }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -601,15 +606,23 @@ export function FeedView({
                 <div className="flex-1 min-w-0 space-y-1">
                   {/* User line */}
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
+                    <div
+                      className="flex items-center gap-1.5 min-w-0 cursor-pointer hover:underline"
+                      title="View Profile"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onViewProfile) onViewProfile(event.pubkey);
+                      }}
+                    >
                       <span className="font-bold text-xs sm:text-sm text-white truncate group-hover:text-pink-300 transition-colors">
                         {authorName}
                       </span>
                       <span className="text-[11px] font-mono text-white/50 truncate">
                         {handle}
                       </span>
-                      <span className="text-white/30 text-xs">·</span>
-                      <span className="text-[11px] font-mono text-white/40 shrink-0">
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[11px] font-mono text-white/40">
                         {dateStr}
                       </span>
                     </div>

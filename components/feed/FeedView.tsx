@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LocalEvent, ProfileMetadata } from '@/lib/core/types';
 import { db } from '@/lib/db';
-import { formatHex, extractEventTags, isSpamOrReply, calculateEventId } from '@/lib/core/nostr';
+import { formatHex, extractEventTags, isSpamOrReply, calculateEventId, generateLocalIdenticon } from '@/lib/core/nostr';
 import { schnorrSign } from '@/lib/core/crypto';
 import { getSessionState, getActiveSigner } from '@/lib/state/session';
 import { relayManager } from '@/lib/workers/relay-manager';
@@ -551,7 +551,7 @@ export function FeedView({
             const profile = profiles.get(event.pubkey);
             const authorName = profile?.display_name || profile?.name || `user_${event.pubkey.slice(0, 6)}`;
             const handle = profile?.nip05 || `@${formatHex(event.pubkey, 6, 0)}`;
-            const avatarUrl = profile?.picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${event.pubkey}`;
+            const avatarUrl = profile?.picture || generateLocalIdenticon(event.pubkey);
             const dateStr = new Date(event.created_at * 1000).toLocaleDateString([], {
               month: 'short',
               day: 'numeric'
@@ -591,7 +591,7 @@ export function FeedView({
                     alt={authorName}
                     referrerPolicy="no-referrer"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${event.pubkey}`;
+                      (e.target as HTMLImageElement).src = generateLocalIdenticon(event.pubkey);
                     }}
                     className="w-9 h-9 rounded-full border border-white/20 bg-[#161412] object-cover hover:opacity-90 transition-opacity"
                   />

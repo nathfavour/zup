@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { LocalEvent, ProfileMetadata } from '@/lib/core/types';
 import { db } from '@/lib/db';
-import { formatHex, extractEventTags } from '@/lib/core/nostr';
+import { formatHex, extractEventTags, generateLocalIdenticon } from '@/lib/core/nostr';
 import { ClickToLoadMedia } from './ClickToLoadMedia';
 import {
   ArrowLeft,
@@ -59,7 +59,7 @@ export function PostDetailView({
 
   const authorName = profile?.display_name || profile?.name || `user_${post.pubkey.slice(0, 6)}`;
   const handle = profile?.nip05 || `@${formatHex(post.pubkey, 6, 0)}`;
-  const avatarUrl = profile?.picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${post.pubkey}`;
+  const avatarUrl = profile?.picture || generateLocalIdenticon(post.pubkey);
   const dateStr = new Date(post.created_at * 1000).toLocaleString([], {
     month: 'short',
     day: 'numeric',
@@ -150,7 +150,7 @@ export function PostDetailView({
               alt={authorName}
               referrerPolicy="no-referrer"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${post.pubkey}`;
+                (e.target as HTMLImageElement).src = generateLocalIdenticon(post.pubkey);
               }}
               className="w-12 h-12 rounded-full border border-white/20 bg-[#161412] object-cover shrink-0"
             />
@@ -309,7 +309,7 @@ export function PostDetailView({
               const cProfile = commentProfiles.get(comment.pubkey);
               const cAuthor = cProfile?.display_name || cProfile?.name || `user_${comment.pubkey.slice(0, 6)}`;
               const cHandle = cProfile?.nip05 || `@${formatHex(comment.pubkey, 6, 0)}`;
-              const cAvatar = cProfile?.picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${comment.pubkey}`;
+              const cAvatar = cProfile?.picture || generateLocalIdenticon(comment.pubkey);
               const cDate = new Date(comment.created_at * 1000).toLocaleDateString([], {
                 month: 'short',
                 day: 'numeric'
@@ -326,7 +326,7 @@ export function PostDetailView({
                     alt={cAuthor}
                     referrerPolicy="no-referrer"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${comment.pubkey}`;
+                      (e.target as HTMLImageElement).src = generateLocalIdenticon(comment.pubkey);
                     }}
                     className="w-9 h-9 rounded-full border border-white/15 bg-[#161412] object-cover shrink-0 mt-0.5"
                   />

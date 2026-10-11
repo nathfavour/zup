@@ -1,6 +1,6 @@
 import { RelayStatus, LocalEvent, ProfileMetadata } from '../core/types';
 import { db } from '../db';
-import { validateEvent, isSpamOrReply } from '../core/nostr';
+import { validateEvent, isSpamOrReply, generateLocalIdenticon } from '../core/nostr';
 
 export const DEFAULT_RELAYS = [
   'wss://nos.lol',
@@ -204,7 +204,7 @@ class RelayManager {
           content: raw.content,
           name: metadata.name,
           display_name: metadata.display_name || metadata.name,
-          picture: metadata.picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${raw.pubkey}`,
+          picture: metadata.picture || generateLocalIdenticon(raw.pubkey),
           nip05: metadata.nip05,
           about: metadata.about,
           updated_at: raw.created_at || Math.floor(Date.now() / 1000),
@@ -247,7 +247,7 @@ class RelayManager {
           content: '{}',
           name: raw.pubkey.slice(0, 8),
           display_name: raw.pubkey.slice(0, 8),
-          picture: `https://api.dicebear.com/7.x/identicon/svg?seed=${raw.pubkey}`,
+          picture: generateLocalIdenticon(raw.pubkey),
           updated_at: raw.created_at,
           cached_at: Date.now()
         });

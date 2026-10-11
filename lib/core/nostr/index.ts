@@ -138,6 +138,43 @@ export function extractEventTags(tags: string[][]): string[] {
 }
 
 /**
+ * Generates a local SVG identicon Data URI based on a seed (e.g. pubkey or event ID)
+ * to avoid third-party CDN external HTTP calls.
+ */
+export function generateLocalIdenticon(seed: string): string {
+  if (!seed) seed = 'default';
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+
+  const hue = Math.abs(hash) % 360;
+  const saturation = 65 + (Math.abs(hash >> 3) % 25);
+  const lightness = 55 + (Math.abs(hash >> 6) % 20);
+
+  const mainColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  const bgHue = (hue + 180) % 360;
+  const bgColor = `hsl(${bgHue}, 20%, 12%)`;
+
+  let rects = '';
+  for (let x = 0; x < 3; x++) {
+    for (let y = 0; y < 5; y++) {
+      const bit = (Math.abs(hash) >> (x * 5 + y)) & 1;
+      if (bit === 1) {
+        rects += `<rect x="${x * 10 + 5}" y="${y * 10 + 5}" width="10" height="10" fill="${mainColor}" />`;
+        if (x < 2) {
+          rects += `<rect x="${(4 - x) * 10 + 5}" y="${y * 10 + 5}" width="10" height="10" fill="${mainColor}" />`;
+        }
+      }
+    }
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 60" width="100%" height="100%"><rect width="60" height="60" rx="30" fill="${bgColor}" /><g>${rects}</g></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/**
  * Truncate pubkey or hash with ellipsis
  */
 export function formatHex(hex: string, front = 8, back = 6): string {

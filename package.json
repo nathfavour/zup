@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^5.2.1",
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
+    "@types/ws": "^8.18.2",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -24,7 +25,8 @@
     "postcss": "^8.5.6",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.11",

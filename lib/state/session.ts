@@ -80,9 +80,38 @@ export function touchSessionActivity(): void {
 }
 
 /**
+ * Encrypts an identity private key using the current volatile MEK.
+ */
+export async function encryptIdentityNsec(privkeyHexOrNsec: string): Promise<string> {
+  if (!volatileMasterKey) {
+    throw new Error('Vault is locked. Master Encryption Key is not in volatile memory.');
+  }
+  return await encryptAesGcm(volatileMasterKey, privkeyHexOrNsec);
+}
+
+/**
+ * Returns the decrypted volatile private key for the active identity or a target identity pubkey
+ */
+export async function deriveActivePrivkeyHex(): Promise<string | null> {
+  if (!volatileMasterKey) return null;
+  const activePubkey = getActivePubkey();
+  const identity = cachedIdentities.find((i) => i.pubkey === activePubkey) || cachedIdentities[0];
+  if (!identity || !identity.wrappedNsec) return null;
+
+  try {
+    const unwrapped = await decryptAesGcm(volatileMasterKey, identity.wrappedNsec);
+    volatilePrivkeyHex = unwrapped;
+    return unwrapped;
+  } catch {
+    volatilePrivkeyHex = null;
+    return null;
+  }
+}
+
+/**
  * Unlocks the vault using the Master Password:
- * 1. Derives KEK_pass via PBKDF2/Argon2id.
- * 2. Unwraps the 256-bit MEK.
+ * 1. Derives KEK_pass via Argon2id / PBKDF2.
+ * 2. Unwraps the 256-bit MEK into volatile memory.
  * 3. Decrypts active identity's wrapped nsec into volatile memory.
  */
 export async function unlockVault(password: string): Promise<{ success: boolean; error?: string }> {
@@ -91,7 +120,7 @@ export async function unlockVault(password: string): Promise<{ success: boolean;
     const passwordSlot = slots.find((s) => s.type === 'password') || slots[0];
 
     if (!passwordSlot) {
-      // First-time setup: generate MEK and initialize slot
+      // First-time setup: generate MEK and initialize password slot
       const newMek = await generateMasterKey();
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const kek = await deriveKeyFromPassword(password, salt);
@@ -114,48 +143,51 @@ export async function unlockVault(password: string): Promise<{ success: boolean;
       await db.keychain.add(slot);
       volatileMasterKey = newMek;
       await refreshCachedIdentities();
+      await deriveActivePrivkeyHex();
       touchSessionActivity();
       notify();
       return { success: true };
     }
 
-    // Existing slot: attempt to unwrap
-    // For demo/prototype convenience, test password or seed password 'zup-operator-2026' or custom password
+    // Existing slot: attempt to unwrap MEK
+    const saltBytes = passwordSlot.salt
+      ? Uint8Array.from(atob(passwordSlot.salt), (c) => c.charCodeAt(0))
+      : new Uint8Array(16);
+    const kek = await deriveKeyFromPassword(password, saltBytes);
+
+    let unwrappedRawStr: string;
     try {
-      const saltBytes = passwordSlot.salt
-        ? Uint8Array.from(atob(passwordSlot.salt), (c) => c.charCodeAt(0))
-        : new Uint8Array(16);
-      const kek = await deriveKeyFromPassword(password, saltBytes);
-      const unwrappedRaw = await decryptAesGcm(kek, passwordSlot.wrappedMek);
-      const mekBytes = new TextEncoder().encode(unwrappedRaw);
-      volatileMasterKey = await importRawKey(mekBytes.slice(0, 32));
+      unwrappedRawStr = await decryptAesGcm(kek, passwordSlot.wrappedMek);
     } catch {
-      // If salt/wrapper was from seed, unlock with a freshly minted session key for this password
-      volatileMasterKey = await generateMasterKey();
+      return { success: false, error: 'Incorrect Master Password.' };
     }
 
-    // Derive active identity's private key into volatile memory
-    const activePubkey = getActivePubkey();
-    const identity = cachedIdentities.find((i) => i.pubkey === activePubkey) || cachedIdentities[0];
-    if (identity && identity.wrappedNsec && volatileMasterKey) {
-      try {
-        volatilePrivkeyHex = await decryptAesGcm(volatileMasterKey, identity.wrappedNsec);
-      } catch {
-        // Fallback deterministic dev privkey for signing
-        volatilePrivkeyHex = '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b';
-      }
-    } else {
-      volatilePrivkeyHex = '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b';
+    const rawMekBytes = new Uint8Array(unwrappedRawStr.length);
+    for (let i = 0; i < unwrappedRawStr.length; i++) {
+      rawMekBytes[i] = unwrappedRawStr.charCodeAt(i);
     }
 
-    touchSessionActivity();
+    volatileMasterKey = await importRawKey(rawMekBytes.slice(0, 32));
     await refreshCachedIdentities();
+    await deriveActivePrivkeyHex();
+    touchSessionActivity();
     notify();
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to unlock vault';
     return { success: false, error: message };
   }
+}
+
+/**
+ * Unlocks vault directly with a provided CryptoKey MEK (used e.g. for WebAuthn passkeys)
+ */
+export async function unlockVaultWithMEK(mekKey: CryptoKey): Promise<void> {
+  volatileMasterKey = mekKey;
+  await refreshCachedIdentities();
+  await deriveActivePrivkeyHex();
+  touchSessionActivity();
+  notify();
 }
 
 /**
@@ -189,6 +221,7 @@ export async function setActiveIdentity(pubkey: string | null): Promise<void> {
       localStorage.removeItem('zup:active_pubkey');
     }
   }
+  await deriveActivePrivkeyHex();
   notify();
 }
 

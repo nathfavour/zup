@@ -3,8 +3,8 @@
 import React, { useState } from 'react';
 import { LocalEvent } from '@/lib/core/types';
 import { db } from '@/lib/db';
-import { getSessionState } from '@/lib/state/session';
-import { calculateEventId, formatHex } from '@/lib/core/nostr';
+import { getActiveSigner, getSessionState } from '@/lib/state/session';
+import { calculateEventId } from '@/lib/core/nostr';
 import { schnorrSign } from '@/lib/core/crypto';
 import { relayManager } from '@/lib/workers/relay-manager';
 import { X, Send, MessageCircle, ShieldCheck } from 'lucide-react';
@@ -35,7 +35,13 @@ export function AddCommentDrawer({
     const text = content.trim();
     if (!text || isSubmitting) return;
 
-    const pubkey = session.activeIdentity?.pubkey || 'anonymous_operator';
+    const signer = getActiveSigner();
+    if (!signer) {
+      alert('Signer unavailable. Please unlock your Vault first.');
+      return;
+    }
+
+    const pubkey = signer.pubkey;
     setIsSubmitting(true);
 
     try {
@@ -53,9 +59,7 @@ export function AddCommentDrawer({
         content: text
       });
 
-      // Sign with mock key or Schnorr
-      const mockPriv = '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b';
-      const sig = await schnorrSign(id, mockPriv);
+      const sig = await schnorrSign(id, signer.privkey);
 
       const commentEvent: LocalEvent = {
         id,
@@ -69,7 +73,7 @@ export function AddCommentDrawer({
         relay_source: 'local_dispatch'
       };
 
-      // Broadcast live to all connected Nostr relays and commit locally to Dexie
+      // Broadcast live to all connected Nostr relays and commit locally
       await relayManager.broadcastEvent(commentEvent);
 
       // Log interaction telemetry

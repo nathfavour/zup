@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { getActivePubkey, setActiveIdentity, getActiveSigner, unlockVault } from '../state/session';
+import { getActivePubkey, setActiveIdentity, getActiveSigner } from '../state/session';
 import { relayManager } from '../workers/relay-manager';
 import { tursoSync } from '../sync/turso-sync';
 import { createAndSignEvent, formatHex, validateEvent } from '../core/nostr';
@@ -116,13 +116,7 @@ export class CliEngine {
           return results;
         }
 
-        let signer = getActiveSigner();
-        if (!signer) {
-          // Unlock with default session key for operator
-          await unlockVault('zup-operator-2026');
-          signer = getActiveSigner();
-        }
-
+        const signer = getActiveSigner();
         if (!signer) {
           push('Error: Signer unavailable. Vault must be unlocked before signing Schnorr events.', 'error');
           return results;

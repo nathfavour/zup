@@ -6,7 +6,9 @@ import {
   hexToNpub,
   hexToNsec,
   bytesToHex,
-  safeDecodeKey
+  safeDecodeKey,
+  generateNostrKeyPair,
+  generateMasterKey
 } from '@/lib/core/crypto';
 import { db } from '@/lib/db';
 import { EncryptedIdentity } from '@/lib/core/types';
@@ -16,7 +18,8 @@ import {
   refreshCachedIdentities,
   unlockVault,
   subscribeSession,
-  SessionState
+  SessionState,
+  encryptIdentityNsec
 } from '@/lib/state/session';
 import {
   X,
@@ -128,7 +131,7 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
 
     try {
       const pubkey = createdKeypair.pubHex;
-      const wrappedNsec = btoa(`mock_enc_${createdKeypair.privHex}`);
+      const wrappedNsec = await encryptIdentityNsec(createdKeypair.privHex);
 
       const newIdentity: EncryptedIdentity = {
         pubkey,
@@ -147,7 +150,7 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
         pubkey,
         name: createLabel.trim().toLowerCase().replace(/\s+/g, '_'),
         display_name: createLabel.trim() || 'Personal Persona',
-        picture: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubkey}`,
+        picture: '',
         content: '{}',
         updated_at: Math.floor(Date.now() / 1000),
         cached_at: Date.now()
@@ -192,7 +195,7 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
         throw new Error('Invalid derived public key length.');
       }
 
-      const wrappedNsec = privHex ? btoa(`mock_enc_${privHex}`) : '';
+      const wrappedNsec = privHex ? await encryptIdentityNsec(privHex) : '';
 
       const importedIdentity: EncryptedIdentity = {
         pubkey: pubHex,
@@ -213,7 +216,7 @@ export function ConnectIdentityDrawer({ isOpen, onClose }: ConnectIdentityDrawer
           pubkey: pubHex,
           name: importLabel.trim().toLowerCase().replace(/\s+/g, '_'),
           display_name: importLabel.trim() || (privHex ? 'Imported Signer' : 'Watch-only Persona'),
-          picture: `https://api.dicebear.com/7.x/identicon/svg?seed=${pubHex}`,
+          picture: '',
           content: '{}',
           updated_at: Math.floor(Date.now() / 1000),
           cached_at: Date.now()

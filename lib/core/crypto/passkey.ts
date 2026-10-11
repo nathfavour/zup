@@ -6,9 +6,11 @@ import {
   exportRawKey,
   importRawKey,
   generateMasterKey,
-  sha256Hex
+  sha256Hex,
+  bytesToHex,
+  hexToBytes
 } from './index';
-import { unlockVaultWithMEK } from '../../state/session';
+import { unlockVaultWithMEK, getVolatileMasterKey } from '../../state/session';
 
 // Helper to convert ArrayBuffer to Base64URL string
 function bufferToBase64URL(buffer: ArrayBuffer): string {
@@ -117,9 +119,11 @@ export async function registerPasskey(userLabel = 'Operator Passkey'): Promise<{
     const kek = await deriveWebAuthnKEK(prfBytes);
 
     // Get active MEK or generate new one
-    const newMek = await generateMasterKey();
-    const rawMek = await exportRawKey(newMek);
-    const wrappedMek = await encryptAesGcm(kek, rawMek);
+    const activeMek = getVolatileMasterKey();
+    const targetMek = activeMek || (await generateMasterKey());
+    const rawMekBytes = await exportRawKey(targetMek);
+    const rawMekHex = bytesToHex(rawMekBytes);
+    const wrappedMek = await encryptAesGcm(kek, rawMekHex);
 
     const slot: KeychainSlot = {
       id: 'kc_passkey_' + Math.random().toString(36).substring(2, 9),
@@ -137,7 +141,7 @@ export async function registerPasskey(userLabel = 'Operator Passkey'): Promise<{
     };
 
     await db.keychain.add(slot);
-    await unlockVaultWithMEK(newMek);
+    await unlockVaultWithMEK(targetMek);
 
     return { success: true };
   } catch (err: unknown) {
@@ -210,12 +214,18 @@ export async function authenticatePasskey(): Promise<{ success: boolean; error?:
     const kek = await deriveWebAuthnKEK(prfBytes);
     const unwrappedRawStr = await decryptAesGcm(kek, targetSlot.wrappedMek);
 
-    const rawMekBytes = new Uint8Array(unwrappedRawStr.length);
-    for (let i = 0; i < unwrappedRawStr.length; i++) {
-      rawMekBytes[i] = unwrappedRawStr.charCodeAt(i);
+    let rawMekBytes: Uint8Array;
+    if (/^[0-9a-fA-F]{64}$/.test(unwrappedRawStr)) {
+      rawMekBytes = hexToBytes(unwrappedRawStr);
+    } else {
+      rawMekBytes = new Uint8Array(unwrappedRawStr.length);
+      for (let i = 0; i < unwrappedRawStr.length; i++) {
+        rawMekBytes[i] = unwrappedRawStr.charCodeAt(i);
+      }
+      rawMekBytes = rawMekBytes.slice(0, 32);
     }
 
-    const mekKey = await importRawKey(rawMekBytes.slice(0, 32));
+    const mekKey = await importRawKey(rawMekBytes);
     await unlockVaultWithMEK(mekKey);
 
     return { success: true };

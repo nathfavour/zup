@@ -5,7 +5,8 @@ import {
   getSessionState,
   setActiveIdentity,
   SessionState,
-  subscribeSession
+  subscribeSession,
+  deleteIdentity
 } from '@/lib/state/session';
 import { db } from '@/lib/db';
 import { LocalEvent, UserTelemetry } from '@/lib/core/types';
@@ -21,7 +22,8 @@ import {
   Key,
   Layers,
   Activity,
-  PlusCircle
+  PlusCircle,
+  Trash2
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -63,6 +65,13 @@ export function ProfileView({ onOpenSettings, onInspectEvent, onConnect }: Profi
     navigator.clipboard.writeText(npub);
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
+  };
+
+  const handleDeleteIdentity = async (e: React.MouseEvent, pubkey: string, label: string) => {
+    e.stopPropagation();
+    if (confirm(`Are you sure you want to delete persona "${label}"?`)) {
+      await deleteIdentity(pubkey);
+    }
   };
 
   // Derive top interests
@@ -190,11 +199,22 @@ export function ProfileView({ onOpenSettings, onInspectEvent, onConnect }: Profi
                       {formatHex(id.pubkey, 8, 4)}
                     </div>
                   </div>
-                  {isSelected && (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
-                      ACTIVE
+                  <div className="flex items-center gap-2">
+                    {isSelected && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                        ACTIVE
+                      </span>
+                    )}
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => handleDeleteIdentity(e, id.pubkey, id.label)}
+                      title="Delete Identity"
+                      className="p-1 rounded bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 opacity-80 hover:opacity-100 transition-all cursor-pointer"
+                    >
+                      <Trash2 size={12} />
                     </span>
-                  )}
+                  </div>
                 </button>
               );
             })}

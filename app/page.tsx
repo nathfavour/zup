@@ -7,7 +7,6 @@ import {
   getSessionState,
   subscribeSession,
   lockVault,
-  unlockVault,
   SessionState
 } from '@/lib/state/session';
 import { LocalEvent, RelayStatus } from '@/lib/core/types';
@@ -18,6 +17,7 @@ import { FeedView } from '@/components/feed/FeedView';
 import { NewDispatchView } from '@/components/feed/NewDispatchView';
 import { ProfileView } from '@/components/profile/ProfileView';
 import { SettingsView } from '@/components/settings/SettingsView';
+import { CliView } from '@/components/cli/CliView';
 
 // Modals / Drawers
 import { InspectRawSidebar } from '@/components/modals/InspectRawSidebar';
@@ -34,10 +34,12 @@ import {
   Lock,
   Unlock,
   Radio,
-  Key
+  Key,
+  Terminal,
+  User
 } from 'lucide-react';
 
-type TabType = 'feed' | 'new' | 'profile' | 'settings';
+type TabType = 'feed' | 'new' | 'profile' | 'settings' | 'cli';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
@@ -64,7 +66,7 @@ export default function Home() {
     };
   }, []);
 
-  // Keyboard shortcut listener (Cmd+K, 1-4, etc.)
+  // Keyboard shortcut listener (Cmd+K, 1-6, etc.)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -86,6 +88,7 @@ export default function Home() {
       if (e.key === '2' || e.key.toLowerCase() === 'n') setActiveTab('new');
       if (e.key === '3') setActiveTab('profile');
       if (e.key === '4') setActiveTab('settings');
+      if (e.key === '6' || e.key.toLowerCase() === 'c') setActiveTab('cli');
       if (e.key.toLowerCase() === 'l') {
         e.preventDefault();
         lockVault();
@@ -110,10 +113,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#161412] text-white flex flex-col font-sans selection:bg-pink-500/30 selection:text-white">
-      {/* 
-        Topbar: Anchored to the top, but with two bottom rounded corners (rounded-b-[20px])
-        Shows 'Connect' when client has no active Nostr identity, or avatar circle when connected.
-      */}
+      {/* Topbar */}
       <header className="sticky top-0 z-40 bg-[#000000] border-b border-white/20 rounded-b-[20px] px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-xl">
         {/* Left: Brand mark */}
         <button
@@ -174,10 +174,7 @@ export default function Home() {
 
       {/* Main Container: Desktop Left Sidebar + Central Viewport */}
       <div className="flex-1 flex max-w-[1500px] w-full mx-auto">
-        {/* 
-          Desktop Left Sidebar (Desktop Only: hidden md:flex)
-          Anchored to the left edge, with two right rounded corners (rounded-r-[24px])
-        */}
+        {/* Desktop Left Sidebar */}
         <aside className="hidden md:flex flex-col justify-between w-60 lg:w-64 shrink-0 bg-[#161412] border-r border-white/20 rounded-r-[24px] p-5 my-3 shadow-xl">
           <div className="space-y-4">
             {/* New Dispatch Primary Button */}
@@ -189,7 +186,7 @@ export default function Home() {
               <span>New Dispatch</span>
             </button>
 
-            {/* Navigation Links: Feed, New, Profile, Settings */}
+            {/* Navigation Links: Feed, New, Profile, Settings, CLI */}
             <nav className="space-y-1.5 pt-2">
               <button
                 onClick={() => setActiveTab('feed')}
@@ -213,6 +210,30 @@ export default function Home() {
               >
                 <Plus size={17} />
                 <span>New</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[16px] text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'profile'
+                    ? 'bg-[#000000] text-pink-400 border border-pink-500 shadow-md'
+                    : 'text-white/70 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                }`}
+              >
+                <User size={17} />
+                <span>Profile</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('cli')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[16px] text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'cli'
+                    ? 'bg-[#000000] text-indigo-400 border border-indigo-500 shadow-md'
+                    : 'text-white/70 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                }`}
+              >
+                <Terminal size={17} />
+                <span>@zup/cli Shell</span>
               </button>
 
               <button
@@ -273,7 +294,7 @@ export default function Home() {
             )}
 
             <div className="text-[11px] font-mono text-white/40 text-center">
-              Shortcuts: <kbd className="text-white/60">Cmd+K</kbd>
+              Shortcuts: <kbd className="text-white/60">Cmd+K</kbd> · <kbd className="text-white/60">6</kbd> CLI
             </div>
           </div>
         </aside>
@@ -306,6 +327,10 @@ export default function Home() {
             />
           )}
 
+          {activeTab === 'cli' && (
+            <CliView />
+          )}
+
           {activeTab === 'settings' && (
             <SettingsView
               onBack={() => setActiveTab('profile')}
@@ -314,12 +339,8 @@ export default function Home() {
         </main>
       </div>
 
-      {/* 
-        Mobile Fixed Bottom Navigation Bar (Mobile Only: md:hidden)
-        Anchored to the bottom edge, with two top rounded corners (rounded-t-[24px])
-        Contains: Feed, centralized '+' button for create, Profile, Settings
-      */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t-2 border-white/20 rounded-t-[24px] px-8 py-2 flex items-center justify-between shadow-2xl">
+      {/* Mobile Fixed Bottom Navigation Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t-2 border-white/20 rounded-t-[24px] px-6 py-2 flex items-center justify-between shadow-2xl">
         {/* Feed Tab */}
         <button
           onClick={() => setActiveTab('feed')}
@@ -327,17 +348,39 @@ export default function Home() {
             activeTab === 'feed' ? 'text-pink-400 font-bold' : 'text-white/60 hover:text-white'
           }`}
         >
-          <Layers size={20} />
+          <Layers size={18} />
           <span className="text-[10px] font-mono">Feed</span>
+        </button>
+
+        {/* CLI Tab */}
+        <button
+          onClick={() => setActiveTab('cli')}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            activeTab === 'cli' ? 'text-indigo-400 font-bold' : 'text-white/60 hover:text-white'
+          }`}
+        >
+          <Terminal size={18} />
+          <span className="text-[10px] font-mono">CLI</span>
         </button>
 
         {/* Centralized Plus Button for New Dispatch */}
         <button
           onClick={() => setActiveTab('new')}
           title="New Dispatch"
-          className="w-13 h-13 -mt-6 rounded-full bg-pink-500 hover:bg-pink-400 text-black flex items-center justify-center font-bold shadow-[0_0_18px_rgba(236,72,153,0.6)] border-2 border-[#161412] active:scale-95 transition-transform cursor-pointer shrink-0"
+          className="w-12 h-12 -mt-5 rounded-full bg-pink-500 hover:bg-pink-400 text-black flex items-center justify-center font-bold shadow-[0_0_18px_rgba(236,72,153,0.6)] border-2 border-[#161412] active:scale-95 transition-transform cursor-pointer shrink-0"
         >
-          <Plus size={24} className="stroke-[3]" />
+          <Plus size={22} className="stroke-[3]" />
+        </button>
+
+        {/* Profile Tab */}
+        <button
+          onClick={() => setActiveTab('profile')}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            activeTab === 'profile' ? 'text-pink-400 font-bold' : 'text-white/60 hover:text-white'
+          }`}
+        >
+          <User size={18} />
+          <span className="text-[10px] font-mono">Profile</span>
         </button>
 
         {/* Settings Tab */}
@@ -347,12 +390,12 @@ export default function Home() {
             activeTab === 'settings' ? 'text-pink-400 font-bold' : 'text-white/60 hover:text-white'
           }`}
         >
-          <Settings size={20} />
+          <Settings size={18} />
           <span className="text-[10px] font-mono">Settings</span>
         </button>
       </nav>
 
-      {/* Cryptographic Inspector Sidebar (Opens on Inspect click) */}
+      {/* Cryptographic Inspector Sidebar */}
       {inspectEvent && (
         <InspectRawSidebar
           event={inspectEvent}
@@ -360,20 +403,20 @@ export default function Home() {
         />
       )}
 
-      {/* Notifications Drawer (Opens on Bell click) */}
+      {/* Notifications Drawer */}
       <NotificationsDrawer
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
         relaysOnlineCount={connectedRelaysCount}
       />
 
-      {/* Connect Identity Bottom Drawer (Max 60% height) */}
+      {/* Connect Identity Drawer */}
       <ConnectIdentityDrawer
         isOpen={isConnectDrawerOpen}
         onClose={() => setIsConnectDrawerOpen(false)}
       />
 
-      {/* Global Command Palette (Cmd+K) */}
+      {/* Global Command Palette */}
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}

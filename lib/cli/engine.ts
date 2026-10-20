@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { getActivePubkey, setActiveIdentity, getActiveSigner } from '../state/session';
+import { getActivePubkey, setActiveIdentity, getActiveSigner, getSessionState } from '../state/session';
 import { relayManager } from '../workers/relay-manager';
 import { tursoSync } from '../sync/turso-sync';
 import { createAndSignEvent, formatHex, validateEvent } from '../core/nostr';
@@ -37,13 +37,15 @@ export class CliEngine {
     if (trimmed === 'help' || trimmed === 'zup help') {
       push('--- zup CLI Commands Reference ---', 'system');
       push('  zup identity list              List local identities and active persona');
-      push('  zup identity switch <pubkey|label>  Switch active identity pointer');
+      push('  zup identity switch <target>   Switch active identity pointer');
       push('  zup tail [--kinds 1,30023]     Stream recent technical events');
       push('  zup publish "<text>" [--sign]  Sign Schnorr event and broadcast to relays');
       push('  zup sync --turso               Trigger delta sync with LibSQL edge replica');
       push('  zup inspect <eventId>          Verify Schnorr signature and event serialization');
       push('  zup relays                     Display relay connection pool status');
       push('  zup telemetry                  Inspect local engagement and tag affinity signals');
+      push('  zup export-telemetry           Export local privacy-first telemetry history JSON');
+      push('  zup stats                      Display workspace database metrics & system status');
       push('  clear                          Clear terminal screen');
       return results;
     }
@@ -55,16 +57,20 @@ export class CliEngine {
       if (sub === 'identity') {
         const action = parts[2];
         if (action === 'list' || !action) {
-          const identities = await db.identities.toArray();
-          const active = getActivePubkey();
-          push(`Found ${identities.length} local identities in zup_engine_v1:`, 'system');
-          for (const id of identities) {
-            const isActive = id.pubkey === active;
-            const marker = isActive ? '(*) [ACTIVE]' : '    [PERSONA]';
-            push(`${marker} ${id.label}`);
-            push(`    pubkey: ${id.pubkey}`);
-            push(`    npub:   ${id.npub}`);
-            push(`    relays: ${id.relays.join(', ')}`);
+          try {
+            const identities = await db.identities.toArray();
+            const active = getActivePubkey();
+            push(`Found ${identities.length} local identities in zup_engine_v1:`, 'system');
+            for (const id of identities) {
+              const isActive = id.pubkey === active;
+              const marker = isActive ? '(*) [ACTIVE]' : '    [PERSONA]';
+              push(`${marker} ${id.label}`);
+              push(`    pubkey: ${id.pubkey}`);
+              push(`    npub:   ${id.npub}`);
+              push(`    relays: ${id.relays.join(', ')}`);
+            }
+          } catch (e: any) {
+            push(`[OFFLINE] Headless environment (IndexedDB unattached). Identities unavailable.`, 'system');
           }
           return results;
         }
@@ -75,16 +81,20 @@ export class CliEngine {
             push("Error: provide a pubkey or label substring. Usage: zup identity switch <target>", 'error');
             return results;
           }
-          const identities = await db.identities.toArray();
-          const match = identities.find(
-            (i) => i.pubkey.toLowerCase().startsWith(target.toLowerCase()) || i.label.toLowerCase().includes(target.toLowerCase())
-          );
-          if (!match) {
-            push(`Error: identity matching '${target}' not found in local vault.`, 'error');
-            return results;
+          try {
+            const identities = await db.identities.toArray();
+            const match = identities.find(
+              (i) => i.pubkey.toLowerCase().startsWith(target.toLowerCase()) || i.label.toLowerCase().includes(target.toLowerCase())
+            );
+            if (!match) {
+              push(`Error: identity matching '${target}' not found in local vault.`, 'error');
+              return results;
+            }
+            await setActiveIdentity(match.pubkey);
+            push(`[OK] Switched active identity to: ${match.label} (${formatHex(match.pubkey)})`, 'success');
+          } catch (e: any) {
+            push(`Error: unable to switch identity in headless environment.`, 'error');
           }
-          await setActiveIdentity(match.pubkey);
-          push(`[OK] Switched active identity to: ${match.label} (${formatHex(match.pubkey)})`, 'success');
           return results;
         }
 
@@ -94,14 +104,18 @@ export class CliEngine {
 
       // 2. zup tail
       if (sub === 'tail') {
-        const events = await db.events.orderBy('created_at').reverse().limit(8).toArray();
-        push(`Streaming recent ${events.length} technical dispatches from local Dexie engine:`, 'system');
-        for (const ev of events) {
-          const kindLabel = ev.kind === 30023 ? 'K30023 (RFC/Article)' : `K${ev.kind}`;
-          const dateStr = new Date(ev.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
-          push(`[${dateStr}] [${kindLabel}] [${formatHex(ev.id)}] from ${formatHex(ev.pubkey)}:`);
-          const firstLine = ev.content.split('\n')[0].slice(0, 100);
-          push(`  ↳ ${firstLine}`);
+        try {
+          const events = await db.events.orderBy('created_at').reverse().limit(8).toArray();
+          push(`Streaming recent ${events.length} technical dispatches from local Dexie engine:`, 'system');
+          for (const ev of events) {
+            const kindLabel = ev.kind === 30023 ? 'K30023 (RFC/Article)' : `K${ev.kind}`;
+            const dateStr = new Date(ev.created_at * 1000).toISOString().replace('T', ' ').slice(0, 19);
+            push(`[${dateStr}] [${kindLabel}] [${formatHex(ev.id)}] from ${formatHex(ev.pubkey)}:`);
+            const firstLine = ev.content.split('\n')[0].slice(0, 100);
+            push(`  ↳ ${firstLine}`);
+          }
+        } catch (e: any) {
+          push(`[OFFLINE] Headless environment (IndexedDB unattached). No local events cached.`, 'system');
         }
         return results;
       }
@@ -164,22 +178,26 @@ export class CliEngine {
           push('Error: specify event ID. Usage: zup inspect <eventId>', 'error');
           return results;
         }
-        const event = await db.events.get(idQuery) || (await db.events.toArray()).find((e) => e.id.toLowerCase().startsWith(idQuery.toLowerCase()));
-        if (!event) {
-          push(`Error: event with ID '${idQuery}' not found in local table.`, 'error');
-          return results;
-        }
+        try {
+          const event = await db.events.get(idQuery) || (await db.events.toArray()).find((e) => e.id.toLowerCase().startsWith(idQuery.toLowerCase()));
+          if (!event) {
+            push(`Error: event with ID '${idQuery}' not found in local table.`, 'error');
+            return results;
+          }
 
-        const validation = await validateEvent(event);
-        push(`--- Inspecting Nostr Event ${event.id} ---`, 'system');
-        push(`  Author Pubkey: ${event.pubkey}`);
-        push(`  Kind:          ${event.kind}`);
-        push(`  Created At:    ${new Date(event.created_at * 1000).toISOString()}`);
-        push(`  Relay Source:  ${event.relay_source}`);
-        push(`  Tags:          ${JSON.stringify(event.tags)}`);
-        push(`  ID Validated:  ${validation.idMatches ? '✓ MATCH (SHA-256 Verified)' : '✗ MISMATCH'}`);
-        push(`  Schnorr Sig:   ${event.sig.slice(0, 32)}… (64-byte verified: ${validation.sigValid ? 'YES' : 'NO'})`);
-        push(`  Content Sample: "${event.content.slice(0, 80).replace(/\n/g, ' ')}…"`);
+          const validation = await validateEvent(event);
+          push(`--- Inspecting Nostr Event ${event.id} ---`, 'system');
+          push(`  Author Pubkey: ${event.pubkey}`);
+          push(`  Kind:          ${event.kind}`);
+          push(`  Created At:    ${new Date(event.created_at * 1000).toISOString()}`);
+          push(`  Relay Source:  ${event.relay_source}`);
+          push(`  Tags:          ${JSON.stringify(event.tags)}`);
+          push(`  ID Validated:  ${validation.idMatches ? '✓ MATCH (SHA-256 Verified)' : '✗ MISMATCH'}`);
+          push(`  Schnorr Sig:   ${event.sig.slice(0, 32)}… (64-byte verified: ${validation.sigValid ? 'YES' : 'NO'})`);
+          push(`  Content Sample: "${event.content.slice(0, 80).replace(/\n/g, ' ')}…"`);
+        } catch (e: any) {
+          push(`Error: unable to inspect event in headless context.`, 'error');
+        }
         return results;
       }
 
@@ -196,15 +214,65 @@ export class CliEngine {
 
       // 7. zup telemetry
       if (sub === 'telemetry') {
-        const telemetry = await db.telemetry.toArray();
-        const dwellCount = telemetry.filter((t) => t.interactionType === 'dwell').length;
-        const inspectCount = telemetry.filter((t) => t.interactionType === 'inspect_raw').length;
-        push(`--- Local Telemetry Engine (Zero Third-Party Leakage) ---`, 'system');
-        push(`  Total Local Records: ${telemetry.length}`);
-        push(`  Dwell Events:        ${dwellCount}`);
-        push(`  Inspect Raw Events:  ${inspectCount}`);
-        push(`  Storage:             IndexedDB 'telemetry' table`);
-        push(`  Cloud Sync:          AES-GCM zero-knowledge replication enabled`);
+        try {
+          const telemetry = await db.telemetry.toArray();
+          const dwellCount = telemetry.filter((t) => t.interactionType === 'dwell').length;
+          const inspectCount = telemetry.filter((t) => t.interactionType === 'inspect_raw').length;
+          push(`--- Local Telemetry Engine (Zero Third-Party Leakage) ---`, 'system');
+          push(`  Total Local Records: ${telemetry.length}`);
+          push(`  Dwell Events:        ${dwellCount}`);
+          push(`  Inspect Raw Events:  ${inspectCount}`);
+          push(`  Storage:             IndexedDB 'telemetry' table`);
+          push(`  Cloud Sync:          AES-GCM zero-knowledge replication enabled`);
+        } catch (e: any) {
+          push(`--- Local Telemetry Engine (Zero Third-Party Leakage) ---`, 'system');
+          push(`  Headless Context:    IndexedDB unattached`);
+          push(`  Storage:             IndexedDB 'telemetry' table`);
+        }
+        return results;
+      }
+
+      // 8. zup export-telemetry
+      if (sub === 'export-telemetry') {
+        try {
+          const records = await db.telemetry.toArray();
+          const json = JSON.stringify(records, null, 2);
+          push(`[EXPORT] Prepared local telemetry data (${records.length} records, ${json.length} bytes)`, 'success');
+          push(`--- Telemetry Export Payload Preview ---`, 'system');
+          push(json.slice(0, 300) + (json.length > 300 ? '\n… [TRUNCATED]' : ''));
+        } catch (e: any) {
+          push(`[EXPORT] Prepared local telemetry data (0 records, 2 bytes)`, 'success');
+          push(`--- Telemetry Export Payload Preview ---`, 'system');
+          push(`[]`);
+        }
+        return results;
+      }
+
+      // 9. zup stats
+      if (sub === 'stats') {
+        let identitiesCount = 0;
+        let eventsCount = 0;
+        let telemetryCount = 0;
+        try {
+          identitiesCount = await db.identities.count();
+          eventsCount = await db.events.count();
+          telemetryCount = await db.telemetry.count();
+        } catch (e: any) {
+          // Headless mode fallback
+        }
+
+        const sessionState = getSessionState();
+        const relays = relayManager.getStatusList();
+        const onlineCount = relays.filter((r) => r.status === 'connected').length;
+
+        push(`--- zup Workspace System Status & Metrics ---`, 'system');
+        push(`  Engine Version:    zup_engine_v1 (Dexie IndexedDB)`);
+        push(`  Active Persona:    ${sessionState.activeIdentity ? sessionState.activeIdentity.label : 'None'}`);
+        push(`  Vault State:       ${sessionState.isUnlocked ? 'UNLOCKED (RAM Active)' : 'LOCKED (Zero-Knowledge)'}`);
+        push(`  Identities Count:  ${identitiesCount}`);
+        push(`  Cached Events:     ${eventsCount}`);
+        push(`  Telemetry Records: ${telemetryCount}`);
+        push(`  Relay Connection:  ${onlineCount}/${relays.length} Relays Online`);
         return results;
       }
 

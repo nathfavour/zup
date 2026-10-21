@@ -36,7 +36,8 @@ import {
   Radio,
   Key,
   Terminal,
-  User
+  User,
+  Cloud
 } from 'lucide-react';
 
 type TabType = 'feed' | 'new' | 'profile' | 'settings' | 'cli';
@@ -148,8 +149,18 @@ export default function Home() {
             <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-pink-500 shadow-[0_0_6px_rgba(236,72,153,0.8)]" />
           </button>
 
-          {/* Active Identity Avatar OR 'Connect' Trigger */}
-          {session.activeIdentity ? (
+          {/* Topbar Sync Action Button */}
+          <button
+            onClick={() => setIsConnectDrawerOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[14px] bg-pink-500 hover:bg-pink-400 text-black text-xs font-bold font-mono transition-all shadow-[0_0_12px_rgba(236,72,153,0.3)] active:scale-95 cursor-pointer"
+            title="Sync data or manage identity authentication"
+          >
+            <Cloud size={13} className="stroke-[2.5]" />
+            <span>Sync</span>
+          </button>
+
+          {/* Active Identity Avatar */}
+          {session.activeIdentity && (
             <button
               onClick={handleGoToMyProfile}
               title={`Logged in as ${session.activeIdentity.label}. Click to view Profile`}
@@ -158,15 +169,6 @@ export default function Home() {
               <div className="w-full h-full rounded-full bg-[#161412] flex items-center justify-center text-white font-bold text-xs font-mono">
                 {session.activeIdentity.label.slice(0, 2).toUpperCase()}
               </div>
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsConnectDrawerOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[14px] bg-pink-500 hover:bg-pink-400 text-black text-xs font-bold font-mono transition-all shadow-[0_0_12px_rgba(236,72,153,0.3)] active:scale-95 cursor-pointer"
-              title="Connect or create Nostr identity"
-            >
-              <Key size={13} className="stroke-[2.5]" />
-              <span>Connect</span>
             </button>
           )}
         </div>

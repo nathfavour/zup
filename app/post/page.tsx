@@ -22,6 +22,7 @@ import {
   Lock,
   Unlock,
   ShieldCheck,
+  Cloud,
   Image as ImageIcon
 } from 'lucide-react';
 
@@ -189,27 +190,29 @@ function PostIntentComposer() {
             </div>
           </div>
 
-          {session.activeIdentity ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#161412] border border-white/20 rounded-[14px] text-xs font-mono">
-              <span className="text-white/50">Posting as:</span>
-              <span className="text-emerald-400 font-bold">{session.activeIdentity.label}</span>
-              <button
-                onClick={() => lockVault()}
-                className="text-white/40 hover:text-white transition-colors ml-1 cursor-pointer"
-                title="Lock Vault"
-              >
-                {session.isUnlocked ? <Unlock size={12} className="text-emerald-400" /> : <Lock size={12} className="text-amber-400" />}
-              </button>
-            </div>
-          ) : (
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setIsConnectDrawerOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-[14px] bg-pink-500 hover:bg-pink-400 text-black text-xs font-bold font-mono transition-all cursor-pointer"
             >
-              <Key size={13} />
-              <span>Connect Vault Identity</span>
+              <Cloud size={13} />
+              <span>Sync / Auth</span>
             </button>
-          )}
+
+            {session.activeIdentity && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-[#161412] border border-white/20 rounded-[14px] text-xs font-mono">
+                <span className="text-white/50">Posting as:</span>
+                <span className="text-emerald-400 font-bold">{session.activeIdentity.label}</span>
+                <button
+                  onClick={() => lockVault()}
+                  className="text-white/40 hover:text-white transition-colors ml-1 cursor-pointer"
+                  title="Lock Vault"
+                >
+                  {session.isUnlocked ? <Unlock size={12} className="text-emerald-400" /> : <Lock size={12} className="text-amber-400" />}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Intent Form Card */}

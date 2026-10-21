@@ -1,5 +1,20 @@
 // Core types for zup isomorphic engine
 
+export type AuthProviderType = "import" | "google" | "github" | "passkey";
+export type EncryptionManagementMode = "managed" | "self-managed";
+
+export interface AuthProfileInfo {
+  provider: AuthProviderType;
+  providerId?: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+  encryptionMode: EncryptionManagementMode;
+  passphraseSet: boolean;
+  passkeyRegistered: boolean;
+  linkedAt: number;
+}
+
 export interface KeychainSlot {
   id: string; // UUID v4
   type: "password" | "passkey";

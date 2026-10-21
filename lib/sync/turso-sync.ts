@@ -29,7 +29,21 @@ export class TursoSyncEngine {
     unsyncedSlots: number;
     unsyncedTelemetry: number;
     zkSafe: boolean;
+    authProvider?: string;
+    encryptionManaged?: boolean;
   }> {
+    const authProfileStr = typeof window !== 'undefined' ? localStorage.getItem('zup:auth_profile') : null;
+    let authProvider = 'import';
+    let encryptionManaged = false;
+    if (authProfileStr) {
+      try {
+        const parsed = JSON.parse(authProfileStr);
+        authProvider = parsed.provider || 'import';
+        encryptionManaged = parsed.encryptionMode === 'managed';
+      } catch {
+        // fallback
+      }
+    }
     const identities = await db.identities.toArray();
     const slots = await db.keychain.toArray();
     const telemetry = await db.telemetry.toArray();
@@ -51,7 +65,9 @@ export class TursoSyncEngine {
       unsyncedIdentities,
       unsyncedSlots,
       unsyncedTelemetry,
-      zkSafe
+      zkSafe,
+      authProvider,
+      encryptionManaged
     };
   }
 

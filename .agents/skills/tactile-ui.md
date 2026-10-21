@@ -25,8 +25,8 @@ This skill defines the UI styling, typography, component layout, and keyboard in
 ---
 
 ## 3. Responsive Layout Architecture
-- **Desktop**: Persistent Left Sidebar (`w-60` to `w-64`) with direct access to Feed, New Dispatch, Settings, and `@zup/cli Shell`, plus quick action dispatch button.
-- **Mobile**: Tactile fixed **Bottom Navigation Bar** with key tabs and centralized highlighted `+` dispatch action button.
+- **Desktop**: Persistent Left Sidebar (`w-60` to `w-64`) with direct access to Feed, New Dispatch, Profile, and Settings, plus quick action dispatch button.
+- **Mobile**: Tactile fixed **Bottom Navigation Bar** with key tabs (Feed, New Dispatch, Profile, Settings) and centralized highlighted `+` dispatch action button.
 - **Drawers / Sidebars**: Cryptographic event inspector (`InspectRawSidebar`) and notifications open in dedicated right sidebar drawers keeping primary navigation accessible.
 
 ---
@@ -34,9 +34,8 @@ This skill defines the UI styling, typography, component layout, and keyboard in
 ## 4. Keyboard Short-cuts & Ergonomics
 - `Cmd+K` / `Ctrl+K`: Global Command Palette
 - `1`: Switch to Feeds
-- `2`: Switch to Vault & Identities / New
-- `3`: Switch to Profile / Relays
+- `2`: Switch to New Dispatch
+- `3`: Switch to Profile
 - `4`: Switch to Settings
-- `6`: Switch to `@zup/cli` Operator Terminal
 - `L`: Lock Vault (Immediate RAM zeroing)
 - `Esc`: Close active modal or drawer

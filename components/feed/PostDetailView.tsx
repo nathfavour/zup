@@ -6,6 +6,7 @@ import { db } from '@/lib/db';
 import { formatHex, extractEventTags, generateLocalIdenticon } from '@/lib/core/nostr';
 import { hexToNpub } from '@/lib/core/crypto';
 import { ClickToLoadMedia } from './ClickToLoadMedia';
+import { FormattedContent } from './FormattedContent';
 import {
   ArrowLeft,
   MessageCircle,
@@ -182,9 +183,9 @@ export function PostDetailView({
           </div>
         </div>
 
-        {/* Post Text Content */}
-        <div className="text-base text-white leading-relaxed whitespace-pre-wrap break-words font-normal">
-          {textContent}
+        {/* Post Text Content / Formatted Markdown RFC Reader */}
+        <div className="py-1">
+          <FormattedContent content={textContent} kind={post.kind} />
         </div>
 
         {/* Hashtags */}

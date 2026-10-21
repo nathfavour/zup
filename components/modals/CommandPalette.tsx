@@ -3,22 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import {
   Search,
-  Terminal,
   Key,
   Radio,
   Activity,
   Cloud,
   Layers,
   Send,
-  Lock,
-  ArrowRight,
-  Command
+  Lock
 } from 'lucide-react';
 
 interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
-  onNavigate: (tab: 'feed' | 'vault' | 'relays' | 'telemetry' | 'sync' | 'cli') => void;
+  onNavigate: (tab: 'feed' | 'vault' | 'relays' | 'telemetry' | 'sync') => void;
   onCompose: () => void;
   onLockVault: () => void;
   onSync: () => void;
@@ -98,16 +95,6 @@ export function CommandPalette({
       icon: <Cloud size={15} />,
       action: () => {
         onNavigate('sync');
-        onClose();
-      }
-    },
-    {
-      id: 'cli',
-      title: '@zup/cli Interactive Shell',
-      shortcut: '6',
-      icon: <Terminal size={15} />,
-      action: () => {
-        onNavigate('cli');
         onClose();
       }
     },

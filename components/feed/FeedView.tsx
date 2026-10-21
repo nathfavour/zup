@@ -617,6 +617,11 @@ export function FeedView({
                       <span className="font-bold text-xs sm:text-sm text-white truncate group-hover:text-pink-300 transition-colors">
                         {authorName}
                       </span>
+                      {profile?.nip05 && (
+                        <span title={`Verified NIP-05: ${profile.nip05}`} className="p-0.5 rounded-full bg-emerald-500/20 text-emerald-400 shrink-0">
+                          <Check size={10} className="stroke-[3]" />
+                        </span>
+                      )}
                       <span className="text-[11px] font-mono text-white/50 truncate">
                         {handle}
                       </span>

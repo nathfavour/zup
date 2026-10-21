@@ -15,11 +15,13 @@ Autonomous agents working on specific subsystems MUST read and apply the domain 
 | **UI Design System** | `.agents/skills/tactile-ui.md` | OpenBricks 4.0 dark tactile theme, `#161412` shell, `#000000` cards, pure white typography |
 | **Local Telemetry** | `.agents/skills/telemetry-engine.md` | Local-first Dexie telemetry, dwell tracking (>75% visibility >800ms), zero third-party leak |
 | **Cloud Sync** | `.agents/skills/turso-sync.md` | LibSQL/Turso edge replication, encrypted blob sync, Last-Write-Wins (LWW) conflict resolution |
-| **Companion CLI** | `.agents/skills/cli-shell.md` | `@zup/cli` terminal emulator, IPC execution against local IndexedDB, command reference |
+| **Companion CLI Package** | `.agents/skills/cli-shell.md` | `@zup/cli` npm package specification located in `packages/cli` |
 
 ---
 
 ## 2. Core Architectural Directives & Invariants
+
+> ⚠️ **STRICT DIRECTIVE ON `@zup/cli`**: `@zup/cli` is a standalone command-line package located under `packages/cli` that will be published to npm later. **DO NOT** add a literal CLI UI, terminal emulator page, `/cli` route, CLI tab, or bottom/sidebar navbar CLI buttons to the Next.js web application (`getzup.vercel.app`). Agents MUST NOT re-add a CLI UI or terminal emulator view to the web app interface under any circumstances.
 
 1. **Zero-Knowledge Root Boundary**:
    - `nsec` (private key) and the Master Encryption Key (MEK) **MUST NEVER** be logged, sent over any network socket, stored in `localStorage`, or dumped to disk in unencrypted format.
@@ -61,7 +63,6 @@ Autonomous agents working on specific subsystems MUST read and apply the domain 
 │   ├── layout.tsx             # Root layout shell
 │   └── page.tsx               # Main workspace entry point (Left Sidebar + Viewport + Drawer)
 ├── components/
-│   ├── cli/                   # Companion @zup/cli terminal emulator (CliView.tsx)
 │   ├── feed/                  # Technical feeds, kind 1 & 30023 dispatches, click-to-load media
 │   ├── vault/                 # Vault manager, Argon2id KEK derivation, identity switcher
 │   ├── relays/                # Relay pool status, latency monitor, manual connector

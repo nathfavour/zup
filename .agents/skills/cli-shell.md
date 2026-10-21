@@ -1,13 +1,15 @@
-# Skill: Companion Terminal Shell (`cli-shell`)
+# Skill: Standalone Command-Line Package (`cli-shell`)
 
-This skill defines the in-browser `@zup/cli` terminal emulator and command specification for developer operators.
+This skill defines the command specification for the standalone `@zup/cli` package located under `packages/cli` which will be published on npm.
+
+> ⚠️ **IMPORTANT**: `@zup/cli` is a standalone CLI package (`packages/cli`). It is NOT an in-app web UI component, route, or terminal emulator page on the web app. DO NOT add a CLI UI or CLI tab button to the web application.
 
 ---
 
-## 1. Terminal Interface Directives
-- Rendered using tactile font-mono OpenBricks 4.0 styling (`#000000` pitch black surface, emerald `#10B981` prompt `operator@zup:~$`).
-- Directly invokes `CliEngine.execute(command)` executing headless protocol primitives against local IndexedDB tables.
-- Terminal line history navigation via Up/Down arrow keys.
+## 1. Package Architecture
+- Published as `@zup/cli` on npm.
+- Built using Node/Bun executable binaries under `packages/cli/src`.
+- Communicates via local IPC sockets and daemon processes.
 
 ---
 

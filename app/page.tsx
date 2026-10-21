@@ -17,7 +17,6 @@ import { FeedView } from '@/components/feed/FeedView';
 import { NewDispatchView } from '@/components/feed/NewDispatchView';
 import { ProfileView } from '@/components/profile/ProfileView';
 import { SettingsView } from '@/components/settings/SettingsView';
-import { CliView } from '@/components/cli/CliView';
 
 // Modals / Drawers
 import { InspectRawSidebar } from '@/components/modals/InspectRawSidebar';
@@ -35,11 +34,10 @@ import {
   Unlock,
   Radio,
   Key,
-  Terminal,
   User
 } from 'lucide-react';
 
-type TabType = 'feed' | 'new' | 'profile' | 'settings' | 'cli';
+type TabType = 'feed' | 'new' | 'profile' | 'settings';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('feed');
@@ -88,7 +86,6 @@ export default function Home() {
       if (e.key === '2' || e.key.toLowerCase() === 'n') setActiveTab('new');
       if (e.key === '3') setActiveTab('profile');
       if (e.key === '4') setActiveTab('settings');
-      if (e.key === '6' || e.key.toLowerCase() === 'c') setActiveTab('cli');
       if (e.key.toLowerCase() === 'l') {
         e.preventDefault();
         lockVault();
@@ -186,7 +183,7 @@ export default function Home() {
               <span>New Dispatch</span>
             </button>
 
-            {/* Navigation Links: Feed, New, Profile, Settings, CLI */}
+            {/* Navigation Links: Feed, New, Profile, Settings */}
             <nav className="space-y-1.5 pt-2">
               <button
                 onClick={() => setActiveTab('feed')}
@@ -222,18 +219,6 @@ export default function Home() {
               >
                 <User size={17} />
                 <span>Profile</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('cli')}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-[16px] text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'cli'
-                    ? 'bg-[#000000] text-indigo-400 border border-indigo-500 shadow-md'
-                    : 'text-white/70 hover:text-white hover:bg-white/[0.04] border border-transparent'
-                }`}
-              >
-                <Terminal size={17} />
-                <span>@zup/cli Shell</span>
               </button>
 
               <button
@@ -294,7 +279,7 @@ export default function Home() {
             )}
 
             <div className="text-[11px] font-mono text-white/40 text-center">
-              Shortcuts: <kbd className="text-white/60">Cmd+K</kbd> · <kbd className="text-white/60">6</kbd> CLI
+              Shortcuts: <kbd className="text-white/60">Cmd+K</kbd>
             </div>
           </div>
         </aside>
@@ -327,10 +312,6 @@ export default function Home() {
             />
           )}
 
-          {activeTab === 'cli' && (
-            <CliView />
-          )}
-
           {activeTab === 'settings' && (
             <SettingsView
               onBack={() => setActiveTab('profile')}
@@ -340,7 +321,7 @@ export default function Home() {
       </div>
 
       {/* Mobile Fixed Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t-2 border-white/20 rounded-t-[24px] px-6 py-2 flex items-center justify-between shadow-2xl">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t-2 border-white/20 rounded-t-[24px] px-8 py-2 flex items-center justify-between shadow-2xl">
         {/* Feed Tab */}
         <button
           onClick={() => setActiveTab('feed')}
@@ -350,17 +331,6 @@ export default function Home() {
         >
           <Layers size={18} />
           <span className="text-[10px] font-mono">Feed</span>
-        </button>
-
-        {/* CLI Tab */}
-        <button
-          onClick={() => setActiveTab('cli')}
-          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
-            activeTab === 'cli' ? 'text-indigo-400 font-bold' : 'text-white/60 hover:text-white'
-          }`}
-        >
-          <Terminal size={18} />
-          <span className="text-[10px] font-mono">CLI</span>
         </button>
 
         {/* Centralized Plus Button for New Dispatch */}

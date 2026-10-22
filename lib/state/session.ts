@@ -1,4 +1,4 @@
-import { EncryptedIdentity, KeychainSlot } from '../core/types';
+import { AuthProfileInfo, AuthProviderType, EncryptionManagementMode, EncryptedIdentity, KeychainSlot } from '../core/types';
 import { db } from '../db';
 import {
   deriveKeyFromPassword,
@@ -28,6 +28,7 @@ export interface SessionState {
   identities: EncryptedIdentity[];
   keychainSlots: KeychainSlot[];
   autoLockCountdownSec: number;
+  authProfile: AuthProfileInfo | null;
 }
 
 type SessionListener = (state: SessionState) => void;
@@ -60,6 +61,27 @@ export function getActivePubkey(): string | null {
   return localStorage.getItem('zup:active_pubkey');
 }
 
+export function getAuthProfile(): AuthProfileInfo | null {
+  if (typeof window === 'undefined') return null;
+  const stored = localStorage.getItem('zup:auth_profile');
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as AuthProfileInfo;
+  } catch {
+    return null;
+  }
+}
+
+export function saveAuthProfile(profile: AuthProfileInfo | null): void {
+  if (typeof window === 'undefined') return;
+  if (!profile) {
+    localStorage.removeItem('zup:auth_profile');
+  } else {
+    localStorage.setItem('zup:auth_profile', JSON.stringify(profile));
+  }
+  notify();
+}
+
 export function getSessionState(): SessionState {
   const activePubkey = getActivePubkey();
   const activeIdentity = activePubkey
@@ -72,7 +94,8 @@ export function getSessionState(): SessionState {
     activeIdentity,
     identities: cachedIdentities,
     keychainSlots: cachedSlots,
-    autoLockCountdownSec: volatileMasterKey ? 600 : 0
+    autoLockCountdownSec: volatileMasterKey ? 600 : 0,
+    authProfile: getAuthProfile()
   };
 }
 

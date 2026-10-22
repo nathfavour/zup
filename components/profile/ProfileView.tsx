@@ -254,6 +254,12 @@ export function ProfileView({
               <p className="text-xs font-mono text-white/50 truncate">
                 {handleStr}
               </p>
+              {profile?.nip05 && (
+                <div className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono font-bold text-emerald-400">
+                  <Check size={11} className="stroke-[3]" />
+                  <span>NIP-05 Verified</span>
+                </div>
+              )}
             </div>
           </div>
 

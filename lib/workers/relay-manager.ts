@@ -207,6 +207,9 @@ class RelayManager {
           picture: metadata.picture || generateLocalIdenticon(raw.pubkey),
           nip05: metadata.nip05,
           about: metadata.about,
+          website: metadata.website,
+          banner: metadata.banner,
+          lud16: metadata.lud16 || metadata.lud06,
           updated_at: raw.created_at || Math.floor(Date.now() / 1000),
           cached_at: Date.now()
         };

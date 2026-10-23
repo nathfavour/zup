@@ -26,7 +26,9 @@ import {
   ArrowLeft,
   PlusCircle,
   Trash2,
-  Code2
+  Code2,
+  Globe,
+  ExternalLink
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -177,9 +179,16 @@ export function ProfileView({
   const activePubkey = effectivePubkey || session.activePubkey || '';
   const npub = hexToNpub(activePubkey);
   const formattedNpub = formatHex(npub, 12, 6);
+  const fallbackIdenticon = generateLocalIdenticon(activePubkey);
+
   const displayName = profile?.display_name || profile?.name || formattedNpub;
-  const handleStr = profile?.nip05 ? `@${profile.nip05}` : `@${formatHex(npub, 10, 4)}`;
-  const avatarUrl = profile?.picture || generateLocalIdenticon(activePubkey);
+  const handleStr = profile?.nip05
+    ? `@${profile.nip05}`
+    : profile?.name
+    ? `@${profile.name}`
+    : `@${formatHex(npub, 10, 4)}`;
+  const avatarUrl = profile?.picture || fallbackIdenticon;
+  const bannerUrl = profile?.banner;
 
   const handleCopyNpub = () => {
     if (!npub) return;
@@ -229,131 +238,183 @@ export function ProfileView({
       )}
 
       {/* Profile Header Card */}
-      <div className="p-6 bg-[#000000] border border-white/20 rounded-[24px] space-y-5 shadow-xl">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5 min-w-0">
-            {/* Avatar Circle */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+      <div className="bg-[#000000] border border-white/20 rounded-[24px] overflow-hidden shadow-xl">
+        {/* Banner Area */}
+        <div className="h-32 sm:h-40 relative bg-[#161412] border-b border-white/10 overflow-hidden">
+          {bannerUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={avatarUrl}
-              alt={displayName}
+              src={bannerUrl}
+              alt="Profile banner"
               referrerPolicy="no-referrer"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = generateLocalIdenticon(activePubkey);
+                (e.target as HTMLImageElement).style.display = 'none';
               }}
-              className="w-14 h-14 rounded-full border-2 border-white/20 bg-[#161412] object-cover shrink-0 shadow-lg"
+              className="w-full h-full object-cover"
             />
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-white tracking-tight truncate">
-                  {displayName}
-                </h2>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-r from-pink-900/30 via-purple-900/20 to-indigo-900/30 flex items-center justify-center">
+              <div className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+                zup nostr identity
               </div>
-              <p className="text-xs font-mono text-white/50 truncate">
-                {handleStr}
-              </p>
-              {profile?.nip05 && (
-                <div className="inline-flex items-center gap-1 px-2 py-0.5 mt-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono font-bold text-emerald-400">
-                  <Check size={11} className="stroke-[3]" />
-                  <span>NIP-05 Verified</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Actions: Settings if own profile */}
-          {isOwnProfile && (
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={onOpenSettings}
-                className="flex items-center gap-2 px-3.5 py-2 bg-[#161412] hover:bg-[#1E1C1A] border border-white/20 hover:border-pink-500 rounded-[14px] text-xs font-bold font-mono text-white transition-all shadow-md cursor-pointer"
-              >
-                <Settings size={14} className="text-pink-400" />
-                <span>Settings</span>
-              </button>
             </div>
           )}
         </div>
 
-        {/* Bio / About if present */}
-        {profile?.about && (
-          <p className="text-xs text-white/80 leading-relaxed font-sans pt-1">
-            {profile.about}
-          </p>
-        )}
+        <div className="p-6 space-y-5 -mt-12 sm:-mt-14 relative z-10">
+          <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
+            <div className="flex items-end gap-4 min-w-0">
+              {/* Avatar Circle */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = fallbackIdenticon;
+                }}
+                className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-[#000000] bg-[#161412] object-cover shrink-0 shadow-2xl"
+              />
 
-        {/* Public Key (npub) Display Bar */}
-        <div className="p-3 bg-[#161412] border border-white/10 rounded-[16px] flex items-center justify-between gap-3 text-xs font-mono">
-          <div className="min-w-0 flex items-center gap-2">
-            <span className="text-pink-400 font-bold shrink-0">npub:</span>
-            <span className="text-white/90 truncate select-all">{npub}</span>
+              <div className="min-w-0 pb-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-white tracking-tight truncate">
+                    {displayName}
+                  </h2>
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                </div>
+                <p className="text-xs font-mono text-white/60 truncate">
+                  {handleStr}
+                </p>
+              </div>
+            </div>
+
+            {/* Actions: Settings if own profile */}
+            {isOwnProfile && (
+              <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                <button
+                  onClick={onOpenSettings}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#161412] hover:bg-[#1E1C1A] border border-white/20 hover:border-pink-500 rounded-[14px] text-xs font-bold font-mono text-white transition-all shadow-md cursor-pointer"
+                >
+                  <Settings size={14} className="text-pink-400" />
+                  <span>Settings</span>
+                </button>
+              </div>
+            )}
           </div>
-          <button
-            onClick={handleCopyNpub}
-            title="Copy Public Key (npub)"
-            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white shrink-0 transition-colors cursor-pointer"
-          >
-            {copiedKey ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-          </button>
-        </div>
 
-        {/* Persona Switcher (If own profile) */}
-        {isOwnProfile && session.identities.length > 0 && (
-          <div className="space-y-2 pt-2 border-t border-white/10">
-            <div className="flex items-center justify-between text-xs font-mono text-white/50">
-              <span>Switch Active Persona:</span>
-              <button
-                onClick={onConnect}
-                className="text-pink-400 hover:underline flex items-center gap-1 cursor-pointer"
+          {/* Metadata Badges: NIP-05, Website, Lightning lud16 */}
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-mono">
+            {profile?.nip05 && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-bold text-emerald-400">
+                <Check size={12} className="stroke-[3]" />
+                <span>NIP-05: {profile.nip05}</span>
+              </div>
+            )}
+
+            {profile?.lud16 && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-[11px] font-bold text-amber-400">
+                <Zap size={12} className="fill-amber-400" />
+                <span>{profile.lud16}</span>
+              </div>
+            )}
+
+            {profile?.website && (
+              <a
+                href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 hover:border-sky-400 text-[11px] font-bold text-sky-400 transition-colors"
               >
-                <PlusCircle size={12} />
-                <span>Add / Import</span>
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {session.identities.map((id) => {
-                const isSelected = id.pubkey === session.activePubkey;
-                const idNpub = id.npub || hexToNpub(id.pubkey);
-                return (
-                  <button
-                    key={id.pubkey}
-                    onClick={() => setActiveIdentity(id.pubkey)}
-                    className={`p-3 rounded-[16px] text-left transition-all flex items-center justify-between cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#161412] border-2 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                        : 'bg-[#000000] border border-white/15 hover:border-white/30 text-white/70'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-white truncate">{id.label}</div>
-                      <div className="text-[10px] font-mono text-white/40 truncate">
-                        {formatHex(idNpub, 10, 4)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isSelected && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
-                          ACTIVE
-                        </span>
-                      )}
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => handleDeleteIdentity(e, id.pubkey, id.label)}
-                        title="Delete Identity"
-                        className="p-1 rounded bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 opacity-80 hover:opacity-100 transition-all cursor-pointer"
-                      >
-                        <Trash2 size={12} />
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+                <Globe size={12} />
+                <span>{profile.website.replace(/^https?:\/\//, '')}</span>
+                <ExternalLink size={10} />
+              </a>
+            )}
           </div>
-        )}
+
+          {/* Bio / About if present */}
+          {profile?.about ? (
+            <p className="text-xs sm:text-sm text-white/90 leading-relaxed font-sans pt-1 whitespace-pre-line">
+              {profile.about}
+            </p>
+          ) : (
+            <p className="text-xs text-white/40 italic font-sans pt-1">
+              No profile bio provided on connected relays.
+            </p>
+          )}
+
+          {/* Public Key (npub) Display Bar */}
+          <div className="p-3 bg-[#161412] border border-white/10 rounded-[16px] flex items-center justify-between gap-3 text-xs font-mono">
+            <div className="min-w-0 flex items-center gap-2">
+              <span className="text-pink-400 font-bold shrink-0">npub:</span>
+              <span className="text-white/90 truncate select-all">{npub}</span>
+            </div>
+            <button
+              onClick={handleCopyNpub}
+              title="Copy Public Key (npub)"
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white shrink-0 transition-colors cursor-pointer"
+            >
+              {copiedKey ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+            </button>
+          </div>
+
+          {/* Persona Switcher (If own profile) */}
+          {isOwnProfile && session.identities.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-white/10">
+              <div className="flex items-center justify-between text-xs font-mono text-white/50">
+                <span>Switch Active Persona:</span>
+                <button
+                  onClick={onConnect}
+                  className="text-pink-400 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <PlusCircle size={12} />
+                  <span>Add / Import</span>
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {session.identities.map((id) => {
+                  const isSelected = id.pubkey === session.activePubkey;
+                  const idNpub = id.npub || hexToNpub(id.pubkey);
+                  return (
+                    <button
+                      key={id.pubkey}
+                      onClick={() => setActiveIdentity(id.pubkey)}
+                      className={`p-3 rounded-[16px] text-left transition-all flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#161412] border-2 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                          : 'bg-[#000000] border border-white/15 hover:border-white/30 text-white/70'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-white truncate">{id.label}</div>
+                        <div className="text-[10px] font-mono text-white/40 truncate">
+                          {formatHex(idNpub, 10, 4)}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isSelected && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                            ACTIVE
+                          </span>
+                        )}
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => handleDeleteIdentity(e, id.pubkey, id.label)}
+                          title="Delete Identity"
+                          className="p-1 rounded bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 opacity-80 hover:opacity-100 transition-all cursor-pointer"
+                        >
+                          <Trash2 size={12} />
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Activity Tabs Bar: Posts, Likes, Comments, Reposts, Zaps */}

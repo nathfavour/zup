@@ -77,6 +77,9 @@ export interface ProfileMetadata {
   picture?: string;
   nip05?: string;
   about?: string;
+  website?: string;
+  banner?: string;
+  lud16?: string;
   updated_at: number;
   cached_at: number;
 }

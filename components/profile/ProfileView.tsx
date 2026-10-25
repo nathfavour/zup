@@ -10,7 +10,8 @@ import {
 } from '@/lib/state/session';
 import { db } from '@/lib/db';
 import { LocalEvent, ProfileMetadata } from '@/lib/core/types';
-import { formatHex, generateLocalIdenticon } from '@/lib/core/nostr';
+import { formatHex, generateLocalIdenticon, getProfileDisplayName, getProfileHandle } from '@/lib/core/nostr';
+import { fetchNostrProfile } from '@/lib/core/nostr/fetcher';
 import { hexToNpub } from '@/lib/core/crypto';
 import { relayManager } from '@/lib/workers/relay-manager';
 import {
@@ -28,7 +29,8 @@ import {
   Trash2,
   Code2,
   Globe,
-  ExternalLink
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -56,6 +58,7 @@ export function ProfileView({
   // Profile metadata
   const [profile, setProfile] = useState<ProfileMetadata | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Profile activity events
   const [userEvents, setUserEvents] = useState<LocalEvent[]>([]);
@@ -83,17 +86,14 @@ export function ProfileView({
       const prof = await db.profiles.get(effectivePubkey);
       if (prof) {
         setProfile(prof);
-      } else {
-        // Fallback profile if uncached
-        const npub = hexToNpub(effectivePubkey);
-        setProfile({
-          pubkey: effectivePubkey,
-          content: '{}',
-          name: formatHex(npub, 12, 6),
-          display_name: formatHex(npub, 12, 6),
-          picture: generateLocalIdenticon(effectivePubkey),
-          updated_at: Math.floor(Date.now() / 1000),
-          cached_at: Date.now()
+      }
+
+      // If missing or empty content stub, fetch directly from relays
+      if (!prof || prof.content === '{}') {
+        fetchNostrProfile(effectivePubkey).then((fetchedProf) => {
+          if (fetchedProf) {
+            setProfile(fetchedProf);
+          }
         });
       }
 
@@ -130,10 +130,34 @@ export function ProfileView({
 
     // Send REQ subscription to connected Nostr relays for author activity & profile
     relayManager.queryAuthorProfileAndActivity(effectivePubkey);
+    fetchNostrProfile(effectivePubkey).then((p) => {
+      if (p && active) setProfile(p);
+    });
 
     // Listen to real-time events streamed from relays
-    const unsubRelay = relayManager.onNewEvent(() => {
-      if (active) loadProfileData();
+    const unsubRelay = relayManager.onNewEvent((ev) => {
+      if (active) {
+        if (ev.kind === 0 && ev.pubkey === effectivePubkey) {
+          try {
+            const metadata = JSON.parse(ev.content);
+            setProfile({
+              pubkey: ev.pubkey,
+              content: ev.content,
+              name: metadata.name,
+              display_name: metadata.display_name || metadata.name,
+              picture: metadata.picture || generateLocalIdenticon(ev.pubkey),
+              nip05: metadata.nip05,
+              about: metadata.about,
+              website: metadata.website,
+              banner: metadata.banner,
+              lud16: metadata.lud16 || metadata.lud06,
+              updated_at: ev.created_at || Math.floor(Date.now() / 1000),
+              cached_at: Date.now()
+            });
+          } catch {}
+        }
+        loadProfileData();
+      }
     });
 
     const pollInterval = setInterval(() => {
@@ -178,17 +202,28 @@ export function ProfileView({
 
   const activePubkey = effectivePubkey || session.activePubkey || '';
   const npub = hexToNpub(activePubkey);
-  const formattedNpub = formatHex(npub, 12, 6);
   const fallbackIdenticon = generateLocalIdenticon(activePubkey);
 
-  const displayName = profile?.display_name || profile?.name || formattedNpub;
-  const handleStr = profile?.nip05
-    ? `@${profile.nip05}`
-    : profile?.name
-    ? `@${profile.name}`
-    : `@${formatHex(npub, 10, 4)}`;
+  // Derive persona label from local vault if available
+  const matchingPersona = session.identities.find((i) => i.pubkey === activePubkey);
+  const personaLabel = matchingPersona?.label;
+
+  const displayName = getProfileDisplayName(profile, activePubkey, personaLabel);
+  const handleStr = getProfileHandle(profile, activePubkey);
   const avatarUrl = profile?.picture || fallbackIdenticon;
   const bannerUrl = profile?.banner;
+
+  const handleRefreshFromRelays = async () => {
+    if (!activePubkey || isRefreshing) return;
+    setIsRefreshing(true);
+    relayManager.queryAuthorProfileAndActivity(activePubkey);
+    const refreshed = await fetchNostrProfile(activePubkey);
+    if (refreshed) {
+      setProfile(refreshed);
+    }
+    await loadProfileData();
+    setIsRefreshing(false);
+  };
 
   const handleCopyNpub = () => {
     if (!npub) return;
@@ -289,9 +324,19 @@ export function ProfileView({
               </div>
             </div>
 
-            {/* Actions: Settings if own profile */}
-            {isOwnProfile && (
-              <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+            {/* Actions: Refresh & Settings */}
+            <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+              <button
+                onClick={handleRefreshFromRelays}
+                disabled={isRefreshing}
+                title="Refresh Profile Metadata from Nostr Relays"
+                className="flex items-center gap-2 px-3.5 py-2 bg-[#161412] hover:bg-[#1E1C1A] border border-white/20 hover:border-emerald-500 rounded-[14px] text-xs font-bold font-mono text-white transition-all shadow-md cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={`text-emerald-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Fetching...' : 'Sync Nostr'}</span>
+              </button>
+
+              {isOwnProfile && (
                 <button
                   onClick={onOpenSettings}
                   className="flex items-center gap-2 px-4 py-2 bg-[#161412] hover:bg-[#1E1C1A] border border-white/20 hover:border-pink-500 rounded-[14px] text-xs font-bold font-mono text-white transition-all shadow-md cursor-pointer"
@@ -299,8 +344,8 @@ export function ProfileView({
                   <Settings size={14} className="text-pink-400" />
                   <span>Settings</span>
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Metadata Badges: NIP-05, Website, Lightning lud16 */}

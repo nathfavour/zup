@@ -214,6 +214,19 @@ class RelayManager {
           cached_at: Date.now()
         };
         await db.profiles.put(profile);
+
+        const localEv: LocalEvent = {
+          id: raw.id,
+          pubkey: raw.pubkey,
+          kind: 0,
+          created_at: raw.created_at || Math.floor(Date.now() / 1000),
+          tags: raw.tags || [],
+          content: raw.content,
+          sig: raw.sig || '',
+          first_seen_at: Date.now(),
+          relay_source: relayUrl
+        };
+        this.eventListeners.forEach((fn) => fn(localEv));
       } catch {}
       return;
     }
@@ -242,16 +255,14 @@ class RelayManager {
       const content = (raw.content || '').trim();
       if (content.length === 0) return;
 
-      // Check profile cache; if uncached, save deterministic avatar
+      // Check profile cache; if uncached, save deterministic avatar placeholder
       const existingProfile = await db.profiles.get(raw.pubkey);
       if (!existingProfile) {
         await db.profiles.put({
           pubkey: raw.pubkey,
           content: '{}',
-          name: raw.pubkey.slice(0, 8),
-          display_name: raw.pubkey.slice(0, 8),
           picture: generateLocalIdenticon(raw.pubkey),
-          updated_at: raw.created_at,
+          updated_at: raw.created_at || Math.floor(Date.now() / 1000),
           cached_at: Date.now()
         });
       }

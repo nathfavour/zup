@@ -1,5 +1,5 @@
-import { sha256Hex, schnorrSign, schnorrVerify } from '../crypto';
-import { LocalEvent } from '../types';
+import { sha256Hex, schnorrSign, schnorrVerify, hexToNpub } from '../crypto';
+import { LocalEvent, ProfileMetadata } from '../types';
 
 /**
  * Serializes a Nostr event canonically as per NIP-01:
@@ -180,6 +180,67 @@ export function generateLocalIdenticon(seed: string): string {
 export function formatHex(hex: string, front = 8, back = 6): string {
   if (!hex || hex.length <= front + back) return hex;
   return `${hex.slice(0, front)}…${hex.slice(-back)}`;
+}
+
+/**
+ * Checks if a string looks like a raw hex pubkey (64 chars hex or prefix) or bech32 npub string
+ */
+export function isRawAlphanumericIdentity(str?: string | null): boolean {
+  if (!str) return true;
+  const trimmed = str.trim();
+  if (trimmed.startsWith('npub1') || trimmed.startsWith('nsec1') || trimmed.startsWith('note1')) return true;
+  if (/^[0-9a-fA-F]{8,}$/.test(trimmed)) return true;
+  if (/^[0-9a-fA-F]{8}…[0-9a-fA-F]{4,}$/.test(trimmed)) return true;
+  return false;
+}
+
+/**
+ * Extracts a human-readable display name for a Nostr profile without falling back to hardcoded alphanumericals.
+ */
+export function getProfileDisplayName(
+  profile?: ProfileMetadata | null,
+  pubkey?: string | null,
+  fallbackLabel?: string | null
+): string {
+  if (profile) {
+    if (profile.display_name && profile.display_name.trim() && !isRawAlphanumericIdentity(profile.display_name)) {
+      return profile.display_name.trim();
+    }
+    if (profile.name && profile.name.trim() && !isRawAlphanumericIdentity(profile.name)) {
+      return profile.name.trim();
+    }
+  }
+
+  if (fallbackLabel && fallbackLabel.trim() && !isRawAlphanumericIdentity(fallbackLabel)) {
+    return fallbackLabel.trim();
+  }
+
+  if (pubkey) {
+    const npub = hexToNpub(pubkey);
+    return `Nostr User (${formatHex(npub, 10, 4)})`;
+  }
+
+  return 'Anonymous Nostr User';
+}
+
+/**
+ * Extracts a human-readable handle for a Nostr profile.
+ */
+export function getProfileHandle(
+  profile?: ProfileMetadata | null,
+  pubkey?: string | null
+): string {
+  if (profile?.nip05 && profile.nip05.trim()) {
+    return `@${profile.nip05.trim()}`;
+  }
+  if (profile?.name && profile.name.trim() && !isRawAlphanumericIdentity(profile.name)) {
+    return `@${profile.name.trim()}`;
+  }
+  if (pubkey) {
+    const npub = hexToNpub(pubkey);
+    return `@${formatHex(npub, 10, 4)}`;
+  }
+  return '@anonymous';
 }
 
 /**

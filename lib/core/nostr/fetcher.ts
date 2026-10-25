@@ -1,6 +1,8 @@
 import WebSocket from 'ws';
-import { generateLocalIdenticon, formatHex } from './index';
+import { generateLocalIdenticon, formatHex, getProfileDisplayName, getProfileHandle } from './index';
 import { hexToNpub } from '../crypto';
+import { ProfileMetadata } from '../types';
+import { db } from '../../db';
 
 export interface FetchedNostrPost {
   id: string;
@@ -18,8 +20,119 @@ export interface FetchedNostrPost {
 const DEFAULT_RELAYS = [
   'wss://relay.primal.net',
   'wss://nos.lol',
-  'wss://relay.damus.io'
+  'wss://relay.damus.io',
+  'wss://nostr.wine'
 ];
+
+/**
+ * Fetches Kind 0 profile metadata directly from Nostr relays for a given pubkey
+ */
+export async function fetchNostrProfile(pubkey: string): Promise<ProfileMetadata | null> {
+  if (!pubkey) return null;
+
+  const WS = typeof window !== 'undefined' && (window as any).WebSocket ? (window as any).WebSocket : WebSocket;
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    let fetchedProfile: ProfileMetadata | null = null;
+    let activeSockets = DEFAULT_RELAYS.length;
+    const sockets: any[] = [];
+
+    const cleanupAndResolve = (result: ProfileMetadata | null) => {
+      if (resolved) return;
+      resolved = true;
+      sockets.forEach((ws) => {
+        try {
+          ws.close();
+        } catch {}
+      });
+
+      resolve(result);
+    };
+
+    const globalTimeout = setTimeout(() => {
+      if (!resolved) {
+        cleanupAndResolve(fetchedProfile);
+      }
+    }, 3000);
+
+    DEFAULT_RELAYS.forEach((url) => {
+      const handleCloseOrError = () => {
+        activeSockets--;
+        if (activeSockets <= 0 && !resolved) {
+          clearTimeout(globalTimeout);
+          cleanupAndResolve(fetchedProfile);
+        }
+      };
+
+      try {
+        const ws = new (WS as any)(url);
+        sockets.push(ws);
+
+        const subId = 'prof_fetch_' + Math.random().toString(36).substring(2, 7);
+
+        ws.onopen = () => {
+          try {
+            ws.send(JSON.stringify(['REQ', subId, { kinds: [0], authors: [pubkey], limit: 1 }]));
+          } catch {}
+        };
+
+        ws.onmessage = async (msgEvent: any) => {
+          try {
+            const dataStr = typeof msgEvent.data === 'string' ? msgEvent.data : msgEvent.data.toString();
+            const msg = JSON.parse(dataStr);
+
+            if (Array.isArray(msg) && msg[0] === 'EVENT' && msg[2] && msg[2].kind === 0) {
+              const ev = msg[2];
+              if (ev.pubkey === pubkey && ev.content) {
+                let metadata: any = {};
+                try {
+                  metadata = JSON.parse(ev.content);
+                } catch {}
+
+                const profileObj: ProfileMetadata = {
+                  pubkey: ev.pubkey,
+                  content: ev.content,
+                  name: metadata.name,
+                  display_name: metadata.display_name || metadata.name,
+                  picture: metadata.picture || generateLocalIdenticon(ev.pubkey),
+                  nip05: metadata.nip05,
+                  about: metadata.about,
+                  website: metadata.website,
+                  banner: metadata.banner,
+                  lud16: metadata.lud16 || metadata.lud06,
+                  updated_at: ev.created_at || Math.floor(Date.now() / 1000),
+                  cached_at: Date.now()
+                };
+
+                fetchedProfile = profileObj;
+
+                if (typeof window !== 'undefined') {
+                  try {
+                    await db.profiles.put(profileObj);
+                  } catch {}
+                }
+
+                clearTimeout(globalTimeout);
+                cleanupAndResolve(profileObj);
+              }
+            } else if (Array.isArray(msg) && msg[0] === 'EOSE' && msg[1] === subId) {
+              if (fetchedProfile) {
+                clearTimeout(globalTimeout);
+                cleanupAndResolve(fetchedProfile);
+              }
+            }
+          } catch {}
+        };
+
+        ws.onerror = handleCloseOrError;
+        ws.onclose = handleCloseOrError;
+      } catch {
+        handleCloseOrError();
+      }
+    });
+  });
+}
 
 /**
  * Fetches a Nostr event and its author profile directly from Nostr relays (Server or Client side)
@@ -131,10 +244,34 @@ export async function fetchNostrEventAndProfile(eventId: string): Promise<Fetche
 }
 
 function buildFetchedPost(event: any, profile: any): FetchedNostrPost {
-  const npubStr = hexToNpub(event.pubkey);
-  const formattedNpub = formatHex(npubStr, 12, 6);
-  const author = profile?.display_name || profile?.name || formattedNpub;
-  const handle = profile?.nip05 ? `@${profile.nip05}` : `@${formatHex(npubStr, 10, 4)}`;
+  const author = profile
+    ? getProfileDisplayName(
+        {
+          pubkey: event.pubkey,
+          content: '',
+          name: profile.name,
+          display_name: profile.display_name,
+          cached_at: Date.now(),
+          updated_at: event.created_at
+        },
+        event.pubkey
+      )
+    : getProfileDisplayName(null, event.pubkey);
+
+  const handle = profile
+    ? getProfileHandle(
+        {
+          pubkey: event.pubkey,
+          content: '',
+          name: profile.name,
+          nip05: profile.nip05,
+          cached_at: Date.now(),
+          updated_at: event.created_at
+        },
+        event.pubkey
+      )
+    : getProfileHandle(null, event.pubkey);
+
   const picture = profile?.picture || generateLocalIdenticon(event.pubkey);
   const created_at = event.created_at || Math.floor(Date.now() / 1000);
   const date = new Date(created_at * 1000).toLocaleString([], {
